@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.32
+# v0.19.38
 
 using Markdown
 using InteractiveUtils
@@ -259,6 +259,9 @@ begin
 
 end
 
+# ╔═╡ 0579f0bd-5fc8-4c65-822f-9a9c6b0ace89
+plotly()
+
 # ╔═╡ 67289cdc-1676-451c-8bf1-7b4b9f184f48
 function get_input(N,d,seed=1)
 	rng = Xoshiro(seed)
@@ -288,7 +291,7 @@ end
 
 # ╔═╡ 834cf93a-3aba-4b39-9705-8d85dc6ae752
 function PhysicalModel1D(t, P)
-    ModelResponse = (P[1]^2 + 0.0 - 1.0).^2 + P[1]^3 + 0.5 * P[1] * exp(0.0) .- sqrt.(t) .* P[1]
+    ModelResponse = @. (P[1]^2 + 0.0 - 1.0).^2 + P[1]^3 + 0.5 * P[1] * exp(0.0) .- sqrt.(t) .* P[1]
 
     for i = 3:size(P,1)
         ModelResponse .+= P[i]
@@ -511,31 +514,52 @@ end
       
 
 # ╔═╡ 755ee209-17d3-4cd0-a15b-b8ff0dba97ff
-function aPC_PsiPolynomialMatrix(apc::aPC{T},TrainingInput)::AbstractMatrix{T} where {T<:Real}
-	# @info "Construction of Arbitrary Polynomial Basis"
-	d = apc.ExpansionDegree; #Degree of polinomial expansion
-	dd = d+1 #Degree of polinomial for roots defenition
-	NumberOfTerms = apc.NumberOfTerms
-	# TrainingInput = reshape(TrainingInput,(,:))
-	NCpoints =  size(TrainingInput,1)
-	# @warn "" size(TrainingInput)
-	Psi =  ones(NumberOfTerms,NCpoints)
-	PolynomialDegree = apc.MultivariatePolynomialDegrees 
-	# aPC_MultivariatePolynomialDegrees(NCpoints,d)
-	for i=1:1:NumberOfTerms
-	    for j=1:NCpoints  
-	        # Psi[i,j]=1.0
-	        for ii=1:apc.input_dimensions # They get multiplied.
-					pd = PolynomialDegree[i,d] + 1
-				# @show apc.OrthonormalBasis[pd,:,d]
-					p = Polynomials.Polynomial(apc.OrthonormalBasis[pd,:,d])
-					x = getindex(TrainingInput[j],d)
-		            Psi[i,j]=Psi[i,j]*p(x)'
-	        end        
-	    end
-	end
-	# @info "Created P-Polynomials in P_total collocation points with dimension $(size(Psi))."
-	return Psi #$
+# function aPC_PsiPolynomialMatrix(apc::aPC{T},TrainingInput)::AbstractMatrix{T} where {T<:Real}
+# 	d = apc.ExpansionDegree; #Degree of polinomial expansion
+# 	dd = d+1 #Degree of polinomial for roots defenition
+# 	NumberOfTerms = apc.NumberOfTerms
+# 	NCpoints =  size(TrainingInput,1)
+# 	@debug "" NCpoints
+# 	Psi =  ones(NumberOfTerms,NCpoints)
+# 	PolynomialDegree = apc.MultivariatePolynomialDegrees 
+# 	@show PolynomialDegree
+# 	@debug "" apc.OrthonormalBasis
+# 	for i=1:NumberOfTerms
+# 	    for j=1:NCpoints  
+# 			Psi[i,j] = 1.0
+# 	        for ii=1:apc.input_dimensions # They get multiplied.
+# 					pd = PolynomialDegree[i,d]+1
+# 					p = Polynomials.Polynomial(apc.OrthonormalBasis[pd,1:end-2,d])
+# 					x = getindex(TrainingInput[j],ii)
+# 				@debug "" TrainingInput[j]
+# 		            Psi[i,j]=Psi[i,j]*p(x)
+# 	        end        
+# 	    end
+# 	end
+# 	return Psi
+# end
+
+# ╔═╡ 2179ccb3-e486-402d-a131-9148e12ad1c2
+function aPC_PsiPolynomialMatrix(apc::aPC{T}, TrainingInput) where {T<:Real}
+    NumberOfTerms, InputDimensions = size(apc.MultivariatePolynomialDegrees)
+    NCpoints = size(TrainingInput, 1)
+    Psi = ones(T, NumberOfTerms, NCpoints)
+
+    for i = 1:NumberOfTerms  # For each term in the polynomial expansion
+        for j = 1:NCpoints  # For each input sample
+            product = 1.0  # Initialize the product for this term and sample
+            for ii = 1:InputDimensions  # For each dimension of the input
+                degree = apc.MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
+                coeffs = apc.OrthonormalBasis[1:degree, degree, ii]  # Extract the coefficients for the polynomial
+                p = Polynomials.Polynomial(coeffs)  # Create the polynomial
+                x = getindex(TrainingInput[j],ii) # The input value for this dimension
+                product *= p.(x)  # Evaluate the polynomial at x and multiply
+            end
+            Psi[i, j] = product  # Assign the product to Psi matrix
+        end
+    end
+
+    return Psi
 end
 
 # ╔═╡ 59171b1f-8c1b-4865-af39-ddc795ecc0b3
@@ -559,42 +583,57 @@ function train!(apc::aPC{T},TrainingInput::RowVecs,TrainingOutput::RowVecs) wher
 	# @warn "" size(TrainingInput)
         Psi = aPC_PsiPolynomialMatrix(apc,TrainingInput)'
 		to = reduce(vcat,TrainingOutput)
-	
 		@debug "" size(Psi) Psi to size(to) TrainingOutput
-		# if  apc.input_dimensions == 1
+	# 	# if  apc.input_dimensions == 1
 			Psi_inv = pinv(Psi) 
 		
-		# @debug ""  Psi_inv TrainingOutput
-		apc.ExpansionCoefficients = Psi_inv*to
+	# 	# @debug ""  Psi_inv TrainingOutput
+		# apc.ExpansionCoefficients = Psi_inv*to
 	# display(apc.ExpansionCoefficients )
 	# else
 	# 		Psi_inv = pinv(Psi)
-	# 	# @debug ""  Psi_inv TrainingOutput
-	# 	apc.ExpansionCoefficients = Psi_inv'*to
+		# @debug ""  Psi_inv to
+		apc.ExpansionCoefficients = Psi_inv*to
 
 	# end
          return nothing
 end
 
 # ╔═╡ e06776cb-cf7c-4693-b1b1-d6577d72c559
-function predict(apc::aPC{T},PredictionInput::RowVecs{S}) where {S<:Real,T<:Real}
-	# @warn "" size(PredictionInput)
-	# if  apc.input_dimensions == 1
-	# 	Psi::Matrix{T}  = aPC_PsiPolynomialMatrix(apc,PredictionInput')
-	# 	PredictionOutput = vec(Psi*apc.ExpansionCoefficients)
-	# 	return PredictionOutput
-	# else
-	Psi = aPC_PsiPolynomialMatrix(apc,PredictionInput)
-	@debug "" Psi
-	# for i in eachcol(Psi)
-	# 	@show dot(i ,apc.ExpansionCoefficients)
-	# end
-	# @debug "" size(Psi) size(apc.ExpansionCoefficients) 
-	# display(Psi)
+# function predict(apc::aPC{T},PredictionInput::RowVecs{S}) where {S<:Real,T<:Real}
+# 	# @warn "" size(PredictionInput)
+# 	# if  apc.input_dimensions == 1
+# 		# Psi = aPC_PsiPolynomialMatrix(apc,PredictionInput')'
+# 		# PredictionOutput = vec(Psi.*apc.ExpansionCoefficients')
+# 	# 	return PredictionOutput
+# 	# else
+# 	Psi = aPC_PsiPolynomialMatrix(apc,PredictionInput)
+# 	# @debug "" Psi
+# 	PredictionOutput = zeros(size(PredictionInput,1))
+# 	for (i,col) in enumerate(eachcol(Psi))
+# 		PredictionOutput[i] =  col'*apc.ExpansionCoefficients
+# 	end
+# 	@debug "" size(Psi) size(apc.ExpansionCoefficients) 
+# 	# display(Psi)
 	
-	PredictionOutput = Psi*apc.ExpansionCoefficients
-	return PredictionOutput
-	# end
+# 	# PredictionOutput = Psi*apc.ExpansionCoefficients
+# 	return PredictionOutput
+# 	# end
+# end
+
+# ╔═╡ 331760b1-3346-4ed9-b9b2-e14b936ec3c6
+function predict(apc::aPC{T}, PredictionInput) where {T<:Real}
+    println("=> aPC Toolbox: Prediction using Arbitrary Polynomial Chaos ...")
+    
+    # Assuming aPC_PsiPolynomialMatrix is correctly implemented in Julia as discussed before
+    Psi = aPC_PsiPolynomialMatrix(apc, PredictionInput)'
+    # Initialize the prediction output matrix
+	@debug "" Psi apc.ExpansionCoefficients
+    # PredictionOutput = zeros(T, size(PredictionInput, 1))
+    # Perform prediction using the expansion coefficients
+    PredictionOutput = Psi * apc.ExpansionCoefficients
+    
+    return PredictionOutput
 end
 
 # ╔═╡ d1efcbbd-7717-4dc3-a293-7fec3c86e675
@@ -606,96 +645,80 @@ function UQ(apc::aPC{T}) where {T<:Float64}
 end
 
 # ╔═╡ ac63c5ec-e59d-451a-b8f0-eefcae2f5bbb
-# ╠═╡ disabled = true
-#=╠═╡
-let
-	err = []
-	ts = []
-	ps = []
-	degress = 2:3:10
-	N = 100
-	d = 2
-	
-	x =  get_input(N,d,5) 
-
-	m(x) = PhysicalModel(1,x)
-	last_pred = undef
-gTrainingInput = []
-	
-	for degree in degress
-		@info "" degree
-		t = @elapsed begin
-	apc_instance = aPC(x, degree);
-	# @info "" apc_instance
-	TrainingInput =  GaussianCollocation(apc_instance)
-			gTrainingInput = TrainingInput
-	# apc_instance = aPC(x, degree);
-	# @info "" apc_instance
-	# TrainingInput =  GaussianCollocation(apc_instance)
-	# @debug "" TrainingInput
-	TrainingOutput = []
-	for i=1:apc_instance.NumberOfTerms
-		if d == 2
-    		push!(TrainingOutput,m(TrainingInput[i,:]))
-		elseif d==1
-    		push!(TrainingOutput,m(TrainingInput[i,:][1]))
-		end
-	end
-	TrainingOutput = reduce(hcat,TrainingOutput)'|>collect
-	# @debug "" size(TrainingOutput) TrainingOutput
-	train!(apc_instance,TrainingInput,TrainingOutput)
-	# @info "" apc_instance
-	# @debug "" UQ(apc_instance)
-	
-			# @debug "" xcp
-	pred = predict(apc_instance,TrainingInput)
-	# display(pred)
-			
-	last_pred = yy->predict(apc_instance,yy)
-			
-	mypred = [last_pred(x)|>first for x in eachrow(TrainingInput)] 
-	
-	expect = m.(eachrow(TrainingInput))
-
-	@debug "" size(pred) size(expect)
-	# display(expect)
-	# @debug "" size(expect) size(pred)
-	# push!(err,mean(abs.(pred.-expect).^2))
-	# 		@debug expect.-pred
-		end
-	# push!(ts,t)
-
-	# xtest = gTrainingInput
-	# p3 = Plots.scatter(xtest[:,1], m.(xtest')',alpha=0.5)
-	# preds = [last_pred(x)|>first for x in eachrow(xtest)]
-	# @show preds
-	# Plots.scatter!(p3,xtest[:,1], preds,alpha=0.5)
-
-	# 	push!(ps,p3)
-	end
-	# p1 = Plots.scatter(degress, log.(ts))	
-	# p2 = Plots.scatter(degress, log.(err))
-
-
-	
-	# pn = Plots.plot(p1,p2)
-	# pn2 = Plots.plot(ps...)
-	# Plots.plot(pn,pn2, layout =@layout [a ; b])
-	# Plots.scatter(log.((abs.(pred[1,:].-expect[1,:]))))
-end
-  ╠═╡ =#
-
-# ╔═╡ ba7e73e5-edac-4b16-ba69-d9cdb81e53ef
 # let
-
-# 	N = 1000
+# 	err = []
+# 	ts = []
+# 	ps = []
+# 	degress = 2:3:10
+# 	N = 100
 # 	d = 2
 	
-# 	x =  get_input(N,d,44) 
-# # reduce(hcat,x)
-# 	# display( x[1:2,:])
-# 	# getindex.(x,1)
-# 	typeof(x)
+# 	x =  get_input(N,d,5) 
+
+# 	m(x) = PhysicalModel1D(1,x)
+# 	last_pred = undef
+# 	gTrainingInput = []
+	
+# 	for degree in degress
+# 		@info "" degree
+# 		t = @elapsed begin
+# 	apc_instance = aPC(x, degree);
+# 	@info "" apc_instance
+# 	TrainingInput =  GaussianCollocation(apc_instance)
+# 			gTrainingInput = TrainingInput
+# 	# apc_instance = aPC(x, degree);
+# 	# @info "" apc_instance
+# 	# TrainingInput =  GaussianCollocation(apc_instance)
+# 	# @debug "" TrainingInput
+# 	TrainingOutput = []
+# 	for i=1:apc_instance.NumberOfTerms
+# 		if d == 2
+#     		push!(TrainingOutput,m(TrainingInput[i,:]))
+# 		elseif d==1
+#     		push!(TrainingOutput,m(TrainingInput[i,:][1]))
+# 		end
+# 	end
+# 	TrainingOutput = reduce(hcat,TrainingOutput)'|>collect 
+# 	# @debug "" size(TrainingOutput) TrainingOutput
+# 	train!(apc_instance,TrainingInput,TrainingOutput)
+# 	# @info "" apc_instance
+# 	# @debug "" UQ(apc_instance)
+	
+# 			# @debug "" xcp
+# 	pred = predict(apc_instance,TrainingInput)
+# 	# display(pred)
+			
+# 	last_pred = yy->predict(apc_instance,yy)
+			
+# 	mypred = [last_pred(x)|>first for x in eachrow(TrainingInput)] 
+	
+# 	expect = m.(eachrow(TrainingInput))
+
+# 	@debug "" size(pred) size(expect)
+# 	# display(expect)
+# 	# @debug "" size(expect) size(pred)
+# 	# push!(err,mean(abs.(pred.-expect).^2))
+# 	# 		@debug expect.-pred
+# 		end
+# 	# push!(ts,t)
+
+# 	# xtest = gTrainingInput
+# 	# p3 = Plots.scatter(xtest[:,1], m.(xtest')',alpha=0.5)
+# 	# preds = [last_pred(x)|>first for x in eachrow(xtest)]
+# 	# @show preds
+# 	# Plots.scatter!(p3,xtest[:,1], preds,alpha=0.5)
+
+# 	# 	push!(ps,p3)
+# 	end
+# 	# p1 = Plots.scatter(degress, log.(ts))	
+# 	# p2 = Plots.scatter(degress, log.(err))
+
+
+	
+# 	# pn = Plots.plot(p1,p2)
+# 	# pn2 = Plots.plot(ps...)
+# 	# Plots.plot(pn,pn2, layout =@layout [a ; b])
+# 	# Plots.scatter(log.((abs.(pred[1,:].-expect[1,:]))))
 # end
 
 # ╔═╡ 939c9b57-bc84-4c10-b330-d8fd1a6f073e
@@ -703,21 +726,24 @@ let
 	err = []
 	ts = []
 	ps = []
-	degress = 1:1:5
-	N = 1000
+	# degress = 1:1:5
+	N = 500
 	d = 2
 	
-	x =  get_input(N,d,44) 
+	x =  get_input(N,d,1) 
 	# @debug "" x
 	# m(x) = PhysicalModel1D(1,x)
 	last_pred = undef
 
+	true_output = [ PhysicalModelND(1,ix) for ix in x]
 	
-	for degree in [2]
-		t = @elapsed begin
+	degree = 4
+		# t = @elapsed begin
 		apc_instance = aPC(x, degree);
 	# @info "" apc_instance 
 	TrainingInput =  GaussianCollocation(apc_instance)
+
+			
 	TrainingOutput = []
 	for i=1:size(TrainingInput,1)
 		if d == 2
@@ -731,8 +757,8 @@ let
 			# @show TrainingOutput
 	TrainingOutput = reduce(hcat,TrainingOutput)' |> RowVecs
 
-	# @info "" TrainingInput TrainingOutput
-			
+	@info "" TrainingInput TrainingOutput
+	# @info "" apc_instance	
 	train!(apc_instance,TrainingInput,TrainingOutput)
 	@info "" apc_instance
 			
@@ -740,19 +766,23 @@ let
 	# # xcp = [0.422117914428017	0.610608061392019	0.780825721677619]]
 
 			
-	pred = predict(apc_instance,TrainingInput)
+	pred = predict(apc_instance,x)
 	display(pred)
 	# last_pred = yy-> predict(apc_instance,[yy]) 
 
+	# Plots.plot(x,TrainingOutput)
+	p1 = Plots.scatter(reduce(hcat,x)[1,:],reduce(hcat,x)[2,:],true_output,ms=1)
+	p2 = Plots.scatter(reduce(hcat,x)[1,:],reduce(hcat,x)[2,:],pred,ms=1)
+	p3 = Plots.scatter(reduce(hcat,x)[1,:],reduce(hcat,x)[2,:],pred.-true_output,ms=1)
 	
-	expect = RowVecs(PhysicalModel1D.(1,TrainingInput))
-	display(expect)
-
+	# Plots.scatter!(p2,reduce(hcat,TrainingInput)[2,:],)
+	# expect = RowVecs(PhysicalModel1D.(1,TrainingInput))
+	# display(expect)
+	Plots.plot(p1,p2,p3)
 			
 	# # @debug "" size(expect) size(pred)
 	# push!(err,maximum(abs.(pred.-expect).^2))
 	# 		@debug expect.-pred
-		end
 	# push!(ts,t)
 
 	# 		xtest = LinRange(-1,1,50)
@@ -764,10 +794,8 @@ let
 	# 	push!(ps,p3)
 
 		
-	end
 	# p1 = Plots.scatter(degress, log.(ts))	
 	# p2 = Plots.scatter(degress, log.(err))
-
 
 	
 	# pn = Plots.plot(p1,p2)
@@ -775,13 +803,6 @@ let
 	# Plots.plot(pn,pn2, layout =@layout [a ; b])
 	# Plots.scatter(log.((abs.(pred[1,:].-expect[1,:]))))
 end
-
-# ╔═╡ 5073b540-4bdd-461f-954c-c01dd1405720
-
-
-# ╔═╡ ef25e15c-a134-4e74-95ef-403553165940
-
-
 
 # ╔═╡ 8a54a0a0-2a3c-4757-b908-9d2765074482
 # function testmodel(x, NumberOfOutputs=3)
@@ -874,7 +895,7 @@ Tullio = "~0.3.7"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.10.0-rc1"
+julia_version = "1.10.0"
 manifest_format = "2.0"
 project_hash = "8f25b3dcf5ce36c894416f89349d44d0838297f6"
 
@@ -1808,7 +1829,7 @@ deps = ["Libdl", "LinearAlgebra", "Serialization", "SparseArrays"]
 uuid = "4607b0f0-06f3-5cda-b6b1-a6196a1729e9"
 
 [[deps.SuiteSparse_jll]]
-deps = ["Artifacts", "Libdl", "Pkg", "libblastrampoline_jll"]
+deps = ["Artifacts", "Libdl", "libblastrampoline_jll"]
 uuid = "bea87d4a-7f5b-5778-9afe-8cc45184846c"
 version = "7.2.1+1"
 
@@ -2206,26 +2227,26 @@ version = "1.4.1+1"
 # ╔═╡ Cell order:
 # ╟─dd8f3396-5731-4dd1-981d-1e2a8ec6dcbb
 # ╟─9542966c-be6d-4202-9b55-3fd28af49c5e
-# ╟─83e8c530-773b-11ee-0a90-e9022fa50e8b
-# ╟─67289cdc-1676-451c-8bf1-7b4b9f184f48
-# ╟─365ee76a-1fd9-439a-99e0-4ba80f3c9607
-# ╟─834cf93a-3aba-4b39-9705-8d85dc6ae752
-# ╟─f4a00a4b-912e-4039-ac86-0ae8ff4854a3
-# ╟─4f3ed422-6ce1-43e4-9d8f-6bbc35a9f763
-# ╟─062107a0-de05-4ecd-a8e0-ea3779f2fb42
-# ╟─e5544ae4-1934-4867-9e59-3bb01928341e
-# ╟─e2ed7021-a13c-4113-b3d3-618520c6c7c8
-# ╟─c1d9ab51-9bbb-4f54-9377-1ea79357b09e
-# ╟─755ee209-17d3-4cd0-a15b-b8ff0dba97ff
-# ╟─59171b1f-8c1b-4865-af39-ddc795ecc0b3
+# ╠═83e8c530-773b-11ee-0a90-e9022fa50e8b
+# ╠═0579f0bd-5fc8-4c65-822f-9a9c6b0ace89
+# ╠═67289cdc-1676-451c-8bf1-7b4b9f184f48
+# ╠═365ee76a-1fd9-439a-99e0-4ba80f3c9607
+# ╠═834cf93a-3aba-4b39-9705-8d85dc6ae752
+# ╠═f4a00a4b-912e-4039-ac86-0ae8ff4854a3
+# ╠═4f3ed422-6ce1-43e4-9d8f-6bbc35a9f763
+# ╠═062107a0-de05-4ecd-a8e0-ea3779f2fb42
+# ╠═e5544ae4-1934-4867-9e59-3bb01928341e
+# ╠═e2ed7021-a13c-4113-b3d3-618520c6c7c8
+# ╠═c1d9ab51-9bbb-4f54-9377-1ea79357b09e
+# ╠═755ee209-17d3-4cd0-a15b-b8ff0dba97ff
+# ╠═2179ccb3-e486-402d-a131-9148e12ad1c2
+# ╠═59171b1f-8c1b-4865-af39-ddc795ecc0b3
 # ╠═5f8640cf-99f6-40cc-ac14-2101fe0dd5d9
 # ╠═e06776cb-cf7c-4693-b1b1-d6577d72c559
-# ╠═d1efcbbd-7717-4dc3-a293-7fec3c86e675
-# ╠═ac63c5ec-e59d-451a-b8f0-eefcae2f5bbb
-# ╠═ba7e73e5-edac-4b16-ba69-d9cdb81e53ef
+# ╠═331760b1-3346-4ed9-b9b2-e14b936ec3c6
+# ╟─d1efcbbd-7717-4dc3-a293-7fec3c86e675
+# ╟─ac63c5ec-e59d-451a-b8f0-eefcae2f5bbb
 # ╠═939c9b57-bc84-4c10-b330-d8fd1a6f073e
-# ╠═5073b540-4bdd-461f-954c-c01dd1405720
-# ╠═ef25e15c-a134-4e74-95ef-403553165940
 # ╠═8a54a0a0-2a3c-4757-b908-9d2765074482
 # ╠═417151da-08e0-49d7-bfad-35a6e77d7715
 # ╠═2f9757a1-71e7-44c2-bcb4-db5475d3b130
