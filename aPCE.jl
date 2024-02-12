@@ -280,7 +280,7 @@ end
 function PhysicalModelND(t, P::AbstractArray)
 	# @debug "Assuming a nd case" P
 	P = reduce(hcat,P)
-    ModelResponse = (P[1]^2 + P[2] - 1.0).^2 + P[1]^3 + 0.5 * P[1] * exp(P[2]) .- sqrt.(t) .* P[1] 
+    ModelResponse = (P[1]^2 + P[2] - 1.0).^2 #+ P[1]^3 + 0.5 * P[1] * exp(P[2]) .- sqrt.(t) .* P[1] 
 
     for i = 3:size(P,1)
         ModelResponse .+= P[i]
@@ -291,7 +291,7 @@ end
 
 # ╔═╡ 834cf93a-3aba-4b39-9705-8d85dc6ae752
 function PhysicalModel1D(t, P)
-    ModelResponse = @. (P[1]^2 + 0.0 - 1.0).^2 + P[1]^3 + 0.5 * P[1] * exp(0.0) .- sqrt.(t) .* P[1]
+    ModelResponse = @. (P[1]^2 + 0.0 - 1.0).^2 #+ P[1]^3 + 0.5 * P[1] * exp(0.0) .- sqrt.(t) .* P[1]
 
     for i = 3:size(P,1)
         ModelResponse .+= P[i]
@@ -543,19 +543,21 @@ end
 function aPC_PsiPolynomialMatrix(apc::aPC{T}, TrainingInput) where {T<:Real}
     NumberOfTerms, InputDimensions = size(apc.MultivariatePolynomialDegrees)
     NCpoints = size(TrainingInput, 1)
-    Psi = ones(T, NumberOfTerms, NCpoints)
-
+    Psi = ones(T,  NumberOfTerms,NCpoints)
+@debug "" TrainingInput
     for i = 1:NumberOfTerms  # For each term in the polynomial expansion
         for j = 1:NCpoints  # For each input sample
             product = 1.0  # Initialize the product for this term and sample
             for ii = 1:InputDimensions  # For each dimension of the input
                 degree = apc.MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
-                coeffs = apc.OrthonormalBasis[1:degree, degree, ii]  # Extract the coefficients for the polynomial
+                coeffs = apc.OrthonormalBasis[degree,1:degree, ii]  # Extract the coefficients for the polynomial
                 p = Polynomials.Polynomial(coeffs)  # Create the polynomial
-                x = getindex(TrainingInput[j],ii) # The input value for this dimension
-                product *= p.(x)  # Evaluate the polynomial at x and multiply
+				x = reduce(hcat,TrainingInput)[ii,j]
+				# @show degree coeffs p x p(x) 
+				
+                product *= p(x)  # Evaluate the polynomial at x and multiply
             end
-            Psi[i, j] = product  # Assign the product to Psi matrix
+            Psi[i,j] = product  # Assign the product to Psi matrix
         end
     end
 
@@ -585,16 +587,16 @@ function train!(apc::aPC{T},TrainingInput::RowVecs,TrainingOutput::RowVecs) wher
 		to = reduce(vcat,TrainingOutput)
 		@debug "" size(Psi) Psi to size(to) TrainingOutput
 	# 	# if  apc.input_dimensions == 1
-			Psi_inv = pinv(Psi) 
+			# Psi_inv = pinv(Psi) 
 		
 	# 	# @debug ""  Psi_inv TrainingOutput
 		# apc.ExpansionCoefficients = Psi_inv*to
 	# display(apc.ExpansionCoefficients )
 	# else
-	# 		Psi_inv = pinv(Psi)
+			Psi_inv = pinv(Psi)
 		# @debug ""  Psi_inv to
 		apc.ExpansionCoefficients = Psi_inv*to
-
+		# apc.ExpansionCoefficients = Psi\to
 	# end
          return nothing
 end
@@ -628,11 +630,11 @@ function predict(apc::aPC{T}, PredictionInput) where {T<:Real}
     # Assuming aPC_PsiPolynomialMatrix is correctly implemented in Julia as discussed before
     Psi = aPC_PsiPolynomialMatrix(apc, PredictionInput)'
     # Initialize the prediction output matrix
-	@debug "" Psi apc.ExpansionCoefficients
+	# @debug "" Psi apc.ExpansionCoefficients
     # PredictionOutput = zeros(T, size(PredictionInput, 1))
     # Perform prediction using the expansion coefficients
-    PredictionOutput = Psi * apc.ExpansionCoefficients
-    
+    # PredictionOutput = Psi * apc.ExpansionCoefficients
+    PredictionOutput = [dot(apc.ExpansionCoefficients,row) for row in eachrow(Psi)]
     return PredictionOutput
 end
 
@@ -727,7 +729,7 @@ let
 	ts = []
 	ps = []
 	# degress = 1:1:5
-	N = 500
+	N = 1000
 	d = 2
 	
 	x =  get_input(N,d,1) 
@@ -737,7 +739,7 @@ let
 
 	true_output = [ PhysicalModelND(1,ix) for ix in x]
 	
-	degree = 4
+	degree = 2
 		# t = @elapsed begin
 		apc_instance = aPC(x, degree);
 	# @info "" apc_instance 
@@ -767,7 +769,7 @@ let
 
 			
 	pred = predict(apc_instance,x)
-	display(pred)
+	# display(pred)
 	# last_pred = yy-> predict(apc_instance,[yy]) 
 
 	# Plots.plot(x,TrainingOutput)
