@@ -5,27 +5,30 @@ using Markdown
 using InteractiveUtils
 
 # ╔═╡ 83e8c530-773b-11ee-0a90-e9022fa50e8b
+import Pkg 
+Pkg.activate("//iws-ls3-cifs.tik.uni-stuttgart.de/shared/users/ac125867/03_projects/32_aPC_julia/src")
+using AddPackage
 begin
-	using MultivariateBases
-	using DynamicPolynomials
-	using FixedPolynomials
-	using LinearAlgebra
-	using Tullio
-	using Distributions
-	using Plots
-	using Statistics
-	using IterTools
-	using Random
-	using LazyGrids
-	using Polynomials
-	using SparseArrays
-	using AMRVW
-	using ToeplitzMatrices
-	using FFTW
-	using StaticArrays
-	using Test
-	using BenchmarkTools
-	using ProfileCanvas
+	@add using MultivariateBases
+	@add using DynamicPolynomials
+	@add using FixedPolynomials
+	@add using LinearAlgebra
+	@add using Tullio
+	@add using Distributions
+	@add using Plots
+	@add using Statistics
+	@add using IterTools
+	@add using Random
+	@add using LazyGrids
+	@add using Polynomials
+	@add using SparseArrays
+	@add using AMRVW
+	@add using ToeplitzMatrices
+	@add using FFTW
+	@add using StaticArrays
+	@add using Test
+	@add using BenchmarkTools
+	@add using ProfileCanvas
 end
 
 # ╔═╡ dd8f3396-5731-4dd1-981d-1e2a8ec6dcbb
