@@ -38,7 +38,6 @@ function aPC_PsiPolynomialMatrix(apc::aPC{T}, TrainingInput) where {T<:Real}
     NumberOfTerms, InputDimensions = size(apc.MultivariatePolynomialDegrees)
     NCpoints = size(TrainingInput, 1)
     Psi = ones(T,  NumberOfTerms,NCpoints)
-@debug "" TrainingInput
     for i = 1:NumberOfTerms  # For each term in the polynomial expansion
         for j = 1:NCpoints  # For each input sample
             product = 1.0  # Initialize the product for this term and sample

@@ -30,10 +30,21 @@ function get_input(N, d, seed = 1)
 	end
 end
 
+function add_zero_dimension(P::AbstractArray)
+    # Create a zero array with the same size as P
+    zero_array = zeros(size(P))
+
+    # Concatenate P and zero_array along the first dimension
+    P_new = vcat(P, zero_array)
+
+    return P_new
+end
+
 function PhysicalModelND(t, P::AbstractArray)
 	# @debug "Assuming a nd case" P
 	P = reduce(hcat, P)
-	ModelResponse = (P[1]^2 + P[2] - 1.0) .^ 2 #+ P[1]^3 + 0.5 * P[1] * exp(P[2]) .- sqrt.(t) .* P[1] 
+	P = add_zero_dimension(P)
+	ModelResponse = (P[1]^2 + P[2] - 1.0) .^ 2 .+  P[1]^3 + 0.5 * P[1] * exp(P[2]) .- sqrt.(t) .* P[1]
 
 	for i ∈ 3:size(P, 1)
 		ModelResponse .+= P[i]
@@ -43,7 +54,7 @@ function PhysicalModelND(t, P::AbstractArray)
 end
 
 function PhysicalModel1D(t, P)
-	ModelResponse = @. (P[1]^2 + 0.0 - 1.0) .^ 2 .+ P[1]^7 #+ P[1]^3 + 0.5 * P[1] * exp(0.0) .- sqrt.(t) .* P[1]
+	ModelResponse = @. (P[1]^2 + 0.0 - 1.0) .^ 2 .+  P[1]^3 + 0.5 * P[1] * exp(0.0) .- sqrt.(t) .* P[1]
 
 	for i ∈ 3:size(P, 1)
 		ModelResponse .+= P[i]

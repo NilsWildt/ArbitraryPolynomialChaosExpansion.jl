@@ -32,7 +32,7 @@ function train!(apc::aPC{T},TrainingInput::RowVecs,TrainingOutput::RowVecs) wher
 # @warn "" size(TrainingInput)
     Psi = aPC_PsiPolynomialMatrix(apc,TrainingInput)'
     to = reduce(vcat,TrainingOutput)
-    @debug "" size(Psi) Psi to size(to) TrainingOutput
+    # @debug "" size(Psi) Psi to size(to) TrainingOutput
 # 	# if  apc.input_dimensions == 1
         # Psi_inv = pinv(Psi) 
     

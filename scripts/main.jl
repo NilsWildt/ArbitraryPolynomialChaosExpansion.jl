@@ -20,6 +20,9 @@ module Main
     global_logger(debug_logging)
     include(srcdir("APC.jl"))
     using .APC
-    p = APC.run(5)
+    @timev begin
+        p = APC.run(7)
+    end
+
     display(p)
 end

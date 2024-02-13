@@ -21,7 +21,7 @@ function run(degree)
 	ps = []
 	# degress = 1:1:5
 	N = 1000
-	d = 1
+	d = 2
 
 	x = get_input(N, d, 1)
 	# @debug "" x
@@ -57,10 +57,8 @@ function run(degree)
 	# @show TrainingOutput
 	TrainingOutput = reduce(hcat, TrainingOutput)' |> RowVecs
 
-	@info "" TrainingInput TrainingOutput
 	# @info "" apc_instance	
 	train!(apc_instance, TrainingInput, TrainingOutput)
-	@info "" apc_instance
 
 	# # @debug "" UQ(apc_instance)
 	# # xcp = [0.422117914428017	0.610608061392019	0.780825721677619]]
@@ -69,21 +67,32 @@ function run(degree)
 	pred = predict(apc_instance, x)
 	# display(pred)
 	# last_pred = yy-> predict(apc_instance,[yy]) 
-    @debug "" pred x true_output
 	# Plots.plot(x,TrainingOutput)
-    x = reduce(vcat,x)
-    p1 = Plots.scatter(x, true_output, ms = 1)
-	p2 = Plots.scatter(x, pred, ms = 1)
-	p3 = Plots.scatter(x, pred .- true_output, ms = 1)
+   
+   
+    # x = reduce(vcat,x)
+    # p1 = Plots.scatter(x, true_output, ms = 1)
+	# p2 = Plots.scatter(x, pred, ms = 1)
+	# p3 = Plots.scatter(x, pred .- true_output, ms = 1)
 
-	# p1 = Plots.scatter(reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], reduce(hcat,true_output), ms = 1)
+	# p1 = Plots.scatter(reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], true_output, ms = 1)
 	# p2 = Plots.scatter(reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], pred, ms = 1)
 	# p3 = Plots.scatter(reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], pred .- true_output, ms = 1)
+ 
 
+    # p1 = Plots.scatter(reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], true_output, ms = 1, mc = :blue,size = (800, 800))
+    # Plots.scatter!(p1,reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], pred, ms = 1, mc = :red)
+    # # p3 = Plots.scatter(reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], pred .- true_output, ms = 1, mc = :green)
+
+    # display(p1)
+    
+    gratio = (1.0+sqrt(5.0))/2.0
+    p1 = Plots.scatter(reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], true_output, ms = 2, mc = :blue, marker = :circle, label = "True Output", legend = true, size = (600*gratio,600))
+    Plots.scatter!(p1,reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], pred, ms = 2, mc = :red, marker = :square, label = "Prediction", legend = true)
 	# Plots.scatter!(p2,reduce(hcat,TrainingInput)[2,:],)
 	# expect = RowVecs(PhysicalModel1D.(1,TrainingInput))
 	# display(expect)
-	Plots.plot(p1, p2, p3)
+	# Plots.plot(p1, p2, p3,size = (800, 800))
 
 	# # @debug "" size(expect) size(pred)
 	# push!(err,maximum(abs.(pred.-expect).^2))
