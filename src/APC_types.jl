@@ -13,48 +13,49 @@
 # limitations under the License.
 
 mutable struct aPC{T <: Real}
-    InputDistribution::RowVecs{T} # in [ d x N-samples]
-    input_dimensions::Int64
-    ExpansionDegree::Int64
-    NumberOfTerms::Int64
-    MultivariatePolynomialDegrees::AbstractArray{Int64}
-    OrthonormalRepresentation::Bool
-    OrthonormalBasis::AbstractArray{T}
+	InputDistribution::RowVecs{T} # in [ d x N-samples]
+	input_dimensions::Int64
+	ExpansionDegree::Int64
+	NumberOfTerms::Int64
+	MultivariatePolynomialDegrees::AbstractArray{Int64}
+	OrthonormalRepresentation::Bool
+	OrthonormalBasis::AbstractArray{T}
 	# NumberOfOutputs::Int64
-    ExpansionCoefficients::AbstractVector{T}
+	ExpansionCoefficients::AbstractVector{T}
 
-    # Constructor
-    function aPC(
-        InputDistribution::RowVecs{T},
+	# Constructor
+	function aPC(
+		InputDistribution::RowVecs{T},
 		ExpansionDegree::Int64,
-        OrthonormalRepresentation::Bool=true
+		OrthonormalRepresentation::Bool = true,
 	) where T
-		input_dimensions = size(InputDistribution[1],1) 
+		input_dimensions = size(InputDistribution[1], 1)
 		# @info "" size(InputDistribution[1])
-		MultivariatePolynomialDegrees = aPC_MultivariatePolynomialDegrees(input_dimensions,ExpansionDegree)
-		NumberOfTerms = numberPolynomials(ExpansionDegree,input_dimensions)
+		MultivariatePolynomialDegrees = aPC_MultivariatePolynomialDegrees(input_dimensions, ExpansionDegree)
+        display(MultivariatePolynomialDegrees)
+		NumberOfTerms = numberPolynomials(ExpansionDegree, input_dimensions)
 
-		OrthonormalBasis = zeros(ExpansionDegree+2,ExpansionDegree+2,input_dimensions)
+		OrthonormalBasis = zeros(ExpansionDegree + 2, ExpansionDegree + 2, input_dimensions)
 		for i in 1:input_dimensions
-			tmp = aPC_OrthonormalBasis(getindex.(InputDistribution,i), ExpansionDegree)
-			OrthonormalBasis[:,:,i] .= tmp
+			tmp = aPC_OrthonormalBasis(getindex.(InputDistribution, i), ExpansionDegree)
+			OrthonormalBasis[:, :, i] .= tmp
 		end
 		# OrthonormalBasis = tmp
 
 		# display(OrthonormalBasis)
 		NumberOfOutputs = 1 # Allocate 100
-		ExpansionCoefficients = zeros(T,NumberOfTerms)
-		
-        return new{T}(
-            InputDistribution,
-            input_dimensions,
-            ExpansionDegree,
-            NumberOfTerms,
-            MultivariatePolynomialDegrees,
-            OrthonormalRepresentation,
-            OrthonormalBasis,
+		ExpansionCoefficients = zeros(T, NumberOfTerms)
+
+		return new{T}(
+			InputDistribution,
+			input_dimensions,
+			ExpansionDegree,
+			NumberOfTerms,
+			MultivariatePolynomialDegrees,
+			OrthonormalRepresentation,
+			OrthonormalBasis,
 			# NumberOfOutputs,
-            ExpansionCoefficients,
-        )
-    end
+			ExpansionCoefficients,
+		)
+	end
 end

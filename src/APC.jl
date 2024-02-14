@@ -20,7 +20,7 @@ function run(degree)
 	ts = []
 	ps = []
 	# degress = 1:1:5
-	N = 1000
+	N = 2000
 	d = 2
 
 	x = get_input(N, d, 1)
@@ -65,6 +65,9 @@ function run(degree)
 
 
 	pred = predict(apc_instance, x)
+    @show mean(true_output)
+    @show var(true_output)
+    @show UQ(apc_instance)
 	# display(pred)
 	# last_pred = yy-> predict(apc_instance,[yy]) 
 	# Plots.plot(x,TrainingOutput)

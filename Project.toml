@@ -1,6 +1,7 @@
 [deps]
 AMRVW = "233ec0c9-6b8d-4766-b9a2-a16e389fc38a"
 AddPackage = "70d26913-0580-4037-ad67-7d2c365cf5c5"
+Combinatorics = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 DynamicPolynomials = "7c1d4256-1411-5781-91ec-d7bc3513ac07"
 FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"

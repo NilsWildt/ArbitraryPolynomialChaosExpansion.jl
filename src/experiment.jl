@@ -46,7 +46,7 @@ function PhysicalModelND(t, P::AbstractArray)
 	P = add_zero_dimension(P)
 	ModelResponse = (P[1]^2 + P[2] - 1.0) .^ 2 .+  P[1]^3 + 0.5 * P[1] * exp(P[2]) .- sqrt.(t) .* P[1]
 
-	for i ∈ 3:size(P, 1)
+	for i ∈ 3:lastindex(P, 1)
 		ModelResponse .+= P[i]
 	end
 
@@ -56,9 +56,31 @@ end
 function PhysicalModel1D(t, P)
 	ModelResponse = @. (P[1]^2 + 0.0 - 1.0) .^ 2 .+  P[1]^3 + 0.5 * P[1] * exp(0.0) .- sqrt.(t) .* P[1]
 
-	for i ∈ 3:size(P, 1)
+	for i ∈ 3:lastindex(P, 1)
 		ModelResponse .+= P[i]
 	end
 
 	return ModelResponse # SVector{length(ModelResponse)}(
+end
+
+
+function PhysicalModel2DGaussian(t, P::AbstractArray)
+	# Ensure P is a 2D array
+	# P = reduce(hcat, P)
+
+	# Check that P has two dimensions
+	if size(P, 1) != 2
+		@error "P must have two dimensions for the 2D Gaussian model."
+	end
+
+	# Parameters for the 2D Gaussian
+	mu_x = 0
+	mu_y = 0
+	sigma_x = 1
+	sigma_y = 1
+
+	# Calculate the 2D Gaussian
+	ModelResponse = exp(- ((P[1] - mu_x)^2 / (2 * sigma_x^2) + (P[2] - mu_y)^2 / (2 * sigma_y^2)))
+
+	return ModelResponse
 end
