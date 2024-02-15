@@ -32,7 +32,7 @@ mutable struct aPC{T <: Real}
 		input_dimensions = size(InputDistribution[1], 1)
 		# @info "" size(InputDistribution[1])
 		MultivariatePolynomialDegrees = aPC_MultivariatePolynomialDegrees(input_dimensions, ExpansionDegree)
-        display(MultivariatePolynomialDegrees)
+        # display(MultivariatePolynomialDegrees)
 		NumberOfTerms = numberPolynomials(ExpansionDegree, input_dimensions)
 
 		OrthonormalBasis = zeros(ExpansionDegree + 2, ExpansionDegree + 2, input_dimensions)

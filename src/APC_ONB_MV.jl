@@ -71,35 +71,27 @@ end
 # end
 
 
-function aPC_MultivariatePolynomialDegrees(max_degree::T, ndim::T; use_p = false, p::Float64 = 0.85) where {T<:Integer}
+function aPC_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T; use_p = false, p::Float64 = 0.85) where {T<:Integer}
 	# Initialize the indices for the first parameter
-	range_ = 0:max_degree  # Julia arrays are inclusive at both ends
+	range_ = 0:max_degree |> collect 
 	indices = reshape(range_, :, 1)  # Make it a column vector
 
-	for _ in 1:(ndim-1)
-		# Tile the current set of indices ndim times
-		indices = repeat(indices, outer = (max_degree + 1, 1))
-
-		# Stretch ranges over the new dimension
-		front = repeat(range_, inner = (size(indices, 1) ÷ (max_degree + 1)))
-
-		# Combine the new dimension with the existing indices
-		indices = hcat(front, indices)
-
+	for di in 1:num_dimensions-1
+		indices = repeat(indices, inner = (max_degree+1,1))
+		front = repeat(range_, outer = div(lastindex(indices) ,(max_degree+1))÷di)
+		indices = hcat(front,indices)
 		if use_p
 			# Apply truncation using p-norm sparsity
-			idx_to_keep = vec(sum((indices ./ (max_degree + 1)) .^ p, dims = 2) .^ (1 / p) .<= 1)
+			idx_to_keep = vec(sum((indices ./ (num_dimensions + 1)) .^ p, dims = 2) .^ (1 / p) .<= 1)
 			indices = indices[idx_to_keep, :]
 		else
-			idx_to_keep = sum(indices; dims = 2) .<= max_degree
-			indices = indices[idx_to_keep, :]
+			indices = indices[vec(sum(indices; dims = 2)).<=max_degree, :]
 		end
 	end
 
-	# Sort the indices based on the specified criteria (dummy function here)
-	new_order = sort_basis_indices(indices)
-    # @info "" new_order
-	indices = indices[new_order, :]
+	indices = hcat(vec(sum(indices; dims = 2)),indices)
+	indices = sortslices(indices;dims=1,rev=false)[:,2:end]
+ 	reverse_columns!(indices)
 	return indices
 end
 
