@@ -20,7 +20,7 @@ function run(degree)
 	ts = []
 	ps = []
 	# degress = 1:1:5
-	N = 2000
+	N = 500
 	d = 2
 
 	x = get_input(N, d, 1)
@@ -34,7 +34,6 @@ function run(degree)
 
     if d == 2
         true_output = [PhysicalModelND(1, ix) for ix in x]
-       
     end
 
 	

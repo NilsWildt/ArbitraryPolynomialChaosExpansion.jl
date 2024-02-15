@@ -43,7 +43,6 @@ mutable struct aPC{T <: Real}
 		# OrthonormalBasis = tmp
 
 		# display(OrthonormalBasis)
-		NumberOfOutputs = 1 # Allocate 100
 		ExpansionCoefficients = zeros(T, NumberOfTerms)
 
 		return new{T}(
@@ -54,7 +53,6 @@ mutable struct aPC{T <: Real}
 			MultivariatePolynomialDegrees,
 			OrthonormalRepresentation,
 			OrthonormalBasis,
-			# NumberOfOutputs,
 			ExpansionCoefficients,
 		)
 	end

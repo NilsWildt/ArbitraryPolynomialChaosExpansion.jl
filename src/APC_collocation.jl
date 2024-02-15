@@ -7,7 +7,6 @@ function GaussianCollocation(apc::aPC{T}; Strategy = :FT)::RowVecs{T} where {T <
 		poly = apc.OrthonormalBasis[:, :, d]
 		AvailableCollocationPoints[d, :] = Polynomials.roots(Polynomials.Polynomial(poly[apc.ExpansionDegree+2, :]))
 		# AvailableCollocationPoints[d,:]  = AMRVW.roots(poly[apc.ExpansionDegree+2,:])
-
 	end
 	AvailableCollocationPoints = reverse(AvailableCollocationPoints)
 
