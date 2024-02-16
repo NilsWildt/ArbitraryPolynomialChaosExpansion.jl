@@ -1,3 +1,4 @@
+
 function aPC_OrthonormalBasis(Data, Degree)
 	d = Degree #Degree of polinomial expansion
 	dd = d + 1 #Degree of polinomial for roots defenition

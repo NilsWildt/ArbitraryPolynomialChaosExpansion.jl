@@ -20,7 +20,7 @@ function run(degree)
 	ts = []
 	ps = []
 	# degress = 1:1:5
-	N = 500
+	N = 3000
 	d = 2
 
 	x = get_input(N, d, 1)
