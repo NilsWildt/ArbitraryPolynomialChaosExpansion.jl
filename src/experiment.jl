@@ -41,16 +41,24 @@ function add_zero_dimension(P::AbstractArray)
 end
 
 function PhysicalModelND(t, P::AbstractArray)
-	# @debug "Assuming a nd case" P
-	P = reduce(hcat, P)
-	P = add_zero_dimension(P)
 	ModelResponse = (P[1]^2 + P[2] - 1.0) .^ 2 .+  P[1]^3 + 0.5 * P[1] * exp(P[2]) .- sqrt.(t) .* P[1]
-
-	for i ∈ 3:lastindex(P, 1)
-		ModelResponse .+= P[i]
-	end
-	return ModelResponse.+rand().*0.1 # SVector{length(ModelResponse)}(
+	# for i ∈ 3:lastindex(P, 1)
+	# 	ModelResponse .+= P[i]
+	# end
+	return ModelResponse #.+rand() .*0.1 # SVector{length(ModelResponse)}(
 end
+# function PhysicalModelND(t, P::AbstractArray)
+# 	# @debug "Assuming a nd case" P
+# 	# P = reduce(hcat, P)
+# 	# P = add_zero_dimension(P)
+# 	ModelResponse = 4.0*((P[1]-0.5)^2+(P[2]-0.5)^2)
+
+# 	# for i ∈ 3:lastindex(P, 1)
+# 	# 	ModelResponse .+= P[i]
+# 	# end
+# 	return ModelResponse #.+rand() .*0.1 # SVector{length(ModelResponse)}(
+# end
+
 
 function PhysicalModel1D(t, P)
 	ModelResponse = @. (P[1]^2 + 0.0 - 1.0) .^ 2 .+  P[1]^3 + 0.5 * P[1] * exp(0.0) .- sqrt.(t) .* P[1]

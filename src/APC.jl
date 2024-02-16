@@ -14,13 +14,22 @@ include(srcdir("APC_ONB.jl"))
 include(srcdir("APC_ONB_MV.jl"))
 
 using Plots
+using LazyGrids
 plotly()
+
+function meshgrid(x, y)
+	X = [x for _ in y, x in x]
+	Y = [y for y in y, _ in x]
+	X, Y
+ end
+
+
 function run(degree)
 	err = []
 	ts = []
 	ps = []
 	# degress = 1:1:5
-	N = 3000
+	N = 800
 	d = 2
 
 	x = get_input(N, d, 1)
@@ -36,13 +45,23 @@ function run(degree)
         true_output = [PhysicalModelND(1, ix) for ix in x]
     end
 
-	
-
 	# degree = 2
 	# t = @elapsed begin
 	apc_instance = aPC(x, degree)
 	# @info "" apc_instance 
 	TrainingInput = GaussianCollocation(apc_instance)
+		
+	# (xg, yg) = meshgrid(LinRange(0,1,50),LinRange(0,1,50))
+
+	# TrainingInput = []
+	# for i in axes(xg,1)
+	# 	push!(TrainingInput,[xg[i],yg[i]])
+	# end
+	# display(TrainingInput)
+	# TrainingInput = RowVecs(reduce(hcat,TrainingInput))
+	# display(TrainingInput)
+
+
 	TrainingOutput = []
 	for i ∈ 1:size(TrainingInput, 1)
 		if d == 2
@@ -89,8 +108,10 @@ function run(degree)
     # display(p1)
     
     gratio = (1.0+sqrt(5.0))/2.0
-    p1 = Plots.scatter(reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], true_output, ms = 2, mc = :blue, marker = :circle, label = "True Output", legend = true, size = (600*gratio,600))
-    Plots.scatter!(p1,reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], pred, ms = 2, mc = :red, marker = :square, label = "Prediction", legend = true)
+    p1 = Plots.scatter(reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], true_output, ms = 2, mc = :blue, marker = :circle, label = "True Output", legend = true, size = (600*gratio,600),alpha=0.3)
+    Plots.scatter!(p1,reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], pred, ms = 2, mc = :red, marker = :square, label = "Prediction", legend = true,alpha=0.3)
+
+	# Plots.scatter!(p1, reduce(hcat,TrainingInput)[1,:], reduce(hcat,TrainingInput)[2,:], reduce(vcat, TrainingOutput), ms = 2, mc = :green, marker = :square, label = "Collocation Output", legend = true)
 	# Plots.scatter!(p2,reduce(hcat,TrainingInput)[2,:],)
 	# expect = RowVecs(PhysicalModel1D.(1,TrainingInput))
 	# display(expect)
