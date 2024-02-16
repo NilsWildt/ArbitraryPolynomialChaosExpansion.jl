@@ -166,7 +166,7 @@ function train!(apc::aPC{T}, TrainingInput::RowVecs, TrainingOutput::RowVecs) wh
 	# apc.ExpansionCoefficients .= x
 
 	x₀ = apc.ExpansionCoefficients # rand(size(Psi, 1))
-	apc.ExpansionCoefficients = invert(Matrix(Psi), to, Lₖx₀(2, x₀); alg = :gcv_tr, method = NelderMead())
+	apc.ExpansionCoefficients = invert(Matrix(Psi), to, Lₖx₀(2, x₀); alg = :gcv_svd, method = NelderMead())
 
 	return nothing
 end
