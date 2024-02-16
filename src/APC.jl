@@ -21,7 +21,7 @@ function meshgrid(x, y)
 	X = [x for _ in y, x in x]
 	Y = [y for y in y, _ in x]
 	X, Y
- end
+end
 
 
 function run(degree)
@@ -38,19 +38,19 @@ function run(degree)
 	last_pred = undef
 
 
-    true_output = [PhysicalModel1D(1, ix) for ix in x]
+	true_output = [PhysicalModel1D(1, ix) for ix in x]
 
 
-    if d == 2
-        true_output = [PhysicalModelND(1, ix) for ix in x]
-    end
+	if d == 2
+		true_output = [PhysicalModelND(1, ix) for ix in x]
+	end
 
 	# degree = 2
 	# t = @elapsed begin
 	apc_instance = aPC(x, degree)
 	# @info "" apc_instance 
 	TrainingInput = GaussianCollocation(apc_instance)
-		
+
 	# (xg, yg) = meshgrid(LinRange(0,1,50),LinRange(0,1,50))
 
 	# TrainingInput = []
@@ -83,33 +83,37 @@ function run(degree)
 
 
 	pred = predict(apc_instance, x)
-    @show mean(true_output)
-    @show var(true_output)
-    @show UQ(apc_instance)
+	@show mean(true_output)
+	@show var(true_output)
+	@show UQ(apc_instance)
 	# display(pred)
 	# last_pred = yy-> predict(apc_instance,[yy]) 
 	# Plots.plot(x,TrainingOutput)
-   
-   
-    # x = reduce(vcat,x)
-    # p1 = Plots.scatter(x, true_output, ms = 1)
+
+
+	# x = reduce(vcat, x)
+	gratio = (1.0+sqrt(5.0))/2.0
+	# p1 = Plots.scatter(x, true_output, ms = 2, mc = :blue, marker = :circle, label = "True Output", legend = true, size = (600 * gratio, 600), alpha = 0.8)
+	# Plots.scatter!(p1, x, pred, ms = 2, mc = :red, marker = :square, label = "Prediction", legend = true, alpha = 0.8)
+	# Plots.scatter!(p1, TrainingInput, TrainingOutput, ms = 2, mc = :green, marker = :square, label = "Collocation", legend = true, alpha = 0.8)
+
 	# p2 = Plots.scatter(x, pred, ms = 1)
 	# p3 = Plots.scatter(x, pred .- true_output, ms = 1)
 
 	# p1 = Plots.scatter(reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], true_output, ms = 1)
 	# p2 = Plots.scatter(reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], pred, ms = 1)
 	# p3 = Plots.scatter(reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], pred .- true_output, ms = 1)
- 
 
-    # p1 = Plots.scatter(reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], true_output, ms = 1, mc = :blue,size = (800, 800))
-    # Plots.scatter!(p1,reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], pred, ms = 1, mc = :red)
-    # # p3 = Plots.scatter(reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], pred .- true_output, ms = 1, mc = :green)
 
-    # display(p1)
-    
-    gratio = (1.0+sqrt(5.0))/2.0
-    p1 = Plots.scatter(reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], true_output, ms = 2, mc = :blue, marker = :circle, label = "True Output", legend = true, size = (600*gratio,600),alpha=0.3)
-    Plots.scatter!(p1,reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], pred, ms = 2, mc = :red, marker = :square, label = "Prediction", legend = true,alpha=0.3)
+	# p1 = Plots.scatter(reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], true_output, ms = 1, mc = :blue,size = (800, 800))
+	# Plots.scatter!(p1,reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], pred, ms = 1, mc = :red)
+	# # p3 = Plots.scatter(reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], pred .- true_output, ms = 1, mc = :green)
+
+	# display(p1)
+
+	gratio = (1.0+sqrt(5.0))/2.0
+	p1 = Plots.scatter(reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], true_output, ms = 2, mc = :blue, marker = :circle, label = "True Output", legend = true, size = (600*gratio,600),alpha=0.3)
+	Plots.scatter!(p1,reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], pred, ms = 2, mc = :red, marker = :square, label = "Prediction", legend = true,alpha=0.3)
 
 	# Plots.scatter!(p1, reduce(hcat,TrainingInput)[1,:], reduce(hcat,TrainingInput)[2,:], reduce(vcat, TrainingOutput), ms = 2, mc = :green, marker = :square, label = "Collocation Output", legend = true)
 	# Plots.scatter!(p2,reduce(hcat,TrainingInput)[2,:],)

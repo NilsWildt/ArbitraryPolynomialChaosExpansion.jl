@@ -319,7 +319,6 @@ end
 # ╔═╡ 6f84e971-2d48-476b-bf44-39cef1c45bac
 let
 	function ℓπ(u,A,y,λ₁=1e-8,λ₂=1e-8) 
-	
 	        AQiA =  A'*(I./λ₁)*A
 	        P = AQiA+I./λ₁
 	        K = pinv(AQiA)*A'*I./λ₁
@@ -344,7 +343,15 @@ let
 end
 
 # ╔═╡ edb6ae35-b26f-415a-baf9-d38328572875
+let
+A = rand(50,3)
 
+Ai1 = inv(A'*A)
+Ai2 = pinv(A'*A)
+Ai3 = pinv(A)
+
+Ai1.-Ai2
+end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """

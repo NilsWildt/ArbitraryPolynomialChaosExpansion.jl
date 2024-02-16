@@ -1,4 +1,21 @@
 
+function mean(x)
+	s = zero(eltype(x))
+	for i in x
+		s += i
+	end
+	return s / length(x)
+end
+
+function var(x::AbstractArray)
+	m = mean(x)
+	s = zero(eltype(x))
+	for i in x
+		s += (i - m)^2
+	end
+	return s / (length(x) - 1)
+end
+
 function aPC_OrthonormalBasis(Data, Degree)
 	d = Degree #Degree of polinomial expansion
 	dd = d + 1 #Degree of polinomial for roots defenition

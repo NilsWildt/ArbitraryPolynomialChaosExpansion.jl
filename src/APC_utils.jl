@@ -24,6 +24,7 @@ using Hyperopt
 using Preconditioners
 using CUDA
 import Optim: NewtonTrustRegion, Options, optimize, minimizer, minimum, LBFGS
+import RegularizationTools: Lₖx₀, solve, RegularizationProblem, setupRegularizationProblem, to_general_form, to_standard_form, gcv_tr, gcv_svd, invert, Lₖ, NelderMead
 
 
 function numberPolynomials(n::Int64, d::Int64)
@@ -76,21 +77,23 @@ function train!(apc::aPC{T}, TrainingInput::RowVecs, TrainingOutput::RowVecs) wh
 	# end
 
 
-	function bayes_reg_u(A, y, λ₁::T = 1e-3, λ₂::T = 0.0, pinv_atol = 1e-8) where {T <: Real}
-		Qi = I * λ₁
-		Ri = I * λ₂
-		AQiA = A' * Qi * A
-		P = AQiA + Ri
-		Ki = pinv(AQiA, atol = pinv_atol) * A' * Qi
-		# pre = CholeskyPreconditioner(P,2) 
-		if λ₂ == 0
-			return 	Ki*y
-		else
-		return P \ (AQiA * Ki * y)
-		end
-		# u = cg(P |> CuArray{Float32}, (AQiA * Ki * y) |> CuArray{Float32}) |> Array
-		# return u
-	end
+	# function bayes_reg_u(A, y, λ₁::T = 1.0, λ₂::T = 0.0) where {T <: Real}
+	# 	Qi = I * λ₁
+	# 	Ri = I * λ₂
+	# 	AQiA = A' * Qi * A
+	# 	P = AQiA + Ri
+	# 	Ki = AQiA \ (A' * Qi) # atol = pinv_atol
+	# 	# Ki = inv(AQiA) * A' * Qi # atol = pinv_atol
+
+	# 	# pre = CholeskyPreconditioner(P,2) 
+	# 	if λ₂ == 0
+	# 		return Ki * y
+	# 	else
+	# 		return P \ (AQiA * Ki * y) # 
+	# 	end
+	# 	# u = cg(P |> CuArray{Float32}, (AQiA * Ki * y) |> CuArray{Float32}) |> Array
+	# 	# return u
+	# end
 
 	# ho = @thyperopt for i ∈ 4096*2,
 	# 	sampler ∈ RandomSampler(), # This is default if none provided
@@ -108,21 +111,20 @@ function train!(apc::aPC{T}, TrainingInput::RowVecs, TrainingOutput::RowVecs) wh
 
 
 
-	@info "=> aPC Toolbox: Briefly optimizing the regularization noises for the expansion coefficient solving"
-	f(λ) = mean(abs.(Psi * bayes_reg_u(Psi, to, λ[1], λ[2]) .- to) .^ 2)
-	ho = @hyperopt for resources ∈ 100, sampler ∈ Hyperband(R = 100, η = 5, inner = RandomSampler()),
-		λ₁ ∈ exp10.(LinRange(-12, 3, 500)),
-		λ₂ ∈ [0.0],#exp10.(LinRange(-3, 3, 500)),
-		rtol ∈ exp10.(LinRange(-14, -3, 500))
+	# @info "=> aPC Toolbox: Briefly optimizing the regularization noises for the expansion coefficient solving"
+	# f(λ) = mean(abs.(Psi * bayes_reg_u(Psi, to, λ[1], λ[2]) .- to) .^ 2)
+	# ho = @hyperopt for resources ∈ 250, sampler ∈ Hyperband(R = 250, η = 5, inner = RandomSampler()),
+	# 	λ₁ ∈ [1.0],
+	# 	λ₂ ∈ exp10.(LinRange(-13, 1, 500))
 
-		if !(state === nothing)
-			λ₁, λ₂, rtol = state
-		end
-		res = optimize(f, [λ₁, 0.0, rtol], NewtonTrustRegion(), Options(time_limit = resources + 1, show_trace = false))
-		minimum(res), minimizer(res)
-	end
-	@info ho
-	apc.ExpansionCoefficients .= bayes_reg_u(Psi, to, ho.minimizer[1], ho.minimizer[2], ho.minimizer[3])
+	# 	if !(state === nothing)
+	# 		λ₁, λ₂ = state
+	# 	end
+	# 	res = optimize(f, [λ₁, λ₂], NewtonTrustRegion(), Options(time_limit = resources + 1, show_trace = false))
+	# 	minimum(res), minimizer(res)
+	# end
+	# @info ho
+	# apc.ExpansionCoefficients .= bayes_reg_u(Psi, to, ho.minimizer[1], ho.minimizer[2])
 
 
 	# f_opti(x, p) = bayes_reg_u(x, Psi, to, 1.0e-8, 1.0)
@@ -131,7 +133,7 @@ function train!(apc::aPC{T}, TrainingInput::RowVecs, TrainingOutput::RowVecs) wh
 	# prob = NonlinearProblem(NonlinearFunction(f_opti), u0, 0.0)
 	# sol = solve(prob, NonlinearSolve.GaussNewton(); maxiters = 10000, abstol = 1e-8, verbose = true)
 	# @debug "" sol.retcode
-	# apc.ExpansionCoefficients .= bayes_reg_u(Psi, to, 1.0)
+	# apc.ExpansionCoefficients .= bayes_reg_u(Psi, to, 1.0, 0.0001, 0.0)
 
 	# @info size(Psi) size(to) size(Psi'*to)  size((Psi'*Psi))
 
@@ -145,8 +147,26 @@ function train!(apc::aPC{T}, TrainingInput::RowVecs, TrainingOutput::RowVecs) wh
 	# @info sol
 	# apc.ExpansionCoefficients .= sol.u
 
-	# Psi_inv = pinv(Psi)
-	# apc.ExpansionCoefficients = Psi_inv * to
+	Psi_inv = pinv(Psi)
+	apc.ExpansionCoefficients = Psi_inv * to
+
+	# # A is a Matrix and b is a response vector. 
+	# Ψ = setupRegularizationProblem(Psi, 2)     # Setup problem
+	# b̄, x̄₀ = to_standard_form(Ψ, to, x₀)       # Convert to standard form
+	# # Vλ = gcv_tr(Ψ, b̄, x̄₀, 0.1)    
+	# cv = Float64[]
+	# ls = exp10.(LinRange(-18, 5, 500))   
+	# for l in ls                 
+	# 	push!(cv,gcv_svd(Ψ, b̄, x̄₀, l))
+	# end
+	# λ = ls[argmin(cv)]
+
+	# x̄ = solve(Ψ, b̄, x̄₀,λ )                 # Solve the equation
+	# x = to_general_form(Ψ, to, x̄)             # Convert back to general form
+	# apc.ExpansionCoefficients .= x
+
+	x₀ = apc.ExpansionCoefficients # rand(size(Psi, 1))
+	apc.ExpansionCoefficients = invert(Matrix(Psi), to, Lₖx₀(2, x₀); alg = :gcv_tr, method = NelderMead())
 
 	return nothing
 end
