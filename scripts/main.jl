@@ -20,7 +20,7 @@ info_logging = ConsoleLogger(stderr, Logging.Info)
 global_logger(debug_logging)
 include(srcdir("APC.jl"))
 using .APC
-for degree in 4:4
+for degree in 3:3
 	display(degree)
 	@timev begin
 		p = APC.run(degree)
