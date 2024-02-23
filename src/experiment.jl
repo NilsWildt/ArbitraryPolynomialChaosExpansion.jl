@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 using Random
-import Distributions:Beta,Uniform
+import Distributions: Beta, Uniform
 
 export get_input
 export PhysicalModelND
@@ -31,21 +31,21 @@ function get_input(N, d, seed = 1)
 end
 
 function add_zero_dimension(P::AbstractArray)
-    # Create a zero array with the same size as P
-    zero_array = zeros(size(P))
+	# Create a zero array with the same size as P
+	zero_array = zeros(size(P))
 
-    # Concatenate P and zero_array along the first dimension
-    P_new = vcat(P, zero_array)
+	# Concatenate P and zero_array along the first dimension
+	P_new = vcat(P, zero_array)
 
-    return P_new
+	return P_new
 end
 
 function PhysicalModelND(t, P::AbstractArray)
-	ModelResponse = (P[1]^2 + P[2] - 1.0) .^ 2 .+  P[1]^3 #+ 0.5 * P[1] * exp(P[2]) .- sqrt.(t) .* P[1]
+	ModelResponse = (P[1]^2 + P[2] - 1.0) .^ 2 .+ P[1]^3 + 0.5 * P[1] * exp(P[2]) .- sqrt.(t) .* P[1]
 	for i ∈ 3:lastindex(P, 1)
 		ModelResponse .+= P[i]
 	end
-	return ModelResponse .+rand() .*0.01 # SVector{length(ModelResponse)}(
+	return ModelResponse .+ rand() .* 0.3 # SVector{length(ModelResponse)}(
 end
 # function PhysicalModelND(t, P::AbstractArray)
 # 	# @debug "Assuming a nd case" P
@@ -61,13 +61,13 @@ end
 
 
 function PhysicalModel1D(t, P)
-	ModelResponse = @. (P[1]^2 + 0.0 - 1.0) .^ 2 .+  P[1]^3 + 0.5 * P[1] * exp(0.0) .- sqrt.(t) .* P[1]
+	ModelResponse = @. (P[1]^2 + 0.0 - 1.0) .^ 2 .+ P[1]^3 + 0.5 * P[1] * exp(0.0) .- sqrt.(t) .* P[1]
 
 	for i ∈ 3:lastindex(P, 1)
 		ModelResponse .+= P[i]
 	end
 
-	return ModelResponse .+ rand()*0.1 # SVector{length(ModelResponse)}(
+	return ModelResponse .+ rand() * 0.3 # SVector{length(ModelResponse)}(
 end
 
 
@@ -87,7 +87,7 @@ function PhysicalModel2DGaussian(t, P::AbstractArray)
 	sigma_y = 1
 
 	# Calculate the 2D Gaussian
-	ModelResponse = exp(- ((P[1] - mu_x)^2 / (2 * sigma_x^2) + (P[2] - mu_y)^2 / (2 * sigma_y^2)))
+	ModelResponse = exp(-((P[1] - mu_x)^2 / (2 * sigma_x^2) + (P[2] - mu_y)^2 / (2 * sigma_y^2)))
 
 	return ModelResponse
 end

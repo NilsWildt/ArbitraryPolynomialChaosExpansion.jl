@@ -10,6 +10,8 @@ using TerminalLoggers: TerminalLogger
 using ProgressLogging
 using Logging
 using LoggingExtras
+using PProf
+
 loggingdir(args...) = projectdir("output", "logs", args...)
 mkpath(loggingdir())
 # io = open(loggingdir("debug.txt"), "w")
@@ -20,12 +22,15 @@ info_logging = ConsoleLogger(stderr, Logging.Info)
 global_logger(debug_logging)
 include(srcdir("APC.jl"))
 using .APC
-for degree in 3:3
-	display(degree)
-	@timev begin
-		p = APC.run(degree)
-	end
-	display(p)
 
-end
+@pprof APC.run(8)
+
+# for degree in 2:2
+# 	display(degree)
+# 	@timev begin
+# 		p = APC.run(degree)
+# 	end
+# 	display(p)
+
+# end
 end

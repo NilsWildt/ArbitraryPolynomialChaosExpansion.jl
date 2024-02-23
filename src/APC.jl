@@ -8,6 +8,8 @@ export run
 include(srcdir("utils.jl"))
 include(srcdir("experiment.jl"))
 include(srcdir("APC_functions.jl"))
+include(srcdir("analyticalmodel.jl"))
+
 
 using Plots
 plotly()
@@ -45,11 +47,11 @@ function run(degree)
 	apc_instance = aPC(x, degree)
 	# @info "" apc_instance 
 
-	TrainingInput = GaussianCollocation2(apc_instance)
-	@debug "" TrainingInput
+	# TrainingInput = GaussianCollocation2(apc_instance)
+	# @debug "" TrainingInput
 	TrainingInput = GaussianCollocation(apc_instance; strategy = :PCM)
-	@debug "" TrainingInput
-	(xg, yg) = meshgrid(LinRange(0, 1, 50), LinRange(0, 1, 50))
+	# @debug "" TrainingInput
+	# (xg, yg) = meshgrid(LinRange(0, 1, 50), LinRange(0, 1, 50))
 
 	# TrainingInput = []
 	# for i in axes(xg,1)
@@ -141,6 +143,63 @@ function run(degree)
 	# pn2 = Plots.plot(ps...)
 	# Plots.plot(pn,pn2, layout =@layout [a ; b])
 	# Plots.scatter(log.((abs.(pred[1,:].-expect[1,:]))))
+end
+
+
+
+function run2(degree)
+	err = []
+	ts = []
+	ps = []
+	# degress = 1:1:5
+	N = 500
+	d = 2
+
+	# locations
+	(xg, yg) = meshgrid(LinRange(0, 1, 50), LinRange(0, 1, 50))
+	# parameters
+
+
+	true_output = [PhysicalModel1D(1, ix) for ix in x]
+
+
+	if d == 2
+		true_output = [PhysicalModelND(1, ix) for ix in x]
+	end
+
+	# degree = 2
+	# t = @elapsed begin
+	apc_instance = aPC(x, degree)
+	# @info "" apc_instance 
+
+	# TrainingInput = GaussianCollocation2(apc_instance)
+	# @debug "" TrainingInput
+	TrainingInput = GaussianCollocation(apc_instance; strategy = :PCM)
+
+	# 
+
+
+
+
+	TrainingOutput = reduce(hcat, TrainingOutput)' |> RowVecs
+
+
+	train!(apc_instance, TrainingInput, TrainingOutput)
+
+	pred = predict(apc_instance, x)
+	@info mean(true_output)
+	@info var(true_output)
+	@show UQ(apc_instance)
+
+	gratio = (1.0 + sqrt(5.0)) / 2.0
+
+
+	gratio = (1.0 + sqrt(5.0)) / 2.0
+	p1 = Plots.scatter(reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], true_output, ms = 2, mc = :blue, marker = :circle, label = "True Output", legend = true, size = (600 * gratio, 600), alpha = 0.3)
+	Plots.scatter!(p1, reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], pred, ms = 2, mc = :red, marker = :square, label = "Prediction", legend = true, alpha = 0.3)
+
+	Plots.scatter!(p1, reduce(hcat, TrainingInput)[1, :], reduce(hcat, TrainingInput)[2, :], reduce(vcat, TrainingOutput), ms = 2, mc = :green, marker = :square, label = "Collocation Output", legend = true)
+
 end
 
 
