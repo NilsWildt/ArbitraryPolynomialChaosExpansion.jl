@@ -30,6 +30,7 @@ using InducingPoints
 using Polynomials
 using KernelFunctions
 using StatsBase
+using SparseArrays
 
 mutable struct aPC{T <: Real}
 	InputDistribution::RowVecs{T} # in [ d x N-samples]
@@ -50,7 +51,9 @@ mutable struct aPC{T <: Real}
 	) where T
 		input_dimensions = size(InputDistribution[1], 1)
 		# @info "" size(InputDistribution[1])
-		MultivariatePolynomialDegrees = aPC_MultivariatePolynomialDegrees(input_dimensions, ExpansionDegree)
+		# MultivariatePolynomialDegrees = aPC_MultivariatePolynomialDegrees(input_dimensions, ExpansionDegree)
+		MultivariatePolynomialDegrees = aPC_MultivariatePolynomialDegrees(input_dimensions, ExpansionDegree; qnorm = 1.0)
+
 		# display(MultivariatePolynomialDegrees)
 		NumberOfTerms = numberPolynomials(ExpansionDegree, input_dimensions)
 
@@ -60,7 +63,6 @@ mutable struct aPC{T <: Real}
 			OrthonormalBasis[:, :, i] .= tmp
 		end
 		# OrthonormalBasis = tmp
-
 		# display(OrthonormalBasis)
 		ExpansionCoefficients = zeros(T, NumberOfTerms)
 
@@ -127,7 +129,7 @@ function sort_basis_indices(keys; graded = false, reverse = false)
 end
 
 
-function aPC_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T; use_p = false, p::Float64 = 0.85) where {T <: Integer}
+function aPC_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T; qnorm::Float64 = 1.0) where {T <: Integer}
 	# Initialize the indices for the first parameter
 	range_ = 0:max_degree |> collect
 	indices = reshape(range_, :, 1)  # Make it a column vector
@@ -136,9 +138,10 @@ function aPC_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T; use
 		indices = repeat(indices, inner = (max_degree + 1, 1))
 		front = repeat(range_, outer = div(lastindex(indices), (max_degree + 1)) ÷ di)
 		indices = hcat(front, indices)
-		if use_p
-			# Apply truncation using p-norm sparsity
-			idx_to_keep = vec(sum((indices ./ (num_dimensions + 1)) .^ p, dims = 2) .^ (1 / p) .<= 1)
+		if qnorm != 1.0
+			# Apply truncation using qnorm-norm sparsity
+			@info "Q-norm removed some terms"
+			idx_to_keep = vec(sum((indices ./ (max_degree + 1)) .^ qnorm, dims = 2) .^ (1.0 / qnorm) .<= 1.0)
 			indices = indices[idx_to_keep, :]
 		else
 			indices = indices[vec(sum(indices; dims = 2)).<=max_degree, :]
@@ -160,19 +163,17 @@ function aPC_PsiPolynomialMatrix(apc::aPC{T}, TrainingInput) where {T <: Real}
 	@inbounds for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
 		for j ∈ 1:NCpoints  # For each input sample
 			product = 1.0  # Initialize the product for this term and sample
-			@simd for ii ∈ 1:InputDimensions  # For each dimension of the input
+			for ii ∈ 1:InputDimensions  # For each dimension of the input
 				degree = apc.MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
 				coeffs = apc.OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
-				p = Polynomials.Polynomial(coeffs)  # Create the polynomial
+				p = Polynomials.SparsePolynomial(coeffs)  # Create the polynomial
 				x = reduce(hcat, TrainingInput)[ii, j]
 				# @show degree coeffs p x p(x) 
-
 				product *= p(x)  # Evaluate the polynomial at x and multiply
 			end
 			Psi[i, j] = product  # Assign the product to Psi matrix
 		end
 	end
-
 	return Psi
 end
 
@@ -446,6 +447,7 @@ function train!(apc::aPC{T}, TrainingInput::RowVecs, TrainingOutput::RowVecs) wh
 	x₀ = apc.ExpansionCoefficients # Quite a good first guess :) And pinv is quite stable.
 	apc.ExpansionCoefficients = invert(Matrix(Psi), to, Lₖx₀(2, x₀); alg = :gcv_svd, method = LBFGS())
 
+	@info "" sqrt(mean((Psi * apc.ExpansionCoefficients .- to) .^ 2))
 	return nothing
 end
 

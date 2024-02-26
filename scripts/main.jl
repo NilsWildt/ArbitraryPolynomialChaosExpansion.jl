@@ -23,14 +23,14 @@ global_logger(debug_logging)
 include(srcdir("APC.jl"))
 using .APC
 
-@pprof APC.run(8)
+# @pprof APC.run(4)
 
 # for degree in 2:2
-# 	display(degree)
-# 	@timev begin
-# 		p = APC.run(degree)
-# 	end
-# 	display(p)
-
+	# display(degree)
+	degree = 3
+	@timev begin
+		p = APC.run(degree)
+	end
+	display(p)
 # end
 end
