@@ -1,6 +1,7 @@
 module APC
 using DrWatson
 
+
 configdir(args...) = projectdir("configs", args...)
 outputdir(args...) = projectdir("output", args...)
 
@@ -14,6 +15,10 @@ include(srcdir("analyticalmodel.jl"))
 using Plots
 plotly()
 
+using TimerOutputs
+const to = TimerOutput()
+
+
 function meshgrid(x, y)
 	X = [x for _ in y, x in x]
 	Y = [y for y in y, _ in x]
@@ -22,34 +27,31 @@ end
 
 
 function run(degree)
+
 	err = []
 	ts = []
 	ps = []
 	# degress = 1:1:5
-	N = 500
+	N = 1000
 	d = 2
-
-	x = get_input(N, d, 1)
+	
+	x = @timeit to "get_input" get_input(N, d, 1)
 	# @debug "" x
 	# m(x) = PhysicalModel1D(1,x)
 	last_pred = undef
 
-
 	true_output = [PhysicalModel1D(1, ix) for ix in x]
-
-
 	if d == 2
 		true_output = [PhysicalModelND(1, ix) for ix in x]
 	end
-
 	# degree = 2
 	# t = @elapsed begin
-	apc_instance = aPC(x, degree)
+	apc_instance = @timeit to "aPC_instance"  aPC(x, degree)
 	# @info "" apc_instance 
 
 	# TrainingInput = GaussianCollocation2(apc_instance)
 	# @debug "" TrainingInput
-	TrainingInput = GaussianCollocation(apc_instance; strategy = :PCM)
+	TrainingInput =  @timeit to "GaussianCollocation" GaussianCollocation(apc_instance; strategy = :PCM)
 	# @debug "" TrainingInput
 	# (xg, yg) = meshgrid(LinRange(0, 1, 50), LinRange(0, 1, 50))
 
@@ -76,23 +78,23 @@ function run(degree)
 	TrainingOutput = reduce(hcat, TrainingOutput)' |> RowVecs
 
 	# @info "" apc_instance	
-	train!(apc_instance, TrainingInput, TrainingOutput)
+	@timeit to "training" train!(apc_instance, TrainingInput, TrainingOutput)
 
 	# # @debug "" UQ(apc_instance)
 	# # xcp = [0.422117914428017	0.610608061392019	0.780825721677619]]
 
 
-	pred = predict(apc_instance, x)
-	@show mean(true_output)
-	@show var(true_output)
-	@show UQ(apc_instance)
+	pred =  @timeit to "prediction" predict(apc_instance, x)
+	# @show mean(true_output)
+	# @show var(true_output)
+	# @show UQ(apc_instance)
 	# display(pred)
 	# last_pred = yy-> predict(apc_instance,[yy]) 
 	# Plots.plot(x,TrainingOutput)
 
 
 	# x = reduce(vcat, x)
-	gratio = (1.0 + sqrt(5.0)) / 2.0
+	# gratio = (1.0 + sqrt(5.0)) / 2.0
 	# p1 = Plots.scatter(x, true_output, ms = 2, mc = :blue, marker = :circle, label = "True Output", legend = true, size = (600 * gratio, 600), alpha = 0.8)
 	# Plots.scatter!(p1, x, pred, ms = 2, mc = :red, marker = :square, label = "Prediction", legend = true, alpha = 0.8)
 	# Plots.scatter!(p1, TrainingInput, TrainingOutput, ms = 2, mc = :green, marker = :square, label = "Collocation", legend = true, alpha = 0.8)
@@ -111,11 +113,11 @@ function run(degree)
 
 	# display(p1)
 
-	gratio = (1.0 + sqrt(5.0)) / 2.0
-	p1 = Plots.scatter(reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], true_output, ms = 2, mc = :blue, marker = :circle, label = "True Output", legend = true, size = (600 * gratio, 600), alpha = 0.3)
-	Plots.scatter!(p1, reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], pred, ms = 2, mc = :red, marker = :square, label = "Prediction", legend = true, alpha = 0.3)
+	# gratio = (1.0 + sqrt(5.0)) / 2.0
+	# p1 = Plots.scatter(reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], true_output, ms = 2, mc = :blue, marker = :circle, label = "True Output", legend = true, size = (600 * gratio, 600), alpha = 0.3)
+	# Plots.scatter!(p1, reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], pred, ms = 2, mc = :red, marker = :square, label = "Prediction", legend = true, alpha = 0.3)
 
-	Plots.scatter!(p1, reduce(hcat, TrainingInput)[1, :], reduce(hcat, TrainingInput)[2, :], reduce(vcat, TrainingOutput), ms = 2, mc = :green, marker = :square, label = "Collocation Output", legend = true)
+	# Plots.scatter!(p1, reduce(hcat, TrainingInput)[1, :], reduce(hcat, TrainingInput)[2, :], reduce(vcat, TrainingOutput), ms = 2, mc = :green, marker = :square, label = "Collocation Output", legend = true)
 	# Plots.scatter!(p2,reduce(hcat,TrainingInput)[2,:],)
 	# expect = RowVecs(PhysicalModel1D.(1,TrainingInput))
 	# display(expect)
@@ -143,6 +145,7 @@ function run(degree)
 	# pn2 = Plots.plot(ps...)
 	# Plots.plot(pn,pn2, layout =@layout [a ; b])
 	# Plots.scatter(log.((abs.(pred[1,:].-expect[1,:]))))
+	display(to)
 end
 
 
@@ -191,14 +194,14 @@ function run2(degree)
 	@info var(true_output)
 	@show UQ(apc_instance)
 
-	gratio = (1.0 + sqrt(5.0)) / 2.0
+	# gratio = (1.0 + sqrt(5.0)) / 2.0
 
 
-	gratio = (1.0 + sqrt(5.0)) / 2.0
-	p1 = Plots.scatter(reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], true_output, ms = 2, mc = :blue, marker = :circle, label = "True Output", legend = true, size = (600 * gratio, 600), alpha = 0.3)
-	Plots.scatter!(p1, reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], pred, ms = 2, mc = :red, marker = :square, label = "Prediction", legend = true, alpha = 0.3)
+	# gratio = (1.0 + sqrt(5.0)) / 2.0
+	# p1 = Plots.scatter(reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], true_output, ms = 2, mc = :blue, marker = :circle, label = "True Output", legend = true, size = (600 * gratio, 600), alpha = 0.3)
+	# Plots.scatter!(p1, reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], pred, ms = 2, mc = :red, marker = :square, label = "Prediction", legend = true, alpha = 0.3)
 
-	Plots.scatter!(p1, reduce(hcat, TrainingInput)[1, :], reduce(hcat, TrainingInput)[2, :], reduce(vcat, TrainingOutput), ms = 2, mc = :green, marker = :square, label = "Collocation Output", legend = true)
+	# Plots.scatter!(p1, reduce(hcat, TrainingInput)[1, :], reduce(hcat, TrainingInput)[2, :], reduce(vcat, TrainingOutput), ms = 2, mc = :green, marker = :square, label = "Collocation Output", legend = true)
 
 end
 

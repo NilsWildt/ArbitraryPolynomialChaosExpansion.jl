@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+using MKL
 using LinearAlgebra
 using RegularizedLeastSquares
 using FastLevenbergMarquardt
@@ -31,6 +32,7 @@ using Polynomials
 using KernelFunctions
 using StatsBase
 using SparseArrays
+using StaticArrays
 
 mutable struct aPC{T <: Real}
 	InputDistribution::RowVecs{T} # in [ d x N-samples]
@@ -81,52 +83,52 @@ end
 
 
 
-function aPC_MultivariatePolynomialDegrees_old(N, d)
-	# Input:
-	# N- Number of uncertain parameters
-	# d - Degree of polynomial expansion
-	# Output:
-	# PolynomialDegree - Multivariate Polynomial Degrees 
-	# Total number of terms
-	P = numberPolynomials(N, d)
-	# Possible Degrees
-	UniqueDegreeCombinations = zeros((d + 1)^N, d)
-	PossibleDegrees = [collect(0:d) for _ in N:-1:1]
-	if N == 1
-		UniqueDegreeCombinations = PossibleDegrees[1]
-	else
-		tmp = cat(collect(ndgrid_array(reverse(PossibleDegrees)...))...; dims = 3)
-		UniqueDegreeCombinations = reshape(tmp, :, N)
-	end
-	# Possible degree computation
-	DegreeWeight = zeros(1, size(UniqueDegreeCombinations, 1))
-	for i ∈ 1:1:size(UniqueDegreeCombinations, 1)
-		DegreeWeight[i] = 0.0
-		for j ∈ 1:1:N
-			DegreeWeight[i] = DegreeWeight[i] + UniqueDegreeCombinations[i, j]
-		end
-	end
-	# Sorting of possible degree
-	id = sortperm(DegreeWeight; dims = 2)[:]
-	SortDegreeCombinations = UniqueDegreeCombinations[id, :]
-	# Multivariate Polynomial Degrees  
-	reverse_columns!(SortDegreeCombinations)
-	return SortDegreeCombinations[1:P, :]
-end
+# function aPC_MultivariatePolynomialDegrees_old(N, d)
+# 	# Input:
+# 	# N- Number of uncertain parameters
+# 	# d - Degree of polynomial expansion
+# 	# Output:
+# 	# PolynomialDegree - Multivariate Polynomial Degrees 
+# 	# Total number of terms
+# 	P = numberPolynomials(N, d)
+# 	# Possible Degrees
+# 	UniqueDegreeCombinations = zeros((d + 1)^N, d)
+# 	PossibleDegrees = [collect(0:d) for _ in N:-1:1]
+# 	if N == 1
+# 		UniqueDegreeCombinations = PossibleDegrees[1]
+# 	else
+# 		tmp = cat(collect(ndgrid_array(reverse(PossibleDegrees)...))...; dims = 3)
+# 		UniqueDegreeCombinations = reshape(tmp, :, N)
+# 	end
+# 	# Possible degree computation
+# 	DegreeWeight = zeros(1, size(UniqueDegreeCombinations, 1))
+# 	for i ∈ 1:1:size(UniqueDegreeCombinations, 1)
+# 		DegreeWeight[i] = 0.0
+# 		for j ∈ 1:1:N
+# 			DegreeWeight[i] = DegreeWeight[i] + UniqueDegreeCombinations[i, j]
+# 		end
+# 	end
+# 	# Sorting of possible degree
+# 	id = sortperm(DegreeWeight; dims = 2)[:]
+# 	SortDegreeCombinations = UniqueDegreeCombinations[id, :]
+# 	# Multivariate Polynomial Degrees  
+# 	reverse_columns!(SortDegreeCombinations)
+# 	return SortDegreeCombinations[1:P, :]
+# end
 
 
-function sort_basis_indices(keys; graded = false, reverse = false)
-	if reverse
-		reverse!(keys, dims = 1)
-	end
-	indices = sortperm(keys[:, 1])
-	if graded
-		sums = sum(keys[indices, :], dims = 2)
-		graded_indices = sortperm(sums, dims = 1)
-		indices = indices[graded_indices]
-	end
-	return indices
-end
+# function sort_basis_indices(keys; graded = false, reverse = false)
+# 	if reverse
+# 		reverse!(keys, dims = 1)
+# 	end
+# 	indices = sortperm(keys[:, 1])
+# 	if graded
+# 		sums = sum(keys[indices, :], dims = 2)
+# 		graded_indices = sortperm(sums, dims = 1)
+# 		indices = indices[graded_indices]
+# 	end
+# 	return indices
+# end
 
 
 function aPC_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T; qnorm::Float64 = 1.0) where {T <: Integer}
@@ -154,9 +156,7 @@ function aPC_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T; qno
 	return indices
 end
 
-
-
-function aPC_PsiPolynomialMatrix(apc::aPC{T}, TrainingInput) where {T <: Real}
+function aPC_PsiPolynomialMatrix(apc::aPC{T}, TrainingInput::V) where {T <: Real,V<:RowVecs{T}}
 	NumberOfTerms, InputDimensions = size(apc.MultivariatePolynomialDegrees)
 	NCpoints = size(TrainingInput, 1)
 	Psi = ones(T, NumberOfTerms, NCpoints)
@@ -166,7 +166,7 @@ function aPC_PsiPolynomialMatrix(apc::aPC{T}, TrainingInput) where {T <: Real}
 			for ii ∈ 1:InputDimensions  # For each dimension of the input
 				degree = apc.MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
 				coeffs = apc.OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
-				p = Polynomials.SparsePolynomial(coeffs)  # Create the polynomial
+				p = Polynomials.Polynomial(coeffs)  # Create the polynomial
 				x = reduce(hcat, TrainingInput)[ii, j]
 				# @show degree coeffs p x p(x) 
 				product *= p(x)  # Evaluate the polynomial at x and multiply
@@ -176,9 +176,6 @@ function aPC_PsiPolynomialMatrix(apc::aPC{T}, TrainingInput) where {T <: Real}
 	end
 	return Psi
 end
-
-
-
 
 function mean(x)
 	s = zero(eltype(x))
@@ -319,7 +316,7 @@ function UniGridCollocation(apc::aPC{T}, M = 10)::RowVecs{T} where {T <: Real}
 end
 
 
-function GaussianCollocation(apc::aPC{T}; strategy = :PCM)::RowVecs{T} where {T <: Real}
+@inbounds function GaussianCollocation(apc::aPC{T}; strategy = :PCM)::RowVecs{T} where {T <: Real}
 	polynomial_roots = zeros(T, apc.input_dimensions, apc.ExpansionDegree + 1)
 	for d ∈ 1:apc.input_dimensions
 		polynomial_basis = apc.OrthonormalBasis[:, :, d]
@@ -444,8 +441,10 @@ function train!(apc::aPC{T}, TrainingInput::RowVecs, TrainingOutput::RowVecs) wh
 	to = reduce(vcat, TrainingOutput)
 	Psi_inv = pinv(Psi)
 	apc.ExpansionCoefficients = Psi_inv * to
-	x₀ = apc.ExpansionCoefficients # Quite a good first guess :) And pinv is quite stable.
-	apc.ExpansionCoefficients = invert(Matrix(Psi), to, Lₖx₀(2, x₀); alg = :gcv_svd, method = LBFGS())
+
+
+	# x₀ = apc.ExpansionCoefficients # Quite a good first guess :) And pinv is quite stable.
+	# apc.ExpansionCoefficients = invert(Matrix(Psi), to, Lₖx₀(2, x₀); alg = :gcv_svd, method = LBFGS())
 
 	@info "" sqrt(mean((Psi * apc.ExpansionCoefficients .- to) .^ 2))
 	return nothing
@@ -453,7 +452,7 @@ end
 
 
 function predict(apc::aPC{T}, PredictionInput) where {T <: Real}
-	@info "=> aPC Toolbox: Prediction using Arbitrary Polynomial Chaos ..."
+	# @info "=> aPC Toolbox: Prediction using Arbitrary Polynomial Chaos ..."
 	Psi = aPC_PsiPolynomialMatrix(apc, PredictionInput)'
 	PredictionOutput = [dot(apc.ExpansionCoefficients, row) for row in eachrow(Psi)]
 	return PredictionOutput

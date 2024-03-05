@@ -12,6 +12,7 @@ using Logging
 using LoggingExtras
 using PProf
 
+
 loggingdir(args...) = projectdir("output", "logs", args...)
 mkpath(loggingdir())
 # io = open(loggingdir("debug.txt"), "w")
@@ -23,14 +24,17 @@ global_logger(debug_logging)
 include(srcdir("APC.jl"))
 using .APC
 
-# @pprof APC.run(4)
-
 # for degree in 2:2
 	# display(degree)
-	degree = 3
-	@timev begin
-		p = APC.run(degree)
-	end
-	display(p)
+# 	for l in 1:100
+# 	degree = 3
+# 	@timeit to "APC" begin
+# 		p = APC.run(degree)
+# 	end
 # end
+# end
+# display(to)
+
+APC.run(6)
+
 end
