@@ -28,7 +28,7 @@ const to = TimerOutput()
 # for degree in 2:2
 	# display(degree)
 	b = @benchmark begin
-			degree = 15
+			degree = 5
 			@timeit to "APC" begin
 				p = APC.run(degree,to)
 			end

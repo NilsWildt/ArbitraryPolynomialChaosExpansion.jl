@@ -134,7 +134,7 @@ end
 # end
 
 
-function aPC_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T; qnorm::Float64 = 1.0)::Array{T} where {T <: Integer}
+function aPC_MultivariatePolynomialDegrees(num_dimensions, max_degree; qnorm = 1.0)
 	# Initialize the indices for the first parameter
 	range_ = 0:max_degree |> collect
 	indices = reshape(range_, :, 1)  # Make it a column vector
@@ -154,7 +154,7 @@ function aPC_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T; qno
 	end
 
 	# indices = 
-	indices .= Array{T}(sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end])
+	indices .= sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
 	reverse_columns!(indices)
 	return indices
 end
@@ -281,14 +281,14 @@ end
 	return poly # SMatrix{dd+1,dd+1}(
 end
 
-function KMeansCollocation(apc::aPC{T}, M = 10)::RowVecs{T} where {T <: Float64}
+function KMeansCollocation(apc, M = 10)
 	alg = InducingPoints.KmeansAlg(M)
 	Z = inducingpoints(alg, reduce(hcat, apc.InputDistribution)')
 	Z = reduce(hcat, Z) |> Array |> transpose |> RowVecs
 	return Z
 end
 
-function kDPPCollocation(apc::aPC{T}, M = 10)::RowVecs{T} where {T <: Float64}
+function kDPPCollocation(apc, M = 10)
 	kernel = SqExponentialKernel()
 	alg = kDPP(M)
 	Z = inducingpoints(alg, reduce(hcat, apc.InputDistribution)'; kernel)
@@ -296,21 +296,21 @@ function kDPPCollocation(apc::aPC{T}, M = 10)::RowVecs{T} where {T <: Float64}
 	return Z
 end
 
-function RandomSubsetCollocation(apc::aPC{T}, M = 10)::RowVecs{T} where {T <: Float64}
+function RandomSubsetCollocation(apc, M = 10)
 	alg = RandomSubset(M)
 	Z = inducingpoints(alg, reduce(hcat, apc.InputDistribution)')
 	Z = reduce(hcat, Z) |> Array |> transpose |> RowVecs
 	return Z
 end
 
-function CoverTreeCollocation(apc::aPC{T}, c = 0.2)::RowVecs{T} where {T <: Float64}
+function CoverTreeCollocation(apc, c = 0.2)
 	alg = CoverTree(c)
 	Z = inducingpoints(alg, reduce(hcat, apc.InputDistribution)')
 	Z = reduce(hcat, Z) |> Array |> transpose |> RowVecs
 	return Z
 end
 
-function UniGridCollocation(apc::aPC{T}, M = 10)::RowVecs{T} where {T <: Float64}
+function UniGridCollocation(apc, M = 10)
 	alg = UniGrid(M)
 	Z = inducingpoints(alg, reduce(hcat, apc.InputDistribution)')
 	Z = reduce(hcat, Z) |> Array |> transpose |> RowVecs
@@ -318,11 +318,11 @@ function UniGridCollocation(apc::aPC{T}, M = 10)::RowVecs{T} where {T <: Float64
 end
 
 
-function GaussianCollocation(apc::aPC{T}; strategy = :PCM)::RowVecs{T} where {T <: Float64}
-	polynomial_roots = zeros(T, apc.input_dimensions, apc.ExpansionDegree + 1)
+function GaussianCollocation(apc; strategy = :PCM)
+	polynomial_roots = zeros(apc.input_dimensions, apc.ExpansionDegree + 1)
 	@inbounds for d ∈ Base.oneto(Int64(apc.input_dimensions))
 		polynomial_basis = apc.OrthonormalBasis[:, :, d]
-		polynomial_roots[d, :] = Float64.(PolynomialRoots.roots((polynomial_basis[apc.ExpansionDegree+2, :])))
+		polynomial_roots[d, :] = Real.(PolynomialRoots.roots((polynomial_basis[apc.ExpansionDegree+2, :])))
 	end
 	PointsVector = 1:apc.ExpansionDegree+1 |> collect
 	UniqueCombinations = stack(reduce(vcat, collect(Iterators.product([PointsVector for i in 1:apc.input_dimensions]...))))' |> Array{Int64}
@@ -330,7 +330,7 @@ function GaussianCollocation(apc::aPC{T}; strategy = :PCM)::RowVecs{T} where {T 
 	SortUniqueCombinations = UniqueCombinations[sort_indices[:], :]
 	if strategy == :FT
 		TrainingInput = SortUniqueCombinations
-		return RowVecs(Array{T}(view(Float64.(TrainingInput), :, (1:size(TrainingInput, 2)))))
+		return RowVecs(view(Float64.(TrainingInput), :, (1:size(TrainingInput, 2))))
 	elseif strategy == :PCM
 		temp = abs.(polynomial_roots .- @views StatsBase.mean(apc.InputDistribution; dims = 1)[:, :][1])
 		temp_sort = mapslices(sortperm, temp, dims = 2)
@@ -338,20 +338,20 @@ function GaussianCollocation(apc::aPC{T}; strategy = :PCM)::RowVecs{T} where {T 
 		@inbounds for i in axes(polynomial_roots, 1)
 			polynomial_roots[i, :] = @views polynomial_roots[i, temp_sort[i, :]]
 		end
-		collocation_points = zeros(T, (apc.NumberOfTerms, apc.input_dimensions))
+		collocation_points = zeros(apc.NumberOfTerms, apc.input_dimensions)
 		@inbounds for i in 1:apc.NumberOfTerms
 			for j in axes(SortUniqueCombinations, 2)
 				collocation_points[i, j] = @views polynomial_roots[j, Int(SortUniqueCombinations[i, j])]
 			end
 		end
 		collocation_points = sortslices(collocation_points, dims = 1, by = x -> x[1])
-		return RowVecs(Array{T}(view(Float64.(collocation_points), :, (1:size(collocation_points, 2)))))
+		return RowVecs(view(Float64.(collocation_points), :, (1:size(collocation_points, 2))))
 	end
 
 end
 
 
-function GaussianCollocation2(apc::aPC{T}) where {T <: Float64}
+function GaussianCollocation2(apc) 
 
 	py"""
 	import numpy as np
@@ -410,7 +410,7 @@ function GaussianCollocation2(apc::aPC{T}) where {T <: Float64}
 end
 
 
-function numberPolynomials(n::Int64, d::Int64)
+function numberPolynomials(n, d)
 	x, y = max(d, n), min(d, n)
 	return UInt128(prod(UInt128(x + 1):UInt128(d + n)) ÷ factorial(UInt128(y))) |> Int
 end
@@ -422,7 +422,7 @@ function reverse_columns!(x)
 	end
 end
 
-function train!(apc::aPC{T}, TrainingInput::RowVecs{T}, TrainingOutput::RowVecs{T}) where {T <: Float64}
+function train!(apc, TrainingInput, TrainingOutput) 
 	@info "=> aPC Toolbox: Training Arbitrary Polynomial Chaos ..."
 	Psi = aPC_PsiPolynomialMatrix(apc, TrainingInput)'
 	to = reduce(vcat, TrainingOutput)
@@ -438,7 +438,7 @@ function train!(apc::aPC{T}, TrainingInput::RowVecs{T}, TrainingOutput::RowVecs{
 end
 
 
-function predict(apc::aPC{T}, PredictionInput::RowVecs{T}) where {T <: Float64}
+function predict(apc, PredictionInput) 
 	@info "=> aPC Toolbox: Prediction using Arbitrary Polynomial Chaos ..."
 	Psi = aPC_PsiPolynomialMatrix(apc, PredictionInput)'
 	PredictionOutput = [dot(apc.ExpansionCoefficients, row) for row in eachrow(Psi)]
@@ -446,7 +446,7 @@ function predict(apc::aPC{T}, PredictionInput::RowVecs{T}) where {T <: Float64}
 end
 
 
-function UQ(apc::aPC{T}) where {T <: Float64}
+function UQ(apc) 
 	@info "=> aPC Toolbox: UQ Arbitrary Polynomial Chaos ..."
 	lc = Array{T}(apc.ExpansionCoefficients)
 	OutputMean = Vector{Float64}(lc[1, :])
