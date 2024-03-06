@@ -33,17 +33,20 @@ using KernelFunctions
 using StatsBase
 using SparseArrays
 using StaticArrays
+using Polyester
+using PolynomialRoots
 
-mutable struct aPC{T <: Real}
+
+mutable struct aPC{T <: Float64, V <: AbstractArray{T}}
 	InputDistribution::RowVecs{T} # in [ d x N-samples]
 	input_dimensions::Int64
 	ExpansionDegree::Int64
 	NumberOfTerms::Int64
 	MultivariatePolynomialDegrees::AbstractArray{Int64}
 	OrthonormalRepresentation::Bool
-	OrthonormalBasis::AbstractArray{T}
+	OrthonormalBasis::V
 	# NumberOfOutputs::Int64
-	ExpansionCoefficients::AbstractVector{T}
+	ExpansionCoefficients::V
 
 	# Constructor
 	function aPC(
@@ -51,7 +54,7 @@ mutable struct aPC{T <: Real}
 		ExpansionDegree::Int64,
 		OrthonormalRepresentation::Bool = true,
 	) where T
-		input_dimensions = size(InputDistribution[1], 1)
+		input_dimensions = Int64(size(InputDistribution[1], 1))
 		# @info "" size(InputDistribution[1])
 		# MultivariatePolynomialDegrees = aPC_MultivariatePolynomialDegrees(input_dimensions, ExpansionDegree)
 		MultivariatePolynomialDegrees = aPC_MultivariatePolynomialDegrees(input_dimensions, ExpansionDegree; qnorm = 1.0)
@@ -68,7 +71,7 @@ mutable struct aPC{T <: Real}
 		# display(OrthonormalBasis)
 		ExpansionCoefficients = zeros(T, NumberOfTerms)
 
-		return new{T}(
+		return new{T, Array{T}}(
 			InputDistribution,
 			input_dimensions,
 			ExpansionDegree,
@@ -131,7 +134,7 @@ end
 # end
 
 
-function aPC_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T; qnorm::Float64 = 1.0) where {T <: Integer}
+function aPC_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T; qnorm::Float64 = 1.0)::Array{T} where {T <: Integer}
 	# Initialize the indices for the first parameter
 	range_ = 0:max_degree |> collect
 	indices = reshape(range_, :, 1)  # Make it a column vector
@@ -150,16 +153,16 @@ function aPC_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T; qno
 		end
 	end
 
-	indices = hcat(vec(sum(indices; dims = 2)), indices)
-	indices = sortslices(indices; dims = 1, rev = false)[:, 2:end]
+	# indices = 
+	indices .= Array{T}(sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end])
 	reverse_columns!(indices)
 	return indices
 end
 
-function aPC_PsiPolynomialMatrix(apc::aPC{T}, TrainingInput::V) where {T <: Real,V<:RowVecs{T}}
+function aPC_PsiPolynomialMatrix(apc, TrainingInput)
 	NumberOfTerms, InputDimensions = size(apc.MultivariatePolynomialDegrees)
 	NCpoints = size(TrainingInput, 1)
-	Psi = ones(T, NumberOfTerms, NCpoints)
+	Psi = ones(NumberOfTerms, NCpoints)
 	@inbounds for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
 		for j ∈ 1:NCpoints  # For each input sample
 			product = 1.0  # Initialize the product for this term and sample
@@ -169,7 +172,7 @@ function aPC_PsiPolynomialMatrix(apc::aPC{T}, TrainingInput::V) where {T <: Real
 				p = Polynomials.Polynomial(coeffs)  # Create the polynomial
 				x = reduce(hcat, TrainingInput)[ii, j]
 				# @show degree coeffs p x p(x) 
-				product *= p(x)  # Evaluate the polynomial at x and multiply
+				product *= evalpoly(x, p)  # Evaluate the polynomial at x and multiply
 			end
 			Psi[i, j] = product  # Assign the product to Psi matrix
 		end
@@ -205,7 +208,7 @@ end
 	VarOfData = var(Data)
 	Data = Data ./ MeanOfData
 	m = zeros(2 * dd + 2)
-	@simd for i ∈ 0:(2*dd+1)
+	@batch for i ∈ 0:(2*dd+1)
 		m[i+1] = sum(Data .^ i) / NumberOfDataPoints # Raw Moments
 	end
 	poly = zeros(dd + 1, dd + 1)
@@ -219,7 +222,7 @@ end
 		PolyCoeff_NonNorm = copy(Hankel)
 
 		for i ∈ 0:degree
-			@simd for j ∈ 0:degree
+			@batch for j ∈ 0:degree
 				if i < degree
 					Hankel[i+1, j+1] = m[i+j+1] # put in the moment
 				elseif (i == degree) && (j < degree)
@@ -261,7 +264,7 @@ end
 			P_norm += Poly^2 / NumberOfDataPoints
 		end
 
-		@simd for k ∈ 0:degree
+		@batch for k ∈ 0:degree
 			poly[degree+1, k+1] = PolyCoeff_NonNorm[degree+1, k+1] / sqrt(P_norm)
 		end
 
@@ -270,23 +273,22 @@ end
 
 	# Backward linear transformation to the data space
 	Data = Data * MeanOfData
-	for k ∈ 1:lastindex(poly, 2)
+	@inbounds for k ∈ 1:lastindex(poly, 2)
 		poly[:, k] = poly[:, k] ./ (MeanOfData^(k - 1))
 	end
 
 	#%% Data-driven Arbitrary Orthonormal Polynomial Basis
-	OrthonormalBasis = poly
-	return OrthonormalBasis # SMatrix{dd+1,dd+1}(
+	return poly # SMatrix{dd+1,dd+1}(
 end
 
-function KMeansCollocation(apc::aPC{T}, M = 10)::RowVecs{T} where {T <: Real}
+function KMeansCollocation(apc::aPC{T}, M = 10)::RowVecs{T} where {T <: Float64}
 	alg = InducingPoints.KmeansAlg(M)
 	Z = inducingpoints(alg, reduce(hcat, apc.InputDistribution)')
 	Z = reduce(hcat, Z) |> Array |> transpose |> RowVecs
 	return Z
 end
 
-function kDPPCollocation(apc::aPC{T}, M = 10)::RowVecs{T} where {T <: Real}
+function kDPPCollocation(apc::aPC{T}, M = 10)::RowVecs{T} where {T <: Float64}
 	kernel = SqExponentialKernel()
 	alg = kDPP(M)
 	Z = inducingpoints(alg, reduce(hcat, apc.InputDistribution)'; kernel)
@@ -294,21 +296,21 @@ function kDPPCollocation(apc::aPC{T}, M = 10)::RowVecs{T} where {T <: Real}
 	return Z
 end
 
-function RandomSubsetCollocation(apc::aPC{T}, M = 10)::RowVecs{T} where {T <: Real}
+function RandomSubsetCollocation(apc::aPC{T}, M = 10)::RowVecs{T} where {T <: Float64}
 	alg = RandomSubset(M)
 	Z = inducingpoints(alg, reduce(hcat, apc.InputDistribution)')
 	Z = reduce(hcat, Z) |> Array |> transpose |> RowVecs
 	return Z
 end
 
-function CoverTreeCollocation(apc::aPC{T}, c = 0.2)::RowVecs{T} where {T <: Real}
+function CoverTreeCollocation(apc::aPC{T}, c = 0.2)::RowVecs{T} where {T <: Float64}
 	alg = CoverTree(c)
 	Z = inducingpoints(alg, reduce(hcat, apc.InputDistribution)')
 	Z = reduce(hcat, Z) |> Array |> transpose |> RowVecs
 	return Z
 end
 
-function UniGridCollocation(apc::aPC{T}, M = 10)::RowVecs{T} where {T <: Real}
+function UniGridCollocation(apc::aPC{T}, M = 10)::RowVecs{T} where {T <: Float64}
 	alg = UniGrid(M)
 	Z = inducingpoints(alg, reduce(hcat, apc.InputDistribution)')
 	Z = reduce(hcat, Z) |> Array |> transpose |> RowVecs
@@ -316,47 +318,32 @@ function UniGridCollocation(apc::aPC{T}, M = 10)::RowVecs{T} where {T <: Real}
 end
 
 
-@inbounds function GaussianCollocation(apc::aPC{T}; strategy = :PCM)::RowVecs{T} where {T <: Real}
+function GaussianCollocation(apc::aPC{T}; strategy = :PCM)::RowVecs{T} where {T <: Float64}
 	polynomial_roots = zeros(T, apc.input_dimensions, apc.ExpansionDegree + 1)
-	for d ∈ 1:apc.input_dimensions
+	@inbounds for d ∈ Base.oneto(Int64(apc.input_dimensions))
 		polynomial_basis = apc.OrthonormalBasis[:, :, d]
-		polynomial_roots[d, :] = T.(Polynomials.roots(Polynomials.Polynomial(polynomial_basis[apc.ExpansionDegree+2, :])))
+		polynomial_roots[d, :] = Float64.(PolynomialRoots.roots((polynomial_basis[apc.ExpansionDegree+2, :])))
 	end
-	# polynomial_roots = Real.(reverse(polynomial_roots))
-	# display(polynomial_roots)
 	PointsVector = 1:apc.ExpansionDegree+1 |> collect
-	UniqueCombinations = stack(reduce(vcat, collect(Iterators.product([PointsVector for i in 1:apc.input_dimensions]...))))' |> collect
-	# DigitalPointsWeight = zeros(size(UniqueCombinations, 1))
-	# for (i, r) in enumerate(eachcol(UniqueCombinations))
-	# 	DigitalPointsWeight[i] = sum(r)
-	# end
-	# index_SDPW = sortperm(reshape(DigitalPointsWeight, (:, 1)); dims = 1)[:]
-	# SortUniqueCombinations = UniqueCombinations[index_SDPW, :]
-	# display(UniqueCombinations)
-	# @info size(UniqueCombinations)
+	UniqueCombinations = stack(reduce(vcat, collect(Iterators.product([PointsVector for i in 1:apc.input_dimensions]...))))' |> Array{Int64}
 	sort_indices = sortperm(sum(UniqueCombinations; dims = 2); dims = 1)
-	# display(sort_indices)
 	SortUniqueCombinations = UniqueCombinations[sort_indices[:], :]
-	# display(SortUniqueCombinations)
 	if strategy == :FT
 		TrainingInput = SortUniqueCombinations
 		return RowVecs(Array{T}(view(Float64.(TrainingInput), :, (1:size(TrainingInput, 2)))))
 	elseif strategy == :PCM
-		temp = abs.(polynomial_roots .- StatsBase.mean(apc.InputDistribution; dims = 1)[:, :][1])
+		temp = abs.(polynomial_roots .- @views StatsBase.mean(apc.InputDistribution; dims = 1)[:, :][1])
 		temp_sort = mapslices(sortperm, temp, dims = 2)
-		sorted_polynomial_roots = copy(polynomial_roots)
-		for i in axes(sorted_polynomial_roots, 1)
-			sorted_polynomial_roots[i, :] = sorted_polynomial_roots[i, temp_sort[i, :]]
+		# polynomial_roots = copy(polynomial_roots)
+		@inbounds for i in axes(polynomial_roots, 1)
+			polynomial_roots[i, :] = @views polynomial_roots[i, temp_sort[i, :]]
 		end
 		collocation_points = zeros(T, (apc.NumberOfTerms, apc.input_dimensions))
-		# display(sorted_polynomial_roots)
-		# display(SortUniqueCombinations)
-		for i in 1:apc.NumberOfTerms
+		@inbounds for i in 1:apc.NumberOfTerms
 			for j in axes(SortUniqueCombinations, 2)
-				collocation_points[i, j] = sorted_polynomial_roots[j, Int(SortUniqueCombinations[i, j])]
+				collocation_points[i, j] = @views polynomial_roots[j, Int(SortUniqueCombinations[i, j])]
 			end
 		end
-
 		collocation_points = sortslices(collocation_points, dims = 1, by = x -> x[1])
 		return RowVecs(Array{T}(view(Float64.(collocation_points), :, (1:size(collocation_points, 2)))))
 	end
@@ -364,7 +351,7 @@ end
 end
 
 
-function GaussianCollocation2(apc::aPC{T}) where {T <: Real}
+function GaussianCollocation2(apc::aPC{T}) where {T <: Float64}
 
 	py"""
 	import numpy as np
@@ -435,7 +422,7 @@ function reverse_columns!(x)
 	end
 end
 
-function train!(apc::aPC{T}, TrainingInput::RowVecs, TrainingOutput::RowVecs) where {T <: Real}
+function train!(apc::aPC{T}, TrainingInput::RowVecs{T}, TrainingOutput::RowVecs{T}) where {T <: Float64}
 	@info "=> aPC Toolbox: Training Arbitrary Polynomial Chaos ..."
 	Psi = aPC_PsiPolynomialMatrix(apc, TrainingInput)'
 	to = reduce(vcat, TrainingOutput)
@@ -451,8 +438,8 @@ function train!(apc::aPC{T}, TrainingInput::RowVecs, TrainingOutput::RowVecs) wh
 end
 
 
-function predict(apc::aPC{T}, PredictionInput) where {T <: Real}
-	# @info "=> aPC Toolbox: Prediction using Arbitrary Polynomial Chaos ..."
+function predict(apc::aPC{T}, PredictionInput::RowVecs{T}) where {T <: Float64}
+	@info "=> aPC Toolbox: Prediction using Arbitrary Polynomial Chaos ..."
 	Psi = aPC_PsiPolynomialMatrix(apc, PredictionInput)'
 	PredictionOutput = [dot(apc.ExpansionCoefficients, row) for row in eachrow(Psi)]
 	return PredictionOutput

@@ -14,10 +14,12 @@ include(srcdir("analyticalmodel.jl"))
 
 using Plots
 plotly()
-
 using TimerOutputs
-const to = TimerOutput()
 
+# using TimerOutputs
+# const to = TimerOutput()
+
+using Cthulhu
 
 function meshgrid(x, y)
 	X = [x for _ in y, x in x]
@@ -26,7 +28,7 @@ function meshgrid(x, y)
 end
 
 
-function run(degree)
+function run(degree, to)
 
 	err = []
 	ts = []
@@ -34,7 +36,8 @@ function run(degree)
 	# degress = 1:1:5
 	N = 1000
 	d = 2
-	
+
+
 	x = @timeit to "get_input" get_input(N, d, 1)
 	# @debug "" x
 	# m(x) = PhysicalModel1D(1,x)
@@ -46,12 +49,15 @@ function run(degree)
 	end
 	# degree = 2
 	# t = @elapsed begin
-	apc_instance = @timeit to "aPC_instance"  aPC(x, degree)
+	apc_instance = @timeit to "aPC_instance" aPC(x, degree)
 	# @info "" apc_instance 
 
 	# TrainingInput = GaussianCollocation2(apc_instance)
 	# @debug "" TrainingInput
+	# @descend GaussianCollocation(apc_instance; strategy = :PCM)
 	TrainingInput =  @timeit to "GaussianCollocation" GaussianCollocation(apc_instance; strategy = :PCM)
+	# TrainingInput = @timeit to "KMeansCollocation" KMeansCollocation(apc_instance)
+
 	# @debug "" TrainingInput
 	# (xg, yg) = meshgrid(LinRange(0, 1, 50), LinRange(0, 1, 50))
 
@@ -77,14 +83,16 @@ function run(degree)
 	# @show TrainingOutput
 	TrainingOutput = reduce(hcat, TrainingOutput)' |> RowVecs
 
+
+	# @descend train!(apc_instance, TrainingInput, TrainingOutput)
 	# @info "" apc_instance	
 	@timeit to "training" train!(apc_instance, TrainingInput, TrainingOutput)
 
 	# # @debug "" UQ(apc_instance)
 	# # xcp = [0.422117914428017	0.610608061392019	0.780825721677619]]
 
-
-	pred =  @timeit to "prediction" predict(apc_instance, x)
+	# @descend predict(apc_instance, x)
+	pred = @timeit to "prediction" predict(apc_instance, x)
 	# @show mean(true_output)
 	# @show var(true_output)
 	# @show UQ(apc_instance)
@@ -145,7 +153,7 @@ function run(degree)
 	# pn2 = Plots.plot(ps...)
 	# Plots.plot(pn,pn2, layout =@layout [a ; b])
 	# Plots.scatter(log.((abs.(pred[1,:].-expect[1,:]))))
-	display(to)
+	# display(to)
 end
 
 
