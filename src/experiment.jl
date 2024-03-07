@@ -45,7 +45,7 @@ function PhysicalModelND(t, P::AbstractArray)
 	for i ∈ 3:lastindex(P, 1)
 		ModelResponse .+= P[i]
 	end
-	return ModelResponse .+ rand() .* 0.1 # SVector{length(ModelResponse)}(
+	return [ModelResponse .+ rand() .* 0.1] # SVector{length(ModelResponse)}(
 end
 # function PhysicalModelND(t, P::AbstractArray)
 # 	# @debug "Assuming a nd case" P
@@ -90,4 +90,25 @@ function PhysicalModel2DGaussian(t, P::AbstractArray)
 	ModelResponse = exp(-((P[1] - mu_x)^2 / (2 * sigma_x^2) + (P[2] - mu_y)^2 / (2 * sigma_y^2)))
 
 	return ModelResponse
+end
+
+function PhysicalModel2DGaussian_2dout(t, P)
+	# Ensure P is a 2D array
+	# P = reduce(hcat, P)
+
+	# Check that P has two dimensions
+	if size(P, 1) != 2
+		@error "P must have two dimensions for the 2D Gaussian model."
+	end
+
+	# Parameters for the 2D Gaussian
+	mu_x = 0
+	mu_y = 0
+	sigma_x = 1
+	sigma_y = 1
+
+	# Calculate the 2D Gaussian
+	ModelResponse = exp(-((P[1] - mu_x)^2 / (2 * sigma_x^2) + (P[2] - mu_y)^2 / (2 * sigma_y^2)))
+
+	return [ModelResponse,ModelResponse]
 end

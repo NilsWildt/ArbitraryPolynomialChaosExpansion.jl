@@ -9,13 +9,13 @@ using TerminalLoggers: TerminalLogger
 using ProgressLogging
 using Logging
 using LoggingExtras
-using PProf
+# using PProf
 using BenchmarkTools
 # using ProfileView
 using Makie
 using CairoMakie
 using MAT
-using Plots
+
 loggingdir(args...) = projectdir("output", "logs", args...)
 mkpath(loggingdir())
 # io = open(loggingdir("debug.txt"), "w")
@@ -31,17 +31,22 @@ using TimerOutputs
 const to = TimerOutput()
 # mytimes = []
 # for d in 1:25
-# 	APC.run(d, to)
-# 	# display(degree)
-# 	# degree = 25
-# 	t = @elapsed begin
-# 		p = APC.run(d, to)
-# 	end
-# 	push!(mytimes, [d, t])
+
+# data = matread(datadir("data_maria.mat"))
+
+# display(degree)
+# degree = 25
+# @timev begin
+# 	p = APC.run(2, to, data)
+# 	display(p)
 # end
-# display(to)
-# APC.run(6)
-@timev p= APC.run1(3,to)
-display(p)
-current()
+@timev begin
+	p = APC.run1(3, to)
+	display(p)
+end
+
+
+display(to)
+
+
 end
