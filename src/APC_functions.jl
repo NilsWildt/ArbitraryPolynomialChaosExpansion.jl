@@ -91,11 +91,9 @@ function show(io::IO, apc::aPC)
 	println(io, "aPC{$(typeof(apc).parameters[1])} Summary:")
 	println(io, "Input Dimensions: ", apc.input_dimensions)
 	println(io, "Output Dimensions: ", apc.input_dimensions)
-
 	println(io, "Expansion Degree: ", apc.ExpansionDegree)
 	println(io, "Number Of Terms: ", apc.NumberOfTerms)
 	println(io, "Orthonormal Representation: ", apc.OrthonormalRepresentation ? "Yes" : "No")
-
 	# Depending on the size, you might want to only show a preview of the arrays
 	println(io, "Multivariate Polynomial Degrees: ", size(apc.MultivariatePolynomialDegrees))
 	println(io, "Orthonormal Basis: Dimensions ", size(apc.OrthonormalBasis))

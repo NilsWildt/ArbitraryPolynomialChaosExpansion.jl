@@ -29,19 +29,7 @@ using .APC
 
 using TimerOutputs
 const to = TimerOutput()
-# mytimes = []
-# for d in 1:25
-# 	APC.run(d, to)
-# 	# display(degree)
-# 	# degree = 25
-# 	t = @elapsed begin
-# 		p = APC.run(d, to)
-# 	end
-# 	push!(mytimes, [d, t])
-# end
-# display(to)
-# APC.run(6)
-@timev p= APC.run1(3,to)
+@timev p = APC.run1(3,to)
 display(p)
 current()
 end

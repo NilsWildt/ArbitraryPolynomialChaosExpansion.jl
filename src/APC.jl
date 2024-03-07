@@ -217,7 +217,7 @@ function run1(degree, to)
 	ts = []
 	ps = []
 	# degress = 1:1:5
-	N = 1000
+	N = 3000
 	d = 2
 
 
@@ -275,7 +275,7 @@ function run1(degree, to)
 
 	# @descend train!(apc_instance, TrainingInput, TrainingOutput)
 	# @info "" apc_instance	
-	@timeit to "training" train!(apc_instance, TrainingInput, TrainingOutput)
+	@timeit to "training" train!(apc_instance, TrainingInput, TrainingOutput;bayesian_inversion=true)
 
 	# # @debug "" UQ(apc_instance)
 	# # xcp = [0.422117914428017	0.610608061392019	0.780825721677619]]

@@ -48,14 +48,9 @@ display(to)
 mytimes = reduce(hcat, mytimes)
 fig = Figure()
 ax = Axis(fig[1, 1], yscale = log10, xlabel = "degree", ylabel = "time (s)")
-
-
-
 # Plot the data
 scatter!(ax, mytimes[1, :], mytimes[2, :], label = "Julia")
-
 times_mat = matread(Base.Filesystem.normpath("C:/Users/wildt/Downloads/aPC Matlab Toolbox/aPC Matlab Toolbox (1)/aPC Matlab Toolbox/times.mat"))
-
 scatter!(ax, times_mat["ds"] |> vec, times_mat["ts"] |> vec, color = :red, label = "Matlab", marker = :x)
 legend = Legend(fig, ax, "Legend", valign = :top)
 fig[1, 2] = legend
