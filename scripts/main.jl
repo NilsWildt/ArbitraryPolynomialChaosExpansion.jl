@@ -11,6 +11,7 @@ using Logging
 using LoggingExtras
 using PProf
 using BenchmarkTools
+using ProfileView
 
 loggingdir(args...) = projectdir("output", "logs", args...)
 mkpath(loggingdir())
@@ -25,17 +26,15 @@ using .APC
 
 using TimerOutputs
 const to = TimerOutput()
-# for degree in 2:2
-	# display(degree)
-	b = @benchmark begin
-			degree = 5
-			@timeit to "APC" begin
-				p = APC.run(degree,to)
-			end
-		# end
+
+for _ in 1:5
+# display(degree)
+	degree = 20
+	@timeit to "APC" begin
+		p = APC.run(degree, to)
+	end
 	end
 display(to)
-display(b)
 # APC.run(6)
-
+ProfileView.@profview APC.run(20,to)
 end

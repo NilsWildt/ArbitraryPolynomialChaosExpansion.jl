@@ -26,7 +26,7 @@ import Optim: NewtonTrustRegion, Options, optimize, minimizer, minimum, LBFGS
 import RegularizationTools: Lₖx₀, solve, RegularizationProblem, setupRegularizationProblem, to_general_form, to_standard_form, gcv_tr, gcv_svd, invert, Lₖ, NelderMead
 using LazyGrids
 using Combinatorics
-using PyCall
+# using PyCall
 using InducingPoints
 using Polynomials
 using KernelFunctions
@@ -35,18 +35,20 @@ using SparseArrays
 using StaticArrays
 using Polyester
 using PolynomialRoots
+# using FixedPolynomials
+# import DynamicPolynomials: @polyvar
+using LazyArrays
 
-
-mutable struct aPC{T <: Float64, V <: AbstractArray{T}}
-	InputDistribution::RowVecs{T} # in [ d x N-samples]
-	input_dimensions::Int64
-	ExpansionDegree::Int64
-	NumberOfTerms::Int64
-	MultivariatePolynomialDegrees::AbstractArray{Int64}
-	OrthonormalRepresentation::Bool
-	OrthonormalBasis::V
+mutable struct aPC{T <: Float64}
+	const InputDistribution::RowVecs{T} # in [ d x N-samples]
+	const input_dimensions::Int64
+	const ExpansionDegree::Int64
+	const NumberOfTerms::Int64
+	const MultivariatePolynomialDegrees::AbstractArray{Int64}
+	const OrthonormalRepresentation::Bool
+	const OrthonormalBasis::Array{T}
 	# NumberOfOutputs::Int64
-	ExpansionCoefficients::V
+	ExpansionCoefficients::Array{T}
 
 	# Constructor
 	function aPC(
@@ -55,23 +57,16 @@ mutable struct aPC{T <: Float64, V <: AbstractArray{T}}
 		OrthonormalRepresentation::Bool = true,
 	) where T
 		input_dimensions = Int64(size(InputDistribution[1], 1))
-		# @info "" size(InputDistribution[1])
-		# MultivariatePolynomialDegrees = aPC_MultivariatePolynomialDegrees(input_dimensions, ExpansionDegree)
 		MultivariatePolynomialDegrees = aPC_MultivariatePolynomialDegrees(input_dimensions, ExpansionDegree; qnorm = 1.0)
-
-		# display(MultivariatePolynomialDegrees)
 		NumberOfTerms = numberPolynomials(ExpansionDegree, input_dimensions)
-
 		OrthonormalBasis = zeros(ExpansionDegree + 2, ExpansionDegree + 2, input_dimensions)
 		for i in 1:input_dimensions
 			tmp = aPC_OrthonormalBasis(getindex.(InputDistribution, i), ExpansionDegree)
 			OrthonormalBasis[:, :, i] .= tmp
 		end
-		# OrthonormalBasis = tmp
-		# display(OrthonormalBasis)
 		ExpansionCoefficients = zeros(T, NumberOfTerms)
 
-		return new{T, Array{T}}(
+		return new{T}(
 			InputDistribution,
 			input_dimensions,
 			ExpansionDegree,
@@ -153,32 +148,35 @@ function aPC_MultivariatePolynomialDegrees(num_dimensions, max_degree; qnorm = 1
 		end
 	end
 
-	# indices = 
 	indices .= sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
 	reverse_columns!(indices)
 	return indices
 end
 
-function aPC_PsiPolynomialMatrix(apc, TrainingInput)
+
+function aPC_PsiPolynomialMatrix(apc::aPC{T}, TrainingInput) where {T<:Real}
 	NumberOfTerms, InputDimensions = size(apc.MultivariatePolynomialDegrees)
 	NCpoints = size(TrainingInput, 1)
 	Psi = ones(NumberOfTerms, NCpoints)
+	TrainingInput = reduce(hcat, TrainingInput)
 	@inbounds for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
-		for j ∈ 1:NCpoints  # For each input sample
+		@batch for j ∈ 1:NCpoints  # For each input sample
 			product = 1.0  # Initialize the product for this term and sample
 			for ii ∈ 1:InputDimensions  # For each dimension of the input
-				degree = apc.MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
-				coeffs = apc.OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
-				p = Polynomials.Polynomial(coeffs)  # Create the polynomial
-				x = reduce(hcat, TrainingInput)[ii, j]
-				# @show degree coeffs p x p(x) 
+				degree = @views apc.MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
+				coeffs =  @views apc.OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
+				x = @views TrainingInput[ii, j]
+				p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
 				product *= evalpoly(x, p)  # Evaluate the polynomial at x and multiply
 			end
-			Psi[i, j] = product  # Assign the product to Psi matrix
+			Psi[i, j] = @~ product  # Assign the product to Psi matrix
 		end
 	end
 	return Psi
 end
+
+
+
 
 function mean(x)
 	s = zero(eltype(x))
@@ -188,7 +186,7 @@ function mean(x)
 	return s / length(x)
 end
 
-function var(x::AbstractArray)
+function var(x)
 	m = mean(x)
 	s = zero(eltype(x))
 	@simd for i in x
@@ -197,34 +195,29 @@ function var(x::AbstractArray)
 	return s / (length(x) - 1)
 end
 
-@views function aPC_OrthonormalBasis(Data, Degree)
+@inbounds function aPC_OrthonormalBasis(Data, Degree)
 	d = Degree #Degree of polinomial expansion
 	dd = d + 1 #Degree of polinomial for roots defenition
-	L_norm = 1 # L-norm for polnomial normalization
+	# L_norm = 1 # L-norm for polnomial normalization
 	NumberOfDataPoints = length(Data)
 	# @info "Construction of Arbitrary Polynomial Basis" --> We do d+2 x d+2, to have one order higher polynomials to get the gaussian quadrature poitns in the end!!!
-
 	MeanOfData = mean(Data)
-	VarOfData = var(Data)
+	# VarOfData = var(Data)
 	Data = Data ./ MeanOfData
 	m = zeros(2 * dd + 2)
-	@batch for i ∈ 0:(2*dd+1)
+	@simd for i ∈ 0:(2*dd+1)
 		m[i+1] = sum(Data .^ i) / NumberOfDataPoints # Raw Moments
 	end
 	poly = zeros(dd + 1, dd + 1)
 	MHankel = zeros(dd + 1, dd + 1) # Allocate once for all :)
 	@inbounds for degree ∈ 0:dd
 		Hankel = @views MHankel[1:degree+1, 1:degree+1]
-		Hankel .= 0.0
-		fr = copy(Hankel)
-		# fr1 = copy(fr)
 		Vc = zeros(degree + 1)
 		PolyCoeff_NonNorm = copy(Hankel)
-
 		for i ∈ 0:degree
 			@batch for j ∈ 0:degree
 				if i < degree
-					Hankel[i+1, j+1] = m[i+j+1] # put in the moment
+					Hankel[i+1, j+1] = @views m[i+j+1] # put in the moment
 				elseif (i == degree) && (j < degree)
 					Hankel[i+1, j+1] = 0.0
 				elseif (i == degree) && (j == degree)
@@ -232,7 +225,7 @@ end
 				end
 			end
 			# fr1 = copy(Hankel); # Control Hankel only considering the raw moments without division by max(abs) in each row
-			Hankel[i+1, :] = Hankel[i+1, :] / maximum(abs.(Hankel[i+1, :]))
+			Hankel[i+1, :] = @views Hankel[i+1, :] / maximum(abs.(@views Hankel[i+1, :]))
 		end
 
 		@simd for i ∈ 0:degree
@@ -259,26 +252,25 @@ end
 		for i ∈ 1:NumberOfDataPoints
 			Poly = 0
 			@simd for k ∈ 0:degree
-				Poly += PolyCoeff_NonNorm[degree+1, k+1] * Data[i]^k
+				Poly += @views PolyCoeff_NonNorm[degree+1, k+1] * Data[i]^k
 			end
 			P_norm += Poly^2 / NumberOfDataPoints
 		end
 
-		@batch for k ∈ 0:degree
-			poly[degree+1, k+1] = PolyCoeff_NonNorm[degree+1, k+1] / sqrt(P_norm)
+		@simd for k ∈ 0:degree
+			poly[degree+1, k+1] = @views  PolyCoeff_NonNorm[degree+1, k+1] / sqrt(P_norm)
 		end
-
 
 	end
 
 	# Backward linear transformation to the data space
 	Data = Data * MeanOfData
 	@inbounds for k ∈ 1:lastindex(poly, 2)
-		poly[:, k] = poly[:, k] ./ (MeanOfData^(k - 1))
+		poly[:, k] = @views poly[:, k] ./ (MeanOfData^(k - 1))
 	end
 
 	#%% Data-driven Arbitrary Orthonormal Polynomial Basis
-	return poly # SMatrix{dd+1,dd+1}(
+	return  poly
 end
 
 function KMeansCollocation(apc, M = 10)
@@ -318,97 +310,35 @@ function UniGridCollocation(apc, M = 10)
 end
 
 
-function GaussianCollocation(apc; strategy = :PCM)
+function GaussianCollocation(apc::aPC{T}; strategy = :PCM) where {T<:Real}
 	polynomial_roots = zeros(apc.input_dimensions, apc.ExpansionDegree + 1)
 	@inbounds for d ∈ Base.oneto(Int64(apc.input_dimensions))
-		polynomial_basis = apc.OrthonormalBasis[:, :, d]
-		polynomial_roots[d, :] = Real.(PolynomialRoots.roots((polynomial_basis[apc.ExpansionDegree+2, :])))
+		polynomial_basis = @views apc.OrthonormalBasis[:, :, d]
+		polynomial_roots[d, :] = @view reinterpret(T,PolynomialRoots.roots(@views polynomial_basis[apc.ExpansionDegree+2, :]))[1:2:end-1]
 	end
 	PointsVector = 1:apc.ExpansionDegree+1 |> collect
-	UniqueCombinations = stack(reduce(vcat, collect(Iterators.product([PointsVector for i in 1:apc.input_dimensions]...))))' |> Array{Int64}
+	UniqueCombinations = stack(reduce(vcat, collect(Iterators.product([PointsVector for _ in 1:apc.input_dimensions]...))))'
 	sort_indices = sortperm(sum(UniqueCombinations; dims = 2); dims = 1)
 	SortUniqueCombinations = UniqueCombinations[sort_indices[:], :]
 	if strategy == :FT
 		TrainingInput = SortUniqueCombinations
-		return RowVecs(view(Float64.(TrainingInput), :, (1:size(TrainingInput, 2))))
+		return RowVecs(view(TrainingInput, :, (1:size(TrainingInput, 2))))
 	elseif strategy == :PCM
-		temp = abs.(polynomial_roots .- @views StatsBase.mean(apc.InputDistribution; dims = 1)[:, :][1])
+		temp = abs.(polynomial_roots .- StatsBase.mean(apc.InputDistribution; dims = 1)[:, :][1])
 		temp_sort = mapslices(sortperm, temp, dims = 2)
-		# polynomial_roots = copy(polynomial_roots)
 		@inbounds for i in axes(polynomial_roots, 1)
 			polynomial_roots[i, :] = @views polynomial_roots[i, temp_sort[i, :]]
 		end
 		collocation_points = zeros(apc.NumberOfTerms, apc.input_dimensions)
 		@inbounds for i in 1:apc.NumberOfTerms
 			for j in axes(SortUniqueCombinations, 2)
-				collocation_points[i, j] = @views polynomial_roots[j, Int(SortUniqueCombinations[i, j])]
+				collocation_points[i, j] = polynomial_roots[j, Int(SortUniqueCombinations[i, j])]
 			end
 		end
 		collocation_points = sortslices(collocation_points, dims = 1, by = x -> x[1])
-		return RowVecs(view(Float64.(collocation_points), :, (1:size(collocation_points, 2))))
+		return RowVecs(view(collocation_points, :, (1:size(collocation_points, 2))))
 	end
-
 end
-
-
-function GaussianCollocation2(apc) 
-
-	py"""
-	import numpy as np
-	import math
-	def compute_collocation_points(data, orthonormal_basis):
-		# Number of uncertain parameters
-		N = data.shape[1]
-		# Degree of polynomial expansion
-		d = int(orthonormal_basis.shape[0]-2)
-		# Number of terms in polynomial expansion
-		P = math.factorial(N + d) / (math.factorial(N) * math.factorial(d))
-	
-		# Compute the roots of the polynomial of degree d+1 for each of the orthogonal basis (each uncertainty parameter)
-		polynomial_roots = np.zeros((N, d + 1))
-		for i in range(N):
-			polynomial_coefficient = orthonormal_basis[d+1, :, i]
-			polynomial_roots[i, :] = np.roots(np.flip(polynomial_coefficient))
-	
-		# Creation of all the possible combinations of the different polynomial_roots for the N uncertainty parameters
-		nroot_para_mat = np.tile(np.arange(1, d + 2), (N, 1))  # Matrix with the number of roots for each parameter
-		unique_combinations = np.array(np.meshgrid(*(row for row in nroot_para_mat))).T.reshape(-1, N)
-	
-		# Sort the unique_combinations based on the sum of each row. Later this is going to be the ranking to construct the
-		# most probable collocation points using the most probable polynomial roots.
-		sort_unique_combinations = unique_combinations[np.argsort(unique_combinations.sum(axis=1)), :].astype(float)
-	
-		# Sort the polynomial_roots based on the higher probability of occurrence. In this case, we assume that the higher
-		# probability of occurrence is the mean value, and sort the values with respect con the distance from the mean
-		temp = abs(np.subtract(polynomial_roots, np.transpose(np.mean(data, axis=0, keepdims=True))))
-		temp_sort = np.argsort(temp, axis=1)
-		sorted_polynomial_roots = polynomial_roots.copy()
-		for i, row in enumerate(sorted_polynomial_roots):
-			sorted_polynomial_roots[i, :] = row[temp_sort[i]]
-	
-		# print(sorted_polynomial_roots)
-		# print(sort_unique_combinations)
-		# Compute the most probable collocation points as the combination of the most probable polynomial roots for each
-		# parameter.
-		for i in range(0, sort_unique_combinations.shape[0]):
-			for j in range(0, sort_unique_combinations.shape[1]):
-				sort_unique_combinations[i, j] = sorted_polynomial_roots[j, int(sort_unique_combinations[i, j]) - 1]
-	
-		# Choose the P most probable collocation points (being P the order of expansion)
-		collocation_points = sort_unique_combinations[0:int(P), :]
-		x=1
-	
-		return collocation_points
-		"""
-
-	data = reduce(hcat, apc.InputDistribution) |> transpose
-	orthonormal_basis = apc.OrthonormalBasis |> Array
-	Training = py"compute_collocation_points($data, $orthonormal_basis)" |> Array{T}
-	collocation_points = sortslices(Training, dims = 1, by = x -> x[1])
-
-	return collocation_points |> RowVecs
-end
-
 
 function numberPolynomials(n, d)
 	x, y = max(d, n), min(d, n)
@@ -418,18 +348,16 @@ end
 
 function reverse_columns!(x)
 	for row in axes(x, 1)
-		x[row, :] = reverse(x[row, :])
+		x[row, :] = reverse(@views x[row, :])
 	end
 end
 
-function train!(apc, TrainingInput, TrainingOutput) 
+function train!(apc::aPC{T}, TrainingInput, TrainingOutput) where {T<:Real}
 	@info "=> aPC Toolbox: Training Arbitrary Polynomial Chaos ..."
 	Psi = aPC_PsiPolynomialMatrix(apc, TrainingInput)'
 	to = reduce(vcat, TrainingOutput)
 	Psi_inv = pinv(Psi)
 	apc.ExpansionCoefficients = Psi_inv * to
-
-
 	# x₀ = apc.ExpansionCoefficients # Quite a good first guess :) And pinv is quite stable.
 	# apc.ExpansionCoefficients = invert(Matrix(Psi), to, Lₖx₀(2, x₀); alg = :gcv_svd, method = LBFGS())
 
@@ -438,15 +366,19 @@ function train!(apc, TrainingInput, TrainingOutput)
 end
 
 
-function predict(apc, PredictionInput) 
+function predict(apc::aPC{T}, PredictionInput) where {T<:Real}
 	@info "=> aPC Toolbox: Prediction using Arbitrary Polynomial Chaos ..."
-	Psi = aPC_PsiPolynomialMatrix(apc, PredictionInput)'
-	PredictionOutput = [dot(apc.ExpansionCoefficients, row) for row in eachrow(Psi)]
+	Psi = aPC_PsiPolynomialMatrix(apc, PredictionInput)
+	PredictionOutput = zeros(size(Psi, 2))
+	@batch for i ∈ axes(Psi,2)
+		PredictionOutput[i] = dot(apc.ExpansionCoefficients, @views Psi[:, i])
+	end
+	# PredictionOutput = [dot(apc.ExpansionCoefficients, col) for col in eachcol(Psi)]
 	return PredictionOutput
 end
 
 
-function UQ(apc) 
+function UQ(apc::aPC{T}) where {T<:Real}
 	@info "=> aPC Toolbox: UQ Arbitrary Polynomial Chaos ..."
 	lc = Array{T}(apc.ExpansionCoefficients)
 	OutputMean = Vector{Float64}(lc[1, :])

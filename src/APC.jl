@@ -20,6 +20,7 @@ using TimerOutputs
 # const to = TimerOutput()
 
 using Cthulhu
+using JET 
 
 function meshgrid(x, y)
 	X = [x for _ in y, x in x]
@@ -54,8 +55,9 @@ function run(degree, to)
 
 	# TrainingInput = GaussianCollocation2(apc_instance)
 	# @debug "" TrainingInput
+	# display(	@report_call GaussianCollocation(apc_instance; strategy = :PCM) )
 	# @descend GaussianCollocation(apc_instance; strategy = :PCM)
-	TrainingInput =  @timeit to "GaussianCollocation" GaussianCollocation(apc_instance; strategy = :PCM)
+	TrainingInput = @timeit to "GaussianCollocation" GaussianCollocation(apc_instance; strategy = :PCM)
 	# TrainingInput = @timeit to "KMeansCollocation" KMeansCollocation(apc_instance)
 
 	# @debug "" TrainingInput
