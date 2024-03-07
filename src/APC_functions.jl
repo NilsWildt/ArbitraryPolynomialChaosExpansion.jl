@@ -87,7 +87,7 @@ end
 import Base.show
 
 function show(io::IO, apc::aPC)
-	println(io,"=> aPC Toolbox: Prediction using Arbitrary Polynomial Chaos ...")
+	println(io, "=> aPC Toolbox: Prediction using Arbitrary Polynomial Chaos ...")
 	println(io, "aPC{$(typeof(apc).parameters[1])} Summary:")
 	println(io, "Input Dimensions: ", apc.input_dimensions)
 	println(io, "Output Dimensions: ", apc.input_dimensions)
@@ -356,7 +356,7 @@ function GaussianCollocation(apc::aPC{T}; strategy = :PCM) where {T <: Real}
 		temp = abs.(polynomial_roots .- StatsBase.mean(apc.InputDistribution; dims = 1)[:, :][1])
 		temp_sort = mapslices(sortperm, temp, dims = 2)
 		@inbounds for i in axes(polynomial_roots, 1)
-			polynomial_roots[i, :] =  @views polynomial_roots[i, temp_sort[i, :]]
+			polynomial_roots[i, :] = @views polynomial_roots[i, temp_sort[i, :]]
 		end
 		collocation_points = zeros(apc.NumberOfTerms, apc.input_dimensions)
 		@inbounds for i in 1:apc.NumberOfTerms
@@ -377,7 +377,7 @@ end
 
 function reverse_columns!(x)
 	@inbounds for row in axes(x, 1)
-		x[row, :] =  reverse(@views x[row, :])
+		x[row, :] = reverse(@views x[row, :])
 	end
 end
 
@@ -391,7 +391,7 @@ function train!(apc::aPC{T}, TrainingInput, TrainingOutput, bayesian_inversion =
 	y_rhs = reduce(hcat, TrainingOutput)'
 	# @debug "" size(y_rhs) typeof(y_rhs)
 	Psi_inv = pinv(Psi)
-	@tensor opt=true apc.ExpansionCoefficients[i,k] = Psi_inv[i, j] * y_rhs[j, k]
+	@tensor opt = true apc.ExpansionCoefficients[i, k] = Psi_inv[i, j] * y_rhs[j, k]
 	# apc.ExpansionCoefficients = Psi_inv * y_rhs
 	# @info "" size(C) typeof(C)
 	# apc.ExpansionCoefficients .= C
@@ -401,7 +401,7 @@ function train!(apc::aPC{T}, TrainingInput, TrainingOutput, bayesian_inversion =
 	if bayesian_inversion
 		@info "Using bayesian regulaization y_rhs find the expansion coefficients"
 		x₀ = vec(apc.ExpansionCoefficients) # Quite a good first guess :) And pinv is quite stable.
-		apc.ExpansionCoefficients = reshape(invert(Psi, y_rhs[:], Lₖx₀(2, x₀); alg = :gcv_svd, method = LBFGS()),:,1) 
+		apc.ExpansionCoefficients = reshape(invert(Psi, y_rhs[:], Lₖx₀(2, x₀); alg = :gcv_svd, method = LBFGS()), :, 1)
 		@warn "FOR more than 1 Output we need to change the reshape here ;)"
 	end
 
@@ -425,7 +425,7 @@ function predict(apc::aPC{T}, PredictionInput) where {T <: Real}
 	@info "=> aPC Toolbox: Prediction using Arbitrary Polynomial Chaos ..."
 	Psi = aPC_PsiPolynomialMatrix(apc, PredictionInput)
 	# @einsum PredictionOutput[i, j] := Psi[i,k] * apc.ExpansionCoefficients[i, j]
-	@tensor opt=true PredictionOutput[k, j] := Psi[i, k] *  apc.ExpansionCoefficients[i, j]
+	@tensor opt = true PredictionOutput[k, j] := Psi[i, k] * apc.ExpansionCoefficients[i, j]
 	# PredictionOutput = zeros(size(Psi, 2))
 	# @batch for i ∈ axes(Psi,2)
 	# 	PredictionOutput[i] = dot(apc.ExpansionCoefficients, @views Psi[:, i])
