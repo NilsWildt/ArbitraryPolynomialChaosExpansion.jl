@@ -97,7 +97,7 @@ function show(io::IO, apc::aPC)
 	println(io, "Orthonormal Representation: ", apc.OrthonormalRepresentation ? "Yes" : "No")
 
 	# Depending on the size, you might want to only show a preview of the arrays
-	println(io, "Multivariate Polynomial Degrees: ", apc.MultivariatePolynomialDegrees)
+	println(io, "Multivariate Polynomial Degrees: ", size(apc.MultivariatePolynomialDegrees))
 	println(io, "Orthonormal Basis: Dimensions ", size(apc.OrthonormalBasis))
 	println(io, "Expansion Coefficients: Length ", length(apc.ExpansionCoefficients))
 end
