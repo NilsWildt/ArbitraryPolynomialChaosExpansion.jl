@@ -29,7 +29,7 @@ const to = TimerOutput()
 
 for _ in 1:5
 # display(degree)
-	degree = 20
+	degree = 25
 	@timeit to "APC" begin
 		p = APC.run(degree, to)
 	end

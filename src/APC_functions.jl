@@ -176,8 +176,6 @@ function aPC_PsiPolynomialMatrix(apc::aPC{T}, TrainingInput) where {T<:Real}
 end
 
 
-
-
 function mean(x)
 	s = zero(eltype(x))
 	@simd for i in x
@@ -240,7 +238,14 @@ end
 		# display(Hankel)
 		# dt = copy(Vc)
 		# fr .= Hankel 
-		Vp = Hankel \ Vc
+		Vp = similar(Vc)
+		try
+			Vp = Hankel \ Vc
+		catch
+			@warn "Hankel matrix singular, trying pseudo inverse."
+			Vp = pinv(Hankel)*Vc
+		end
+		# Vp = Hankel \ Vc
 		PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Vp
 		if (100 * abs(sum(abs.(Hankel * PolyCoeff_NonNorm[degree+1, 1:degree+1])) - sum(abs.(Vc))) > 0.5)
 			@warn "Computational error of the linear solver is too high"
@@ -258,7 +263,7 @@ end
 		end
 
 		@simd for k ∈ 0:degree
-			poly[degree+1, k+1] = @views  PolyCoeff_NonNorm[degree+1, k+1] / sqrt(P_norm)
+			poly[degree+1, k+1] = @views PolyCoeff_NonNorm[degree+1, k+1] / sqrt(P_norm)
 		end
 
 	end
@@ -381,7 +386,7 @@ end
 function UQ(apc::aPC{T}) where {T<:Real}
 	@info "=> aPC Toolbox: UQ Arbitrary Polynomial Chaos ..."
 	lc = Array{T}(apc.ExpansionCoefficients)
-	OutputMean = Vector{Float64}(lc[1, :])
-	OutputVar = Vector{Float64}(sum(lc[2:end, :] .^ 2; dims = 1)[:])
+	OutputMean = lc[1, :]
+	OutputVar = sum(lc[2:end, :] .^ 2; dims = 1)[:]
 	return (OutputMean = OutputMean, OutputVar = OutputVar)
 end
