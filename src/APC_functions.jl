@@ -381,7 +381,7 @@ function reverse_columns!(x)
 	end
 end
 
-function train!(apc::aPC{T}, TrainingInput, TrainingOutput, bayesian_inversion = :true) where {T <: Real}
+function train!(apc::aPC{T}, TrainingInput, TrainingOutput; bayesian_inversion = :true) where {T <: Real}
 	@info "=> aPC Toolbox: Training Arbitrary Polynomial Chaos ..."
 	# NumberOfTerms, InputDimensions = size(apc.MultivariatePolynomialDegrees)
 	# NCpoints = size(TrainingInput, 1)

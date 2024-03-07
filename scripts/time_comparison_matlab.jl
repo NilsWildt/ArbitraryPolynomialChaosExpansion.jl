@@ -33,7 +33,7 @@ const to = TimerOutput()
 mytimes = []
 @suppress begin
 	for d in 1:25
-		APC.run1(d, to)
+		# APC.run1(d, to)
 		# display(degree)
 		# degree = 25
 		t = @elapsed begin
@@ -60,5 +60,5 @@ scatter!(ax, times_mat["ds"] |> vec, times_mat["ts"] |> vec, color = :red, label
 legend = Legend(fig, ax, "Legend", valign = :top)
 fig[1, 2] = legend
 display(fig)
-save("comparison.png", fig)
+# save("comparison.png", fig)
 end
