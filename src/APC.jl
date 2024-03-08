@@ -43,13 +43,16 @@ function run(degree, to, data)
 
 	pred = @timeit to "prediction" predict(apc_instance, TrainingInput)
 
-	uq = UQ(apc_instance)
-	data_table = ["Mean" uq.OutputMean[1] mean(true_output); "Var" uq.OutputVar[1] var(true_output)]
+	for k in 1:apc_instance.output_dimensions
+		uq = UQ(apc_instance)
+		data = ["Mean" uq.OutputMean[1] mean(true_output[:,k]); "Var" uq.OutputVar[1] var(true_output[:,k])]
+	
+		headers = ["Type", "aPCE", "Data"]
+	
+		# Display the table
+		pretty_table(data; header = headers)
+	end
 
-	headers = ["Type", "aPCE", "Data"]
-
-	# Display the table
-	pretty_table(data_table; header = headers)
 
 	gratio = (1.0 + sqrt(5.0)) / 2.0
 	p1 = Plots.scatter(data["TrainingInput"][:,1], data["TrainingInput"][:,2], data["TrainingOutput"][:, 1], ms = 2, mc = :blue, marker = :circle, label = "True Output", legend = true, size = (600 * gratio, 600), alpha = 0.3)
@@ -80,7 +83,7 @@ function run3(degree, to)
 	true_output = reduce(vcat,true_output)
 	# degree = 2
 	# t = @elapsed begin
-	apc_instance = @timeit to "aPC_instance" aPC(x, degree;outdim=1, OrthonormalRepresentation = true, qnorm = 1.0)
+	apc_instance = @timeit to "aPC_instance" aPC(x, degree; OrthonormalRepresentation = true, qnorm = 1.0)
 	# @info "" apc_instance 
 
 	# TrainingInput = GaussianCollocation2(apc_instance)

@@ -32,18 +32,25 @@ const to = TimerOutput()
 # mytimes = []
 # for d in 1:25
 
-# data = matread(datadir("data_maria.mat"))
+data = matread(datadir("data_maria.mat"))
 
-# display(degree)
-# degree = 25
 # @timev begin
-# 	p = APC.run(2, to, data)
+# 	p = APC.run1(3, to)
 # 	display(p)
 # end
+
+
+
+# display(degree)
 @timev begin
-	p = APC.run1(3, to)
+	p = APC.run(2, to, data)
 	display(p)
 end
+
+# @timev begin
+# 	p = APC.run1(3, to)
+# 	display(p)
+# end
 
 
 display(to)

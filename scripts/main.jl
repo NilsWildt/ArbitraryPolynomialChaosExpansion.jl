@@ -30,6 +30,12 @@ using .APC
 using TimerOutputs
 const to = TimerOutput()
 @timev p = APC.run1(3,to)
+display(to)
 display(p)
+
+@timev p = APC.run3(10,to)
+
+display(to)
+
 current()
 end

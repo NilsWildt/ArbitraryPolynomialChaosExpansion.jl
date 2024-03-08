@@ -42,8 +42,7 @@ LinearAlgebra.BLAS.set_num_threads(Threads.nthreads())
 mutable struct aPC{T <: Float64}
 	const InputDistribution::RowVecs{T} # in [ d x N-samples]
 	const input_dimensions::Int64
-	const output_dimensions::Int64
-
+	output_dimensions::Int64
 	const ExpansionDegree::Int64
 	const NumberOfTerms::Int64
 	const MultivariatePolynomialDegrees::AbstractArray{Int64}
@@ -381,13 +380,18 @@ end
 
 function train!(apc::aPC{T}, TrainingInput, TrainingOutput; bayesian_inversion = :true) where {T <: Real}
 	@info "=> aPC Toolbox: Training Arbitrary Polynomial Chaos ..."
+	y_rhs = reduce(hcat, TrainingOutput)'
+	if apc.output_dimensions != size(y_rhs, 2)
+		@warn "Output dimensions of the aPC model and the training output do not match"
+		apc.output_dimensions = size(y_rhs, 2)
+		apc.ExpansionCoefficients = zeros(T, apc.NumberOfTerms, apc.output_dimensions)
+	end
 	# NumberOfTerms, InputDimensions = size(apc.MultivariatePolynomialDegrees)
 	# NCpoints = size(TrainingInput, 1)
 	# Psi = SMatrix{NumberOfTerms,NCpoints}(aPC_PsiPolynomialMatrix(apc, TrainingInput)')
 	Psi = Matrix{T}(aPC_PsiPolynomialMatrix(apc, TrainingInput)')
 	# @debug "" size(TrainingInput) size(TrainingOutput) size(Psi) typeof(Psi) typeof(TrainingOutput) typeof(TrainingInput) size(apc.ExpansionCoefficients) typeof(apc.ExpansionCoefficients)
-	y_rhs = reduce(hcat, TrainingOutput)'
-	# @debug "" size(y_rhs) typeof(y_rhs)
+	@debug "" size(y_rhs) typeof(y_rhs)
 	Psi_inv = pinv(Psi)
 	@tensor opt = true apc.ExpansionCoefficients[i, k] = Psi_inv[i, j] * y_rhs[j, k]
 	# apc.ExpansionCoefficients = Psi_inv * y_rhs
@@ -398,9 +402,9 @@ function train!(apc::aPC{T}, TrainingInput, TrainingOutput; bayesian_inversion =
 	# apc.ExpansionCoefficients .= ExpansionCoefficients
 	if bayesian_inversion
 		@info "Using bayesian regulaization y_rhs find the expansion coefficients"
-		x₀ = vec(apc.ExpansionCoefficients) # Quite a good first guess :) And pinv is quite stable.
-		apc.ExpansionCoefficients = reshape(invert(Psi, y_rhs[:], Lₖx₀(2, x₀); alg = :gcv_svd, method = LBFGS()), :, 1)
-		@warn "FOR more than 1 Output we need to change the reshape here ;)"
+		x₀ = apc.ExpansionCoefficients # Quite a good first guess :) And pinv is quite stable.
+		apc.ExpansionCoefficients .= reshape(reduce(hcat,[invert(Psi, y_rhs[:, i], Lₖx₀(2, @view x₀[:,i]); alg = :gcv_svd, method = LBFGS()) for i in axes(y_rhs, 2)]), :, apc.output_dimensions)
+		# @warn "FOR more than 1 Output we need to change the reshape here ;)"
 	end
 
 	@info "" sqrt(mean((Psi * apc.ExpansionCoefficients .- y_rhs) .^ 2))
@@ -431,10 +435,11 @@ function predict(apc::aPC{T}, PredictionInput) where {T <: Real}
 	return PredictionOutput
 end
 
-function UQ(apc::aPC{T}) where {T <: Real}
+function UQ(apc::aPC{T};axis=1) where {T <: Real}
 	@info "=> aPC Toolbox: UQ Arbitrary Polynomial Chaos ..."
+	@error "Hier ist noch was faul fürs Multidimensionale!!"
 	lc = Array{T}(apc.ExpansionCoefficients)
-	OutputMean = lc[1, :]
-	OutputVar = sum(lc[2:end, :] .^ 2; dims = 1)[:]
+	OutputMean = lc[1, axis]
+	OutputVar = sum(lc[2:end, axis] .^ 2; dims = axis)[:]
 	return (OutputMean = OutputMean, OutputVar = OutputVar)
 end
