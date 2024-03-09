@@ -40,7 +40,7 @@ data = matread(datadir("data_maria.mat"))
 # end
 
 	@timev begin
-		p = APC.run(3, to, data)
+		p = APC.run(2, to, data)
 	end
 	display(p)
 

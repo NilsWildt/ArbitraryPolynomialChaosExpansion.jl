@@ -32,7 +32,7 @@ using TimerOutputs
 const to = TimerOutput()
 mytimes = []
  begin # @suppress
-	for d in 1:50
+	for d in 1:20
 		# APC.run1(d, to)
 		# display(degree)
 		# degree = 25

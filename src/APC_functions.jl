@@ -35,7 +35,7 @@ using StatsBase
 using Polyester
 using PolynomialRoots
 using PrettyTables
-# using LazyArrays
+using LazyArrays
 using TensorOperations
 using Strided
 Strided.set_num_threads(Threads.nthreads())
@@ -50,7 +50,6 @@ mutable struct aPC{T <: Float64}
 	const MultivariatePolynomialDegrees::AbstractArray{Int64}
 	const OrthonormalRepresentation::Bool
 	const OrthonormalBasis::Array{T}
-	# NumberOfOutputs::Int64
 	ExpansionCoefficients::Matrix{T}
 
 	# Constructor
@@ -157,7 +156,7 @@ function aPC_MultivariatePolynomialDegrees(num_dimensions, max_degree; qnorm = 1
 	@inbounds for di in 1:num_dimensions-1
 		indices = repeat(indices, inner = (max_degree + 1, 1))
 		front = repeat(range_, outer = div(lastindex(indices), (max_degree + 1)) ÷ di)
-		indices = hcat(front, indices)
+		indices = ApplyArray(hcat, front, indices)
 		if qnorm != 1.0
 			@error "qnorm still wrong for more dimensions!"
 			# Apply truncation using qnorm-norm sparsity
@@ -344,7 +343,7 @@ function GaussianCollocation(apc::aPC{T}; strategy = :PCM) where {T <: Real}
 		polynomial_roots[d, :] = @view reinterpret(T, PolynomialRoots.roots(@views polynomial_basis[apc.ExpansionDegree+2, :]))[1:2:end-1]
 	end
 	PointsVector = 1:apc.ExpansionDegree+1 |> collect
-	UniqueCombinations = stack(reduce(vcat, collect(Iterators.product([PointsVector for _ in 1:apc.input_dimensions]...))))'
+	UniqueCombinations = stack(reduce(vcat, (Iterators.product([PointsVector for _ in 1:apc.input_dimensions]...))))'
 
 
 	sort_indices = sortperm(sum(UniqueCombinations; dims = 2); dims = 1)
@@ -354,7 +353,7 @@ function GaussianCollocation(apc::aPC{T}; strategy = :PCM) where {T <: Real}
 		return RowVecs(view(TrainingInput, :, (1:size(TrainingInput, 2))))
 	elseif strategy == :PCM
 		temp = abs.(polynomial_roots .- StatsBase.mean(apc.InputDistribution; dims = 1)[:, :][1])
-		temp_sort = mapslices(sortperm, temp, dims = 2)
+		temp_sort =  mapslices(sortperm, temp, dims = 2)
 		@inbounds for i in axes(polynomial_roots, 1)
 			polynomial_roots[i, :] = @views polynomial_roots[i, temp_sort[i, :]]
 		end
@@ -447,7 +446,7 @@ function UQ(apc::aPC{T};axis=1) where {T <: Real}
 	@info "=> aPC Toolbox: UQ Arbitrary Polynomial Chaos ..."
 	@info "Computing the mean and variance of the output for dimension $axis"
 	lc = Array{T}(apc.ExpansionCoefficients[:, axis])
-	OutputMean = lc[1, :]
-	OutputVar = sum(lc[2:end, :] .^ 2;dims=1)[:]
+	OutputMean = @views lc[1, :]
+	OutputVar =  @views sum(lc[2:end, :] .^ 2;dims=1)[:]
 	return (OutputMean = OutputMean, OutputVar = OutputVar)
 end
