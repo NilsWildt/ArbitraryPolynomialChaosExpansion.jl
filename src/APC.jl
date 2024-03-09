@@ -30,37 +30,43 @@ end
 
 
 function run(degree, to, data)
-	TrainingInput = data["TrainingInput"]
-	TrainingOutput = data["TrainingOutput"]
-	true_output = data["Input_distributios"]
+	TrainingInput = data["TrainingInput"][:,1:13]
+	TrainingOutput = data["TrainingOutput"][:,1:4]
+	true_output = data["Input_distributios"][:,1:4]
 
 	TrainingInput = RowVecs(TrainingInput)
 	TrainingOutput = RowVecs(TrainingOutput)
 	apc_instance = @timeit to "aPC_instance" aPC(TrainingInput, degree; OrthonormalRepresentation = true, qnorm = 1.0)
 	# TrainingInput = @timeit to "GaussianCollocation" GaussianCollocation(apc_instance; strategy = :PCM)
 	# TrainingOutput = reduce(hcat, TrainingOutput)' |> RowVecs
-	@timeit to "training" train!(apc_instance, TrainingInput, TrainingOutput)
+	@timeit to "training" train!(apc_instance, TrainingInput, TrainingOutput;bayesian_inversion=true)
 
 	pred = @timeit to "prediction" predict(apc_instance, TrainingInput)
-
+# @info size(pred) size( TrainingInput)
 	for k in 1:apc_instance.output_dimensions
-		uq = UQ(apc_instance)
-		data = ["Mean" uq.OutputMean[1] mean(true_output[:,k]); "Var" uq.OutputVar[1] var(true_output[:,k])]
+		uq = UQ(apc_instance;axis=k)
+		data_table = ["Mean" uq.OutputMean[1] mean(true_output[:,k]); "Var" uq.OutputVar[1] var(true_output[:,k])]
 	
 		headers = ["Type", "aPCE", "Data"]
 	
 		# Display the table
-		pretty_table(data; header = headers)
+		pretty_table(data_table; header = headers)
+	end
+
+	gratio = (1.0 + sqrt(5.0)) / 2.0
+	ps = []
+	for k in axes(pred,2)
+		
+	p1 = Plots.scatter(reduce(hcat,TrainingInput)[1,:], reduce(hcat,TrainingInput)[2,:],reduce(hcat,TrainingOutput)[k,:], ms = 2, mc = :blue, marker = :circle, label = "True Output", legend = true, size = (600 * gratio, 600), alpha = 0.3)
+	Plots.scatter!(p1, reduce(hcat,TrainingInput)[1,:], reduce(hcat,TrainingInput)[2,:],pred[:,k], ms = 2, mc = :red, marker = :square, label = "Prediction", legend = true, alpha = 1.0)
+
+	Plots.scatter!(p1, reduce(hcat,TrainingInput)[1,:],reduce(hcat,TrainingInput)[2,:],reduce(hcat,TrainingOutput)[k,:], ms = 2, mc = :green, marker = :square, label = "Collocation Output", legend = true)
+
+		push!(ps,p1)
 	end
 
 
-	gratio = (1.0 + sqrt(5.0)) / 2.0
-	p1 = Plots.scatter(data["TrainingInput"][:,1], data["TrainingInput"][:,2], data["TrainingOutput"][:, 1], ms = 2, mc = :blue, marker = :circle, label = "True Output", legend = true, size = (600 * gratio, 600), alpha = 0.3)
-	# Plots.scatter!(p1, data["TrainingInput"][:,1], data["TrainingInput"][:,2], pred, ms = 2, mc = :red, marker = :square, label = "Prediction", legend = true, alpha = 0.3)
-
-	# Plots.scatter!(p1, data["TrainingInput"][:,1], data["TrainingInput"][:,2], data["TrainingOutput"][:, 1], ms = 2, mc = :green, marker = :square, label = "Collocation Output", legend = true)
-
-	return p1
+	return Plots.plot(ps...)
 end
 
 function run3(degree, to)

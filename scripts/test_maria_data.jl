@@ -39,21 +39,17 @@ data = matread(datadir("data_maria.mat"))
 # 	display(p)
 # end
 
-
-
-# display(degree)
-@timev begin
-	p = APC.run(2, to, data)
+	@timev begin
+		p = APC.run(3, to, data)
+	end
 	display(p)
-end
 
 # @timev begin
 # 	p = APC.run1(3, to)
 # 	display(p)
 # end
-
-
 display(to)
+
 
 
 end
