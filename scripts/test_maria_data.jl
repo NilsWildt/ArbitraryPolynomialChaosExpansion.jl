@@ -26,7 +26,6 @@ info_logging = ConsoleLogger(stderr, Logging.Info)
 global_logger(debug_logging)
 include(srcdir("APC.jl"))
 using .APC
-
 using TimerOutputs
 const to = TimerOutput()
 # mytimes = []
@@ -36,15 +35,13 @@ data = matread(datadir("data_maria.mat"))
 # 	p = APC.run1(3, to)
 # 	display(p)
 # end
-	@timev begin
-		p = APC.run(10, to, data)
-	end
-	display(p)
-
+@timev begin
+	p = APC.run_hopt(to, data)
+end
+display(p)
 # @timev begin
 # 	p = APC.run1(3, to)
 # 	display(p)
 # end
 display(to)
-
 end

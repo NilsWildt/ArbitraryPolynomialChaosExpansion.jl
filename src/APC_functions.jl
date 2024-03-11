@@ -11,34 +11,36 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-using MKL
-using LinearAlgebra
-using Zygote
-using LineSearches
-# using NonlinearSolve
-using SparseArrays
-# using IterativeSolvers
-using Enzyme
 # using Hyperopt
-# using Preconditioners
-using UnicodePlots # To use spy from SparseArrays
-using CUDA
-import Optim: NewtonTrustRegion, Options, optimize, minimizer, minimum, LBFGS, IPNewton
-import RegularizationTools: Lₖx₀, solve, RegularizationProblem, setupRegularizationProblem, to_general_form, to_standard_form, gcv_tr, gcv_svd, invert, Lₖ, NelderMead, LₖB, Lₖx₀B, LₖDₓ, Lₖx₀Dₓ, LₖDₓB, Lₖx₀DₓB
-using LazyGrids
-using Combinatorics
-using InducingPoints
-using Polynomials
+# using IterativeSolvers
 # using KernelFunctions
-using StatsBase
+# using NonlinearSolve
+# using Preconditioners
 # using SparseArrays
 # using StaticArrays
+
+import Optim: NewtonTrustRegion, Options, optimize, minimizer, minimum, LBFGS, IPNewton
+import RegularizationTools: Lₖx₀, solve, RegularizationProblem, setupRegularizationProblem, to_general_form, to_standard_form, gcv_tr, gcv_svd, invert, Lₖ, NelderMead, LₖB, Lₖx₀B, LₖDₓ, Lₖx₀Dₓ, LₖDₓB, Lₖx₀DₓB
+using Combinatorics
+using CUDA
+using Enzyme
+using InducingPoints
+using LazyArrays
+using LazyGrids
+using LinearAlgebra
+using LineSearches
+using MKL
 using Polyester
 using PolynomialRoots
+using Polynomials
 using PrettyTables
-using LazyArrays
-using TensorOperations
+using SparseArrays
+using StatsBase
 using Strided
+using TensorOperations
+using UnicodePlots # To use spy from SparseArrays
+using Zygote
+
 Strided.set_num_threads(Threads.nthreads())
 LinearAlgebra.BLAS.set_num_threads(Threads.nthreads())
 
@@ -151,12 +153,22 @@ end
 # 	return indices
 # end
 
+function normalization_functions(matrix)
+	# Calculate mean and std for each column
+	col_means = StatsBase.mean(matrix, dims = 1)
+	col_stds = StatsBase.std(matrix, dims = 1)
+	# Define the normalization function
+	normalize = (x) -> (x .- col_means) ./ col_stds
+	# Define the inverse normalization function
+	inverse_normalize = (x) -> x .* col_stds .+ col_means
+	return normalize, inverse_normalize
+end
+
 
 function aPC_MultivariatePolynomialDegrees(num_dimensions, max_degree; qnorm = 1.0)
 	# Initialize the indices for the first parameter
 	range_ = 0:max_degree |> collect
 	indices = reshape(range_, :, 1)  # Make it a column vector
-
 	@inbounds for di in 1:num_dimensions-1
 		indices = repeat(indices, inner = (max_degree + 1, 1))
 		front = repeat(range_, outer = div(lastindex(indices), (max_degree + 1)) ÷ di)
@@ -169,12 +181,10 @@ function aPC_MultivariatePolynomialDegrees(num_dimensions, max_degree; qnorm = 1
 			indices = indices[vec(sum(indices; dims = 2)).<=max_degree, :]
 		end
 	end
-
 	indices .= sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
 	reverse_columns!(indices)
 	return indices
 end
-
 
 function aPC_PsiPolynomialMatrix(apc::aPC{T}, TrainingInput) where {T <: Real}
 	NumberOfTerms, InputDimensions = size(apc.MultivariatePolynomialDegrees)
@@ -196,7 +206,6 @@ function aPC_PsiPolynomialMatrix(apc::aPC{T}, TrainingInput) where {T <: Real}
 	end
 	return Psi
 end
-
 
 function mean(x)
 	s = zero(eltype(x))
@@ -282,11 +291,9 @@ end
 			end
 			P_norm += Poly^2 / NumberOfDataPoints
 		end
-
 		@simd for k ∈ 0:degree
 			poly[degree+1, k+1] = @views PolyCoeff_NonNorm[degree+1, k+1] / sqrt(P_norm)
 		end
-
 	end
 
 	# Backward linear transformation to the data space
@@ -381,7 +388,7 @@ function reverse_columns!(x)
 	end
 end
 
-function train!(apc::aPC{T}, TrainingInput, TrainingOutput; bayesian_inversion = :true) where {T <: Real}
+function train!(apc::aPC{T}, TrainingInput, TrainingOutput; bayesian_inversion = :true,reg_mode = 3) where {T <: Real}
 	@info "=> aPC Toolbox: Training Arbitrary Polynomial Chaos ..."
 	@info apc
 	y_rhs = reduce(hcat, TrainingOutput)'
@@ -394,15 +401,13 @@ function train!(apc::aPC{T}, TrainingInput, TrainingOutput; bayesian_inversion =
 	# NCpoints = size(TrainingInput, 1)
 	# Psi = SMatrix{NumberOfTerms,NCpoints}(aPC_PsiPolynomialMatrix(apc, TrainingInput)')
 	Psi = Matrix{T}(aPC_PsiPolynomialMatrix(apc, TrainingInput)')
-	@warn "SPYING"
-	display(spy(sparse(Psi)))
-
+	# @warn "SPYING"
+	# display(UnicodePlots.spy(sparse(Psi)))
 	# @debug "" size(TrainingInput) size(TrainingOutput) size(Psi) typeof(Psi) typeof(TrainingOutput) typeof(TrainingInput) size(apc.ExpansionCoefficients) typeof(apc.ExpansionCoefficients)
 	# Psi_inv = pinv(Psi;rtol= sqrt(eps(real(float(oneunit(eltype(Psi)))))) )
 	Psi_inv = pinv(Psi; rtol = sqrt(eps(real(float(oneunit(eltype(Psi)))))))
-	# Psi_inv = pinv(Psi;atol=0.01)
+	# Psi_inv = pinv(Psi;rtol=0.6)
 	# @debug "" size(y_rhs) typeof(y_rhs)  typeof(apc.ExpansionCoefficients) size(Psi_inv) size(Psi)
-
 	@tensor opt = true apc.ExpansionCoefficients[i, k] = Psi_inv[i, j] * y_rhs[j, k]
 	# apc.ExpansionCoefficients = Psi_inv * y_rhs
 	# @info "" size(C) typeof(C)
@@ -423,15 +428,16 @@ function train!(apc::aPC{T}, TrainingInput, TrainingOutput; bayesian_inversion =
 			# upper = ones(size(lower)) .+ 80
 			# x₀[x₀[:, i].<0.0, i] .= 0.1
 			# apc.ExpansionCoefficients[:, i] .= invert(Psi'*Psi .+ 1.0*Diagonal(ones(size(Psi,2))), Psi'*y_rhs[:, i], Lₖx₀(3, view(x₀,:, i));alg = :gcv_svd, method = LBFGS(linesearch = LineSearches.BackTracking()))
-			apc.ExpansionCoefficients[:, i] .= invert(Psi , y_rhs[:, i], Lₖx₀(3, view(apc.ExpansionCoefficients,:, i));alg = :gcv_svd, method = LBFGS(linesearch = LineSearches.BackTracking()))
+			apc.ExpansionCoefficients[:, i] .= invert(Psi, y_rhs[:, i], Lₖx₀(reg_mode, view(x₀, :, i)); alg = :gcv_svd, method = LBFGS(linesearch = LineSearches.BackTracking()))
 
 		end
 	end
-
 	for k in axes(apc.ExpansionCoefficients, 2)
 		res = (@views sqrt(mean((Psi * apc.ExpansionCoefficients[:, k] .- y_rhs[:, k]) .^ 2)))
 		@info "Error for axis $k" res
 	end
+	# @warn "SPYING"
+	# display(UnicodePlots.spy(sparse(apc.ExpansionCoefficients)))
 	# @info "" sqrt(mean((Psi * apc.ExpansionCoefficients .- y_rhs) .^ 2))
 	return nothing
 end
@@ -450,10 +456,8 @@ end
 function predict(apc::aPC{T}, PredictionInput) where {T <: Real}
 	@info "=> aPC Toolbox: Prediction using Arbitrary Polynomial Chaos ..."
 	Psi = aPC_PsiPolynomialMatrix(apc, PredictionInput)
-	@warn "SPYING"
-	display(spy(sparse(Psi)))
-
-
+	# @warn "SPYING"
+	# display(UnicodePlots.spy(sparse(Psi)))
 	# @einsum PredictionOutput[i, j] := Psi[i,k] * apc.ExpansionCoefficients[i, j]
 	@tensor opt = true PredictionOutput[k, j] := Psi[i, k] * apc.ExpansionCoefficients[i, j]
 	# PredictionOutput = zeros(size(Psi, 2))
@@ -464,8 +468,8 @@ function predict(apc::aPC{T}, PredictionInput) where {T <: Real}
 end
 
 function UQ(apc::aPC{T}; axis = 1) where {T <: Real}
-	@info "=> aPC Toolbox: UQ Arbitrary Polynomial Chaos ..."
-	@info "Computing the mean and variance of the output for dimension $axis"
+	# @info "=> aPC Toolbox: UQ Arbitrary Polynomial Chaos ..."
+	# @info "Computing the mean and variance of the output for dimension $axis"
 	lc = Array{T}(apc.ExpansionCoefficients[:, axis])
 	OutputMean = @views lc[1, :]
 	OutputVar = @views sum(lc[2:end, :] .^ 2; dims = 1)[:]
