@@ -31,16 +31,13 @@ using TimerOutputs
 const to = TimerOutput()
 # mytimes = []
 # for d in 1:25
-
 data = matread(datadir("data_maria.mat"))
-
 # @timev begin
 # 	p = APC.run1(3, to)
 # 	display(p)
 # end
-
 	@timev begin
-		p = APC.run(2, to, data)
+		p = APC.run(10, to, data)
 	end
 	display(p)
 
@@ -49,7 +46,5 @@ data = matread(datadir("data_maria.mat"))
 # 	display(p)
 # end
 display(to)
-
-
 
 end

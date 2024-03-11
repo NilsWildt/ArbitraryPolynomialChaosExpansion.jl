@@ -30,13 +30,13 @@ end
 
 
 function run(degree, to, data)
-	TrainingInput = data["TrainingInput"][:,1:13]
-	TrainingOutput = data["TrainingOutput"][:,1:4]
-	true_output = data["Input_distributios"][:,1:4]
+	TrainingInput = data["TrainingInput"][:,:]
+	TrainingOutput = data["TrainingOutput"][:,:]
+	true_output = data["Input_distributios"][:,:]
 
 	TrainingInput = RowVecs(TrainingInput)
 	TrainingOutput = RowVecs(TrainingOutput)
-	apc_instance = @timeit to "aPC_instance" aPC(TrainingInput, degree; OrthonormalRepresentation = true, qnorm = 1.0)
+	apc_instance = @timeit to "aPC_instance" aPC(TrainingInput, degree; OrthonormalRepresentation = true, qnorm = 0.2)
 	# TrainingInput = @timeit to "GaussianCollocation" GaussianCollocation(apc_instance; strategy = :PCM)
 	# TrainingOutput = reduce(hcat, TrainingOutput)' |> RowVecs
 	@timeit to "training" train!(apc_instance, TrainingInput, TrainingOutput;bayesian_inversion=true)
@@ -46,26 +46,33 @@ function run(degree, to, data)
 	for k in 1:apc_instance.output_dimensions
 		uq = UQ(apc_instance;axis=k)
 		data_table = ["Mean" uq.OutputMean[1] mean(true_output[:,k]); "Var" uq.OutputVar[1] var(true_output[:,k])]
-	
 		headers = ["Type", "aPCE", "Data"]
-	
 		# Display the table
 		pretty_table(data_table; header = headers)
 	end
 
 	gratio = (1.0 + sqrt(5.0)) / 2.0
 	ps = []
-	for k in axes(pred,2)
+	# for k in axes(pred,2)
 		
-	p1 = Plots.scatter(reduce(hcat,TrainingInput)[1,:], reduce(hcat,TrainingInput)[2,:],reduce(hcat,TrainingOutput)[k,:], ms = 2, mc = :blue, marker = :circle, label = "True Output", legend = true, size = (600 * gratio, 600), alpha = 0.3)
-	Plots.scatter!(p1, reduce(hcat,TrainingInput)[1,:], reduce(hcat,TrainingInput)[2,:],pred[:,k], ms = 2, mc = :red, marker = :square, label = "Prediction", legend = true, alpha = 1.0)
+	# p1 = Plots.scatter(reduce(hcat,TrainingInput)[1,:], reduce(hcat,TrainingInput)[2,:],reduce(hcat,TrainingOutput)[k,:], ms = 2, mc = :blue, marker = :circle, label = "True Output", legend = true, size = (600 * gratio, 600), alpha = 0.3)
+	# Plots.scatter!(p1, reduce(hcat,TrainingInput)[1,:], reduce(hcat,TrainingInput)[2,:],pred[:,k], ms = 2, mc = :red, marker = :square, label = "Prediction", legend = true, alpha = 1.0)
 
-	Plots.scatter!(p1, reduce(hcat,TrainingInput)[1,:],reduce(hcat,TrainingInput)[2,:],reduce(hcat,TrainingOutput)[k,:], ms = 2, mc = :green, marker = :square, label = "Collocation Output", legend = true)
+	# Plots.scatter!(p1, reduce(hcat,TrainingInput)[1,:],reduce(hcat,TrainingInput)[2,:],reduce(hcat,TrainingOutput)[k,:], ms = 2, mc = :green, marker = :square, label = "Collocation Output", legend = true)
 
+	# 	push!(ps,p1)
+	# end
+		# @info "" size(data["ValidationInput"][:,1:13]) typeof(data["ValidationInput"][:,1:13]) size(TrainingInput) typeof(TrainingInput)
+	pred_validation = @timeit to "prediction_validation" predict(apc_instance, data["ValidationInput"][:,:]|>RowVecs)
+	for k in axes(pred_validation,2)
+		# fig, axs = plt.subplots()
+		# for i in range(n_obs): 
+		#     ax.scatter(validation_out[:, i], surrogate_output[:, i], color=colors_obs[i], label=f'{i + 1}')
+		# handles, labels = ax.get_legend_handles_labels()
+		# fig.legend(handles=handles, labels=labels, loc="center right", ncol=1)
+		p1 = Plots.scatter(data["ValidationOutput"][:,k], pred_validation[:,k], label = "Validation", legend = false)
 		push!(ps,p1)
 	end
-
-
 	return Plots.plot(ps...)
 end
 

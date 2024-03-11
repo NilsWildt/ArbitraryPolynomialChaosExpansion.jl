@@ -21,9 +21,10 @@ using SparseArrays
 using Enzyme
 # using Hyperopt
 # using Preconditioners
+using UnicodePlots # To use spy from SparseArrays
 using CUDA
 import Optim: NewtonTrustRegion, Options, optimize, minimizer, minimum, LBFGS, IPNewton
-import RegularizationTools: Lₖx₀, solve, RegularizationProblem, setupRegularizationProblem, to_general_form, to_standard_form, gcv_tr, gcv_svd, invert, Lₖ, NelderMead
+import RegularizationTools: Lₖx₀, solve, RegularizationProblem, setupRegularizationProblem, to_general_form, to_standard_form, gcv_tr, gcv_svd, invert, Lₖ, NelderMead, LₖB, Lₖx₀B, LₖDₓ, Lₖx₀Dₓ, LₖDₓB, Lₖx₀DₓB
 using LazyGrids
 using Combinatorics
 using InducingPoints
@@ -62,9 +63,12 @@ mutable struct aPC{T <: Float64}
 	) where T
 		input_dimensions = Int64(size(InputDistribution[1], 1))
 		MultivariatePolynomialDegrees = aPC_MultivariatePolynomialDegrees(input_dimensions, ExpansionDegree; qnorm = qnorm)
-		NumberOfTerms = numberPolynomials(ExpansionDegree, input_dimensions)
+		NumberOfTerms = min(size(MultivariatePolynomialDegrees, 1), numberPolynomials(ExpansionDegree, input_dimensions))
+		if qnorm != 1.0
+			@info "qnorm reduced the number of terms from $(numberPolynomials(ExpansionDegree, input_dimensions)) to $NumberOfTerms"
+		end
 		OrthonormalBasis = zeros(ExpansionDegree + 2, ExpansionDegree + 2, input_dimensions)
-		for i in 1:input_dimensions
+		@inbounds for i in 1:input_dimensions
 			tmp = aPC_OrthonormalBasis(getindex.(InputDistribution, i), ExpansionDegree)
 			OrthonormalBasis[:, :, i] .= tmp
 		end
@@ -158,12 +162,9 @@ function aPC_MultivariatePolynomialDegrees(num_dimensions, max_degree; qnorm = 1
 		front = repeat(range_, outer = div(lastindex(indices), (max_degree + 1)) ÷ di)
 		indices = ApplyArray(hcat, front, indices)
 		if qnorm != 1.0
-			@error "qnorm still wrong for more dimensions!"
-			# Apply truncation using qnorm-norm sparsity
 			idx_to_keep = vec(sum((indices ./ (max_degree + 1)) .^ qnorm, dims = 2) .^ (1.0 / qnorm) .<= 1.0)
 			indices = indices[idx_to_keep, :]
-			@info "Q-norm removed $(length(idx_to_keep)-sum(idx_to_keep)) terms"
-
+			# @info "Q-norm removed $(length(idx_to_keep)-sum(idx_to_keep)) terms"
 		else
 			indices = indices[vec(sum(indices; dims = 2)).<=max_degree, :]
 		end
@@ -190,7 +191,7 @@ function aPC_PsiPolynomialMatrix(apc::aPC{T}, TrainingInput) where {T <: Real}
 				p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
 				product *= evalpoly(x, p)  # Evaluate the polynomial at x and multiply
 			end
-			Psi[i, j] =  product  # Assign the product to Psi matrix
+			Psi[i, j] = product  # Assign the product to Psi matrix
 		end
 	end
 	return Psi
@@ -353,7 +354,7 @@ function GaussianCollocation(apc::aPC{T}; strategy = :PCM) where {T <: Real}
 		return RowVecs(view(TrainingInput, :, (1:size(TrainingInput, 2))))
 	elseif strategy == :PCM
 		temp = abs.(polynomial_roots .- StatsBase.mean(apc.InputDistribution; dims = 1)[:, :][1])
-		temp_sort =  mapslices(sortperm, temp, dims = 2)
+		temp_sort = mapslices(sortperm, temp, dims = 2)
 		@inbounds for i in axes(polynomial_roots, 1)
 			polynomial_roots[i, :] = @views polynomial_roots[i, temp_sort[i, :]]
 		end
@@ -393,9 +394,14 @@ function train!(apc::aPC{T}, TrainingInput, TrainingOutput; bayesian_inversion =
 	# NCpoints = size(TrainingInput, 1)
 	# Psi = SMatrix{NumberOfTerms,NCpoints}(aPC_PsiPolynomialMatrix(apc, TrainingInput)')
 	Psi = Matrix{T}(aPC_PsiPolynomialMatrix(apc, TrainingInput)')
+	@warn "SPYING"
+	display(spy(sparse(Psi)))
+
 	# @debug "" size(TrainingInput) size(TrainingOutput) size(Psi) typeof(Psi) typeof(TrainingOutput) typeof(TrainingInput) size(apc.ExpansionCoefficients) typeof(apc.ExpansionCoefficients)
-	Psi_inv = pinv(Psi;rtol= sqrt(eps(real(float(oneunit(eltype(Psi)))))) )
-	# @debug "" size(y_rhs) typeof(y_rhs) size(c) typeof(apc.ExpansionCoefficients)
+	# Psi_inv = pinv(Psi;rtol= sqrt(eps(real(float(oneunit(eltype(Psi)))))) )
+	Psi_inv = pinv(Psi; rtol = sqrt(eps(real(float(oneunit(eltype(Psi)))))))
+	# Psi_inv = pinv(Psi;atol=0.01)
+	# @debug "" size(y_rhs) typeof(y_rhs)  typeof(apc.ExpansionCoefficients) size(Psi_inv) size(Psi)
 
 	@tensor opt = true apc.ExpansionCoefficients[i, k] = Psi_inv[i, j] * y_rhs[j, k]
 	# apc.ExpansionCoefficients = Psi_inv * y_rhs
@@ -407,17 +413,28 @@ function train!(apc::aPC{T}, TrainingInput, TrainingOutput; bayesian_inversion =
 	if bayesian_inversion
 		@info "Using bayesian regularization y_rhs find the expansion coefficients"
 		x₀ = apc.ExpansionCoefficients # Quite a good first guess :) And pinv is quite stable.
+		# apc.ExpansionCoefficients .= reshape(reduce(hcat,[invert(Psi, y_rhs[:, i], Lₖx₀(2, @view x₀[:,i]);  alg = :gcv_svd, method = LBFGS(linesearch=LineSearches.BackTracking())) for i in axes(y_rhs, 2)]), :, apc.output_dimensions)
+		# apc.ExpansionCoefficients .= reshape(reduce(hcat,[invert(Psi, y_rhs[:, i], Lₖx₀(0, @view x₀[:,i]);  alg = :gcv_svd, method = LBFGS(linesearch=LineSearches.BackTracking())) for i in axes(y_rhs, 2)]), :, apc.output_dimensions)
+		# apc.ExpansionCoefficients .= reshape(reduce(hcat,[solve(setupRegularizationProblem(Psi,y_rhs[:,i],@view x₀[:,i])) for i in axes(y_rhs, 2)]), :, apc.output_dimensions)
+		# x̂ = deepcopy(abs.(apc.ExpansionCoefficients .= reshape(reduce(hcat,[solve(setupRegularizationProblem(Psi,y_rhs[:,i],@view x₀[:,i])) for i in axes(y_rhs, 2)]), :, apc.output_dimensions)
+		# ))
+		@batch for i in axes(y_rhs, 2)
+			# lower = zeros(size(Psi, 2)) .+ 0.001
+			# upper = ones(size(lower)) .+ 80
+			# x₀[x₀[:, i].<0.0, i] .= 0.1
+			# apc.ExpansionCoefficients[:, i] .= invert(Psi'*Psi .+ 1.0*Diagonal(ones(size(Psi,2))), Psi'*y_rhs[:, i], Lₖx₀(3, view(x₀,:, i));alg = :gcv_svd, method = LBFGS(linesearch = LineSearches.BackTracking()))
+			apc.ExpansionCoefficients[:, i] .= invert(Psi , y_rhs[:, i], Lₖx₀(3, view(apc.ExpansionCoefficients,:, i));alg = :gcv_svd, method = LBFGS(linesearch = LineSearches.BackTracking()))
 
-		apc.ExpansionCoefficients .= reshape(reduce(hcat,[invert(Psi, y_rhs[:, i], Lₖx₀(2, @view x₀[:,i]);  alg = :gcv_svd, method = LBFGS(linesearch=LineSearches.BackTracking())) for i in axes(y_rhs, 2)]), :, apc.output_dimensions)
+		end
 	end
+
 	for k in axes(apc.ExpansionCoefficients, 2)
-		res =  (@views sqrt(mean((Psi * apc.ExpansionCoefficients[:, k] .- y_rhs[:, k]) .^ 2)))
+		res = (@views sqrt(mean((Psi * apc.ExpansionCoefficients[:, k] .- y_rhs[:, k]) .^ 2)))
 		@info "Error for axis $k" res
 	end
 	# @info "" sqrt(mean((Psi * apc.ExpansionCoefficients .- y_rhs) .^ 2))
 	return nothing
 end
-
 
 # function predict(apc::aPC{T}, PredictionInput) where {T <: Real}
 # 	@info "=> aPC Toolbox: Prediction using Arbitrary Polynomial Chaos ..."
@@ -433,6 +450,10 @@ end
 function predict(apc::aPC{T}, PredictionInput) where {T <: Real}
 	@info "=> aPC Toolbox: Prediction using Arbitrary Polynomial Chaos ..."
 	Psi = aPC_PsiPolynomialMatrix(apc, PredictionInput)
+	@warn "SPYING"
+	display(spy(sparse(Psi)))
+
+
 	# @einsum PredictionOutput[i, j] := Psi[i,k] * apc.ExpansionCoefficients[i, j]
 	@tensor opt = true PredictionOutput[k, j] := Psi[i, k] * apc.ExpansionCoefficients[i, j]
 	# PredictionOutput = zeros(size(Psi, 2))
@@ -442,11 +463,11 @@ function predict(apc::aPC{T}, PredictionInput) where {T <: Real}
 	return PredictionOutput
 end
 
-function UQ(apc::aPC{T};axis=1) where {T <: Real}
+function UQ(apc::aPC{T}; axis = 1) where {T <: Real}
 	@info "=> aPC Toolbox: UQ Arbitrary Polynomial Chaos ..."
 	@info "Computing the mean and variance of the output for dimension $axis"
 	lc = Array{T}(apc.ExpansionCoefficients[:, axis])
 	OutputMean = @views lc[1, :]
-	OutputVar =  @views sum(lc[2:end, :] .^ 2;dims=1)[:]
+	OutputVar = @views sum(lc[2:end, :] .^ 2; dims = 1)[:]
 	return (OutputMean = OutputMean, OutputVar = OutputVar)
 end
