@@ -4,14 +4,14 @@ using DrWatson
 configdir(args...) = projectdir("configs", args...)
 outputdir(args...) = projectdir("output", args...)
 
-export run, normalization_functions, run
+export run, normalization_functions, run, ∂∂I_aPC_PsiPolynomialMatrix
 include(srcdir("utils.jl"))
 include(srcdir("experiment.jl"))
 include(srcdir("APC_functions.jl"))
 include(srcdir("analyticalmodel.jl"))
 
 using Plots
-gr()
+plotly()
 using TimerOutputs
 using StatsBase
 using Hyperopt
@@ -25,22 +25,24 @@ end
 
 function run(degree, to, data)
 	TrainingInput = data["TrainingInput"][:, :]
-	# f_norm_train_input, f_inverse_norm_train_input = normalization_functions(TrainingInput)
+	f_norm_train_input, f_inverse_norm_train_input = normalization_functions(TrainingInput)
 	TrainingOutput = data["TrainingOutput"][:, :]
-	# f_norm_train_output, f_inverse_norm_train_output = normalization_functions(TrainingOutput)
+	f_norm_train_output, f_inverse_norm_train_output = normalization_functions(TrainingOutput)
 	ValidationInput = data["ValidationInput"][:, :]
 	# f_norm_validation_input, f_inverse_norm_validation_input = normalization_functions(TrainingInput)
 	ValidationOutput = data["ValidationOutput"][:, :]
 	# f_norm_validation_output, f_inverse_norm_validation_output = normalization_functions(ValidationOutput)
 	# f_norm_validation_output = ValidationOutput |> f_norm_validation_output
-	TrainingInput = RowVecs(TrainingInput)
-	TrainingOutput = RowVecs(TrainingOutput)
+	TrainingInput = RowVecs(TrainingInput |> f_norm_train_input)
+	TrainingOutput = RowVecs(TrainingOutput|>f_norm_train_output)
+
+
 	apc_instance = @timeit to "aPC_instance" aPC(TrainingInput, degree; OrthonormalRepresentation = true, qnorm = 0.3)
 	# TrainingInput = @timeit to "GaussianCollocation" GaussianCollocation(apc_instance; strategy = :PCM)
 	# TrainingOutput = reduce(hcat, TrainingOutput)' |> RowVecs
 	@timeit to "training" train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion = true)
 	# pred = @timeit to "prediction" predict(apc_instance, TrainingInput)
-	pred_validation = @timeit to "prediction_validation" predict(apc_instance, ValidationInput[:, :] |> RowVecs)
+	pred_validation = @timeit to "prediction_validation" predict(apc_instance, ValidationInput[:, :] |> RowVecs) |> f_inverse_norm_train_output
 	# @info size(pred) size( TrainingInput)
 	for k in 1:apc_instance.output_dimensions
 		uq = UQ(apc_instance; axis = k)
@@ -72,35 +74,37 @@ end
 
 function run_hopt(to, data)
 	TrainingInput = data["TrainingInput"][:, :]
-	# f_norm_train_input, f_inverse_norm_train_input = normalization_functions(TrainingInput)
+	f_norm_train_input, f_inverse_norm_train_input = normalization_functions(TrainingInput)
 	TrainingOutput = data["TrainingOutput"][:, :]
-	# f_norm_train_output, f_inverse_norm_train_output = normalization_functions(TrainingOutput)
+	f_norm_train_output, f_inverse_norm_train_output = normalization_functions(TrainingOutput)
 	ValidationInput = data["ValidationInput"][:, :]
 	# f_norm_validation_input, f_inverse_norm_validation_input = normalization_functions(TrainingInput)
 	ValidationOutput = data["ValidationOutput"][:, :]
 	# f_norm_validation_output, f_inverse_norm_validation_output = normalization_functions(ValidationOutput)
 	# f_norm_validation_output = ValidationOutput |> f_norm_validation_output
-	TrainingInput = RowVecs(TrainingInput)
-	TrainingOutput = RowVecs(TrainingOutput)
+	TrainingInput = RowVecs(TrainingInput |> f_norm_train_input)
+	TrainingOutput = RowVecs(TrainingOutput|>f_norm_train_output)
+
+
 
 	c(x, y) = (abs(x - y))^2 # could have used `sqeuclidean` from `Distances.jl`
 
 	ho = @hyperopt for i ∈ 1000,
 		sampler ∈ RandomSampler(), # This is default if none provided
 		degree ∈ 1:1:8,
-		qnorm ∈ LinRange(0.001, 1.0, 100),
+		qnorm ∈ LinRange(0.001, 1.0, 30),
 		OrthonormalRepresentation ∈ [true, false],
 		bayesian_inversion ∈ [true, false],
 		reg_mode ∈ [0, 1, 2, 3]
 
 		@info i
 		apc_instance = @timeit to "aPC_instance" aPC(TrainingInput, degree; OrthonormalRepresentation = OrthonormalRepresentation, qnorm = qnorm)
-		if apc_instance.NumberOfTerms > 600 || apc_instance.NumberOfTerms < 2
+		if apc_instance.NumberOfTerms > 450 || apc_instance.NumberOfTerms < 2
 			@warn "Skipping"
 			return 1.0e20
 		end
 		@timeit to "training" train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion = bayesian_inversion, reg_mode = reg_mode)
-		pred_validation = @timeit to "prediction_validation" predict(apc_instance, ValidationInput[:, :] |> RowVecs) |> Array
+		pred_validation = @timeit to "prediction_validation" predict(apc_instance, ValidationInput[:, :] |> RowVecs) |> f_inverse_norm_train_output |> Array
 		err = 0.0
 		for k in 1:apc_instance.output_dimensions
 			uq = UQ(apc_instance; axis = k)
@@ -122,7 +126,7 @@ function run_hopt(to, data)
 	# TrainingOutput = reduce(hcat, TrainingOutput)' |> RowVecs
 	@timeit to "training" train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion = bayesian_inversion, reg_mode = reg_mode)
 	# pred = @timeit to "prediction" predict(apc_instance, TrainingInput)
-	pred_validation = @timeit to "prediction_validation" predict(apc_instance, ValidationInput[:, :] |> RowVecs)
+	pred_validation = @timeit to "prediction_validation" predict(apc_instance, ValidationInput[:, :] |> RowVecs) |> f_inverse_norm_train_output
 	# @info size(pred) size( TrainingInput)
 	for k in 1:apc_instance.output_dimensions
 		uq = UQ(apc_instance; axis = k)
@@ -330,7 +334,7 @@ function run1(degree, to)
 	true_output = reduce(vcat, true_output)
 	# degree = 2
 	# t = @elapsed begin
-	apc_instance = @timeit to "aPC_instance" aPC(x, degree; outdim = 1, OrthonormalRepresentation = true, qnorm = 1.0)
+	apc_instance = @timeit to "aPC_instance" aPC(x, degree; outdim = 2, OrthonormalRepresentation = true, qnorm = 1.0)
 	# @info "" apc_instance 
 
 	# TrainingInput = GaussianCollocation2(apc_instance)
@@ -511,6 +515,68 @@ function run2(degree)
 
 	Plots.scatter!(p1, reduce(hcat, TrainingInput)[1, :], reduce(hcat, TrainingInput)[2, :], reduce(vcat, TrainingOutput), ms = 2, mc = :green, marker = :square, label = "Collocation Output", legend = true)
 	p1
+end
+
+
+
+
+
+
+function run_derivative(degree,to)
+	err = []
+	ts = []
+	ps = []
+	# degress = 1:1:5
+	N = 10
+	d = 2
+
+
+	x = @timeit to "get_input" get_input(N, d, 1)
+	# @debug "" x
+	# m(x) = PhysicalModel1D(1,x)
+	# last_pred = undef
+
+	true_output = [PhysicalModel1D(1, ix) for ix in x]
+	if d == 2
+		true_output = [PhysicalModelND(1, ix) for ix in x]
+	end
+
+	true_output = reduce(vcat, true_output)
+	apc_instance = @timeit to "aPC_instance" aPC(x, degree; outdim = 2, OrthonormalRepresentation = true, qnorm = 1.0)
+	TrainingInput = @timeit to "GaussianCollocation" GaussianCollocation(apc_instance; strategy = :PCM)
+
+	TrainingOutput = Array{Float64}[]
+	for i ∈ 1:size(TrainingInput, 1)
+		if d == 2
+			# @show TrainingInput[i]
+			push!(TrainingOutput, PhysicalModelND(1, TrainingInput[i]))
+		elseif d == 1
+			# @show typeof(TrainingInput[i][1])
+			push!(TrainingOutput, PhysicalModel1D(1, vec(TrainingInput[i])[1]))
+		end
+	end
+
+	TrainingOutput = reduce(hcat, TrainingOutput)' |> RowVecs
+
+	# @timeit to "training" train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion = true)
+
+
+	@timeit to "derivative" ∂∂I_aPC_PsiPolynomialMatrix(apc_instance, reduce(hcat,TrainingInput)) |> display
+
+	# pred = predict(apc_instance, x)
+	# @info mean(true_output)
+	# @info var(true_output)
+	# @show UQ(apc_instance)
+
+	# # gratio = (1.0 + sqrt(5.0)) / 2.0
+
+
+	# gratio = (1.0 + sqrt(5.0)) / 2.0
+	# p1 = Plots.scatter(reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], true_output, ms = 2, mc = :blue, marker = :circle, label = "True Output", legend = true, size = (600 * gratio, 600), alpha = 0.3)
+	# Plots.scatter!(p1, reduce(hcat, x)[1, :], reduce(hcat, x)[2, :], pred, ms = 2, mc = :red, marker = :square, label = "Prediction", legend = true, alpha = 0.3)
+
+	# Plots.scatter!(p1, reduce(hcat, TrainingInput)[1, :], reduce(hcat, TrainingInput)[2, :], reduce(vcat, TrainingOutput), ms = 2, mc = :green, marker = :square, label = "Collocation Output", legend = true)
+	# p1
 end
 
 

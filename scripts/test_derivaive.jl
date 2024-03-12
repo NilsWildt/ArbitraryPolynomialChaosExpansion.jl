@@ -29,9 +29,9 @@ using .APC
 
 using TimerOutputs
 const to = TimerOutput()
-@timev p = APC.run1(3,to)
+@timev APC.run_derivative(1,to)
 display(to)
-display(p)
+# display(p)
 
 # @timev p = APC.run3(10,to)
 
