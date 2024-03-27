@@ -1,4 +1,84 @@
 # Probably from KernelFunctions.jl  
+using Polyester
+@inbounds function evalpoly_two(x, cs::AbstractArray)
+	i = lastindex(cs)
+	out = cs[i]
+	i -= 1
+	fi = firstindex(cs)
+	 while i > fi
+		out = muladd(out, x, cs[i])
+		out = muladd(out, x, cs[i-1])
+		i -= 2
+	end
+
+	return i == fi ? muladd(out, x, @inbounds(cs[fi])) : out
+end
+
+"""
+# Returns
+- `X_train`: The training set features.
+- `X_test`: The testing set features.
+
+The function randomly shuffles the dataset and splits it according to the specified training proportion (`at`).
+"""
+function partitionTrainTest(data; at = 0.7,rng=Xoshiro())
+    num_samples = size(data, 1)
+    shuffled_indices = shuffle(rng,1:num_samples)
+    split_index = floor(Int, at * num_samples)
+
+    train_indices = view(shuffled_indices, 1:split_index)
+    test_indices = view(shuffled_indices, (split_index + 1):num_samples)
+
+    X_train = data[train_indices]
+    X_test = data[test_indices]
+
+    return X_train,  X_test
+end
+
+@views function evaluate_derivative_horner(x,coeffs) 
+    n = length(coeffs) - 1
+    if n == 0
+        return 0.0  # The derivative of a constant polynomial is 0
+    end
+    derivative_coeffs = [i * coeffs[i + 1] for i in 1:n]  # Compute coefficients for the derivative
+    if isempty(derivative_coeffs)
+        return 0.0
+    end
+    # Apply Horner's method
+    derivative_value = derivative_coeffs[end]
+    @simd for i in (n - 1):-1:1
+        derivative_value = derivative_value * x + derivative_coeffs[i]
+    end
+    
+    return derivative_value
+end
+
+@views function evaluate_polynomial_horner_array( x,coeffs)
+    results = Vector(undef, length(x))
+    @batch for (i, xi) in enumerate(x)
+        result = 0.0
+       @simd for coeff in reverse(coeffs)
+            result = result * xi + coeff
+        end
+        results[i] = result
+    end
+    return results
+end
+
+
+
+
+function numberPolynomials(n::Int64, d::Int64)
+	x, y = max(d, n), min(d, n)
+	return UInt128(prod(UInt128(x + 1):UInt128(d + n)) ÷ factorial(UInt128(y))) |> Int
+end
+
+
+@inbounds function reverse_columns!(x)
+	@views for row in axes(x, 1)
+		x[row, :] = reverse(x[row, :])
+	end
+end
 
 # Macro for checking arguments
 macro check_args(K, param, cond, desc=string(cond))

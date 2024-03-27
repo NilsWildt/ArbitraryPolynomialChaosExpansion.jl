@@ -40,12 +40,13 @@ using Strided
 using TensorOperations
 using UnicodePlots # To use spy from SparseArrays
 using Zygote
+using ChainRulesCore
 
 Strided.set_num_threads(Threads.nthreads())
 LinearAlgebra.BLAS.set_num_threads(Threads.nthreads())
 
-mutable struct aPC{T <: Float64}
-	const InputDistribution::RowVecs{T} # in [ d x N-samples]
+mutable struct aPC{T <: Real}
+	const InputDistribution::AbstractArray{T} # in [ d x N-samples]
 	const input_dimensions::Int64
 	output_dimensions::Int64
 	const ExpansionDegree::Int64
@@ -57,24 +58,22 @@ mutable struct aPC{T <: Float64}
 
 	# Constructor
 	function aPC(
-		InputDistribution::RowVecs{T},
+		InputDistribution::AbstractVecOrMat{T},
 		ExpansionDegree::Int64;
+		outdim::Int64 = 1,
 		OrthonormalRepresentation::Bool = true,
 		qnorm::Float64 = 1.0,
-		outdim::Int64 = 1,
+		normalize_data=true,
 	) where T
-		input_dimensions = Int64(size(InputDistribution[1], 1))
+		input_dimensions = Int64(size(InputDistribution, 2))
+		@debug "" qnorm
 		MultivariatePolynomialDegrees = aPC_MultivariatePolynomialDegrees(input_dimensions, ExpansionDegree; qnorm = qnorm)
 		NumberOfTerms = min(size(MultivariatePolynomialDegrees, 1), numberPolynomials(ExpansionDegree, input_dimensions))
 		if qnorm != 1.0
 			@info "qnorm reduced the number of terms from $(numberPolynomials(ExpansionDegree, input_dimensions)) to $NumberOfTerms"
 		end
-		OrthonormalBasis = zeros(ExpansionDegree + 2, ExpansionDegree + 2, input_dimensions)
-		@inbounds for i in 1:input_dimensions
-			tmp = aPC_OrthonormalBasis(getindex.(InputDistribution, i), ExpansionDegree)
-			OrthonormalBasis[:, :, i] .= tmp
-		end
-		ExpansionCoefficients = zeros(T, NumberOfTerms, outdim)
+		OrthonormalBasis = create_basis(InputDistribution, ExpansionDegree; qnorm = qnorm,normalize_data = normalize_data)
+		ExpansionCoefficients = spzeros(T, NumberOfTerms, outdim)
 
 		return new{T}(
 			InputDistribution,
@@ -91,6 +90,18 @@ mutable struct aPC{T <: Float64}
 end
 
 import Base.show
+function create_basis(x, degree; qnorm = 1.0, normalize_data = true)
+	@ignore_derivatives begin
+		input_dimensions = size(x, 2)
+		OrthonormalBasis = zeros(eltype(x), degree + 1, degree + 1, input_dimensions)# +2 for gaussian collocation!!
+		@inbounds for i in 1:input_dimensions
+			tmp = aPCE_OrthonormalBasis(x[:, i], degree; normalize_data = normalize_data)
+			OrthonormalBasis[:, :, i] = tmp
+		end
+		return OrthonormalBasis
+	end
+end
+
 
 function show(io::IO, apc::aPC)
 	println(io, "=> aPC Toolbox: Prediction using Arbitrary Polynomial Chaos ...")
@@ -118,7 +129,6 @@ function normalization_functions(matrix)
 	return normalize, inverse_normalize
 end
 
-
 function aPC_MultivariatePolynomialDegrees(num_dimensions, max_degree; qnorm = 1.0)
 	# Initialize the indices for the first parameter
 	range_ = 0:max_degree |> collect
@@ -135,27 +145,51 @@ function aPC_MultivariatePolynomialDegrees(num_dimensions, max_degree; qnorm = 1
 			indices = indices[vec(sum(indices; dims = 2)).<=max_degree, :]
 		end
 	end
-	indices .= sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
+	indices = sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
 	reverse_columns!(indices)
 	return indices
 end
 
-function aPC_PsiPolynomialMatrix(apc::aPC{T}, TrainingInput) where {T <: Real}
-	NumberOfTerms, InputDimensions = size(apc.MultivariatePolynomialDegrees)
+@polly function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis) where {T <: Real}
+	NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
 	NCpoints = size(TrainingInput, 1)
-	Psi = ones(NumberOfTerms, NCpoints)
-	TrainingInput = reduce(hcat, TrainingInput)
+	Psi = ones(eltype(TrainingInput), NumberOfTerms, NCpoints)
+
+	# Function to evaluate polynomials for a given term and input sample
 	@inbounds for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
-		@batch for j ∈ 1:NCpoints  # For each input sample
-			product = 1.0  # Initialize the product for this term and sample
-			for ii ∈ 1:InputDimensions  # For each dimension of the input
-				degree = @views apc.MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
-				coeffs = @views apc.OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
-				x = @views TrainingInput[ii, j]
-				p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
-				product *= evalpoly(x, p)  # Evaluate the polynomial at x and multiply
+		# product = 1.0  # Initialize the product for this term and sample
+		for ii ∈ 1:InputDimensions  # For each dimension of the input
+			degree = @views MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
+			coeffs = @views OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
+			# p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
+			@batch for j ∈ 1:NCpoints  # For each input sample
+				x = @views TrainingInput[j, ii]
+				Psi[i, j] *= evalpoly_two(x, coeffs)  # Evaluate the polynomial at x and multiply
+				# Psi[i,j] *= evalpoly(x, p)
 			end
-			Psi[i, j] = product  # Assign the product to Psi matrix
+		end
+	end
+	return Psi
+end
+
+
+function aPC_PsiPolynomialMatrix(apc::aPC{T}, TrainingInput) where {T <: Real}
+	NumberOfTerms,InputDimensions = size(apc.MultivariatePolynomialDegrees)
+	NCpoints = size(TrainingInput,1)
+	Psi = ones(eltype(TrainingInput), NumberOfTerms, NCpoints)
+
+	# Function to evaluate polynomials for a given term and input sample
+	@inbounds for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
+		# product = 1.0  # Initialize the product for this term and sample
+		for ii ∈ 1:InputDimensions  # For each dimension of the input
+			degree = @views apc.MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
+			coeffs = @views apc.OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
+			# p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
+			@batch for j ∈ 1:NCpoints  # For each input sample
+				x = @views TrainingInput[j, ii]
+				Psi[i, j] *= evalpoly_two(x, coeffs)  # Evaluate the polynomial at x and multiply
+				# Psi[i,j] *= evalpoly(x, p)
+			end
 		end
 	end
 	return Psi
@@ -192,105 +226,85 @@ end
 
 # ∂∂I_aPC_PsiPolynomialMatrix(apc, x) = Zygote.jacobian(x -> aPC_PsiPolynomialMatrix(apc, Matrix(x)), x) |> first
 
-function mean(x)
-	s = zero(eltype(x))
-	@simd for i in x
-		s += i
-	end
-	return s / length(x)
-end
 
-function var(x)
-	m = mean(x)
-	s = zero(eltype(x))
-	@simd for i in x
-		s += (i - m)^2
-	end
-	return s / (length(x) - 1)
-end
-
-@inbounds function aPC_OrthonormalBasis(Data, Degree)
-	d = Degree #Degree of polinomial expansion
-	dd = d + 1 #Degree of polinomial for roots defenition
-	# L_norm = 1 # L-norm for polnomial normalization
-	NumberOfDataPoints = length(Data)
-	# @info "Construction of Arbitrary Polynomial Basis" --> We do d+2 x d+2, to have one order higher polynomials to get the gaussian quadrature poitns in the end!!!
-	MeanOfData = mean(Data)
-	# VarOfData = var(Data)
-	Data = Data ./ MeanOfData
-	m = zeros(2 * dd + 2)
-	@simd for i ∈ 0:(2*dd+1)
-		m[i+1] = sum(Data .^ i) / NumberOfDataPoints # Raw Moments
-	end
-	poly = zeros(dd + 1, dd + 1)
-	MHankel = zeros(dd + 1, dd + 1) # Allocate once for all :)
-	@inbounds for degree ∈ 0:dd
-		Hankel = @views MHankel[1:degree+1, 1:degree+1]
-		Vc = zeros(degree + 1)
-		PolyCoeff_NonNorm = copy(Hankel)
-		for i ∈ 0:degree
-			@batch for j ∈ 0:degree
-				if i < degree
-					Hankel[i+1, j+1] = @views m[i+j+1] # put in the moment
-				elseif (i == degree) && (j < degree)
-					Hankel[i+1, j+1] = 0.0
-				elseif (i == degree) && (j == degree)
-					Hankel[i+1, j+1] = 1.0
+ function aPCE_OrthonormalBasis(Data, Degree; normalize_data = true)
+	begin
+		T = eltype(Data)
+		d = Degree #Degree of polinomial expansion
+		dd = d #Degree of polinomial for roots defenition
+		NumberOfDataPoints = length(Data)
+		# VarOfData = var(Data)
+		# MeanOfData = 0.0
+		if normalize_data
+			MeanOfData = mean(Data)
+			Data = Data ./ MeanOfData
+		end
+		m = zeros(T, 2 * dd + 2)
+		for l ∈ 0:(2*dd+1)
+			m[l+1] = sum(Data .^ l) / NumberOfDataPoints
+		end
+		OrthonormalBasis = zeros(T, dd + 1, dd + 1)
+		OrthogonalBasis = zeros(T, dd + 1, dd + 1) # Allocate once for all :)
+		@inbounds for degree ∈ 0:dd
+			Hankel = @views OrthogonalBasis[1:degree+1, 1:degree+1]
+			Vc = zeros(degree + 1)
+			PolyCoeff_NonNorm = copy(Hankel)
+			for i ∈ 0:degree
+				@batch for j ∈ 0:degree
+					if i < degree
+						Hankel[i+1, j+1] = @views m[i+j+1] # put in the moment
+					elseif (i == degree) && (j < degree)
+						Hankel[i+1, j+1] = 0.0
+					elseif (i == degree) && (j == degree)
+						Hankel[i+1, j+1] = 1.0
+					end
+				end
+				# fr1 = copy(Hankel); # Control Hankel only considering the raw moments without division by max(abs) in each row
+				Hankel[i+1, :] = @views Hankel[i+1, :] / maximum(abs.(@views Hankel[i+1, :]))
+			end
+			@batch for i ∈ 0:degree
+				if (i < degree)
+					Vc[i+1] = 0
+				elseif (i == degree)
+					Vc[i+1] = 1
 				end
 			end
-			# fr1 = copy(Hankel); # Control Hankel only considering the raw moments without division by max(abs) in each row
-			Hankel[i+1, :] = @views Hankel[i+1, :] / maximum(abs.(@views Hankel[i+1, :]))
-		end
-
-		@simd for i ∈ 0:degree
-			if (i < degree)
-				Vc[i+1] = 0
-			elseif (i == degree)
-				Vc[i+1] = 1
+			Vp = zeros(T, size(Vc))
+			try
+				Vp .= Hankel \ Vc
+			catch
+				@warn "Hankel matrix singular, trying pseudo inverse."
+				Vp .= pinv(Hankel) * Vc
+			end
+			# Vp = Hankel \ Vc
+			PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Vp
+			# @ignore_derivatives begin
+			deviation = 100 * abs(sum(abs.(Hankel * PolyCoeff_NonNorm[degree+1, 1:degree+1])) - sum(abs.(Vc)))
+			if (deviation > 0.5)
+				@warn "Computational error of the linear solver is too high: $(round(deviation;digits=3))"
+			end
+			#Normalization of polynomial coefficients
+			P_norm = 0
+			@inbounds for i ∈ 1:NumberOfDataPoints
+				Poly = 0
+				for k ∈ 0:degree
+					Poly += @views PolyCoeff_NonNorm[degree+1, k+1] * Data[i]^k
+				end
+				P_norm += Poly^2 / NumberOfDataPoints
+			end
+			for k ∈ 0:degree
+				OrthonormalBasis[degree+1, k+1] = @views PolyCoeff_NonNorm[degree+1, k+1] / sqrt(P_norm)
 			end
 		end
-
-		# inv_Mm = pinv(Hankel, atol=1e-6)
-		# display(Hankel)
-		# dt = copy(Vc)
-		# fr .= Hankel 
-		Vp = zeros(size(Vc))
-		try
-			Vp .= Hankel \ Vc
-		catch
-			@warn "Hankel matrix singular, trying pseudo inverse."
-			Vp .= pinv(Hankel) * Vc
-		end
-		# Vp = Hankel \ Vc
-		PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Vp
-		if (100 * abs(sum(abs.(Hankel * PolyCoeff_NonNorm[degree+1, 1:degree+1])) - sum(abs.(Vc))) > 0.5)
-			@warn "Computational error of the linear solver is too high"
-		end
-
-		#Normalization of polynomial coefficients
-		P_norm = 0
-		for i ∈ 1:NumberOfDataPoints
-			Poly = 0
-			@simd for k ∈ 0:degree
-				Poly += @views PolyCoeff_NonNorm[degree+1, k+1] * Data[i]^k
+		@inbounds if normalize_data
+			@batch for k ∈ 1:lastindex(OrthonormalBasis, 2)
+				OrthonormalBasis[:, k] = @views OrthonormalBasis[:, k] ./ (MeanOfData^(k - 1))
+				# @error "is rhs poly or OrthonormalBasis"
 			end
-			P_norm += Poly^2 / NumberOfDataPoints
 		end
-		@simd for k ∈ 0:degree
-			poly[degree+1, k+1] = @views PolyCoeff_NonNorm[degree+1, k+1] / sqrt(P_norm)
-		end
+		return OrthonormalBasis
 	end
-
-	# Backward linear transformation to the data space
-	Data = Data * MeanOfData
-	@inbounds for k ∈ 1:lastindex(poly, 2)
-		poly[:, k] = @views poly[:, k] ./ (MeanOfData^(k - 1))
-	end
-
-	#%% Data-driven Arbitrary Orthonormal Polynomial Basis
-	return poly
 end
-
 function KMeansCollocation(apc, M = 10)
 	alg = InducingPoints.KmeansAlg(M)
 	Z = inducingpoints(alg, reduce(hcat, apc.InputDistribution)')
@@ -333,6 +347,7 @@ function GaussianCollocation(apc::aPC{T}; strategy = :PCM) where {T <: Real}
 	polynomial_roots = zeros(apc.input_dimensions, apc.ExpansionDegree + 1)
 	@inbounds for d ∈ Base.oneto(Int64(apc.input_dimensions))
 		polynomial_basis = @views apc.OrthonormalBasis[:, :, d]
+		@debug "" polynomial_basis
 		polynomial_roots[d, :] = @view reinterpret(T, PolynomialRoots.roots(@views polynomial_basis[apc.ExpansionDegree+2, :]))[1:2:end-1]
 	end
 	PointsVector = 1:apc.ExpansionDegree+1 |> collect
@@ -343,7 +358,7 @@ function GaussianCollocation(apc::aPC{T}; strategy = :PCM) where {T <: Real}
 	SortUniqueCombinations = UniqueCombinations[sort_indices[:], :]
 	if strategy == :FT
 		TrainingInput = SortUniqueCombinations
-		return RowVecs(view(TrainingInput, :, (1:size(TrainingInput, 2))))
+		return Array(view(TrainingInput, :, (1:size(TrainingInput, 2))))
 	elseif strategy == :PCM
 		temp = abs.(polynomial_roots .- StatsBase.mean(apc.InputDistribution; dims = 1)[:, :][1])
 		temp_sort = mapslices(sortperm, temp, dims = 2)
@@ -357,7 +372,7 @@ function GaussianCollocation(apc::aPC{T}; strategy = :PCM) where {T <: Real}
 			end
 		end
 		collocation_points = @strided sortslices(collocation_points, dims = 1, by = x -> x[1])
-		return RowVecs(view(collocation_points, :, (1:size(collocation_points, 2))))
+		return Array(view(collocation_points, :, (1:size(collocation_points, 2))))
 	end
 end
 
@@ -365,18 +380,21 @@ function numberPolynomials(n, d)
 	x, y = max(d, n), min(d, n)
 	return UInt128(prod(UInt128(x + 1):UInt128(d + n)) ÷ factorial(UInt128(y))) |> Int
 end
-
-
 function reverse_columns!(x)
-	@inbounds for row in axes(x, 1)
+	# x = Zygote.Buffer(x)
+	@batch for row in axes(x, 1)
 		x[row, :] = reverse(@views x[row, :])
 	end
+	return x
 end
 
-function train!(apc::aPC{T}, TrainingInput, TrainingOutput; bayesian_inversion = :true, reg_mode = 3) where {T <: Real}
+function train!(apc::aPC{T}, TrainingInput, y_rhs; bayesian_inversion = :true, reg_mode = 3) where {T <: Real}
 	@info "=> aPC Toolbox: Training Arbitrary Polynomial Chaos ..."
 	@info apc
-	y_rhs = reduce(hcat, TrainingOutput)'
+	if size(y_rhs,2) == 1
+		y_rhs = reshape(y_rhs, :, 1)
+	end
+	# y_rhs = reduce(hcat, TrainingOutput)'
 	if apc.output_dimensions != size(y_rhs, 2)
 		# @warn "Output dimensions of the aPC model and the training output do not match"
 		apc.output_dimensions = size(y_rhs, 2)
@@ -387,12 +405,12 @@ function train!(apc::aPC{T}, TrainingInput, TrainingOutput; bayesian_inversion =
 	# Psi = SMatrix{NumberOfTerms,NCpoints}(aPC_PsiPolynomialMatrix(apc, TrainingInput)')
 	Psi = Matrix{T}(aPC_PsiPolynomialMatrix(apc, TrainingInput)')
 	# @warn "SPYING"
-	# display(UnicodePlots.spy(sparse(Psi)))
+	display(UnicodePlots.spy(sparse(Psi)))
 	# @debug "" size(TrainingInput) size(TrainingOutput) size(Psi) typeof(Psi) typeof(TrainingOutput) typeof(TrainingInput) size(apc.ExpansionCoefficients) typeof(apc.ExpansionCoefficients)
 	# Psi_inv = pinv(Psi;rtol= sqrt(eps(real(float(oneunit(eltype(Psi)))))) )
 	Psi_inv = pinv(Psi; rtol = sqrt(eps(real(float(oneunit(eltype(Psi)))))))
 	# Psi_inv = pinv(Psi;rtol=0.6)
-	# @debug "" size(y_rhs) typeof(y_rhs)  typeof(apc.ExpansionCoefficients) size(Psi_inv) size(Psi)
+	# @debug "" size(y_rhs) typeof(y_rhs)  size(apc.ExpansionCoefficients) size(Psi_inv) size(Psi)
 	@tensoropt apc.ExpansionCoefficients[i, k] = Psi_inv[i, j] * y_rhs[j, k]
 	# apc.ExpansionCoefficients = Psi_inv * y_rhs
 	# @info "" size(C) typeof(C)
@@ -408,13 +426,14 @@ function train!(apc::aPC{T}, TrainingInput, TrainingOutput; bayesian_inversion =
 		# apc.ExpansionCoefficients .= reshape(reduce(hcat,[solve(setupRegularizationProblem(Psi,y_rhs[:,i],@view x₀[:,i])) for i in axes(y_rhs, 2)]), :, apc.output_dimensions)
 		# x̂ = deepcopy(abs.(apc.ExpansionCoefficients .= reshape(reduce(hcat,[solve(setupRegularizationProblem(Psi,y_rhs[:,i],@view x₀[:,i])) for i in axes(y_rhs, 2)]), :, apc.output_dimensions)
 		# ))
-		@batch for i in axes(y_rhs, 2)
+		@batch stride=true for i in axes(y_rhs, 2)
+			@info "Bayesian regularization for axis $i"
 			# lower = zeros(size(Psi, 2)) .+ 0.001
 			# upper = ones(size(lower)) .+ 80
 			# x₀[x₀[:, i].<0.0, i] .= 0.1
 			# apc.ExpansionCoefficients[:, i] .= invert(Psi'*Psi .+ 1.0*Diagonal(ones(size(Psi,2))), Psi'*y_rhs[:, i], Lₖx₀(3, view(x₀,:, i));alg = :gcv_svd, method = LBFGS(linesearch = LineSearches.BackTracking()))
-			apc.ExpansionCoefficients[:, i] .= invert(Psi, y_rhs[:, i], Lₖx₀(reg_mode, view(x₀, :, i)); alg = :gcv_svd, method = LBFGS(linesearch = LineSearches.BackTracking()))
-
+			apc.ExpansionCoefficients[:, i] .= invert(Psi, y_rhs[:, i], Lₖx₀(reg_mode, view(x₀, :, i)); alg = :gcv_svd
+			, method = LBFGS(linesearch = LineSearches.BackTracking()))
 		end
 	end
 	for k in axes(apc.ExpansionCoefficients, 2)

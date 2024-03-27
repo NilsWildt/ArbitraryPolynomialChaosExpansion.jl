@@ -13,31 +13,21 @@
 # limitations under the License.
 
 using LinearAlgebra
-using RegularizedLeastSquares
-using FastLevenbergMarquardt
+# using RegularizedLeastSquares
+# using FastLevenbergMarquardt
 using Zygote
 # using ForwardDiff
 using NonlinearSolve, StaticArrays
 using IterativeSolvers
-using Enzyme
-using Hyperopt
+# using Enzyme
+# using Hyperopt
+using Polyester
 using Preconditioners
-using CUDA
+# using CUDA
 import Optim: NewtonTrustRegion, Options, optimize, minimizer, minimum, LBFGS
 import RegularizationTools: Lₖx₀, solve, RegularizationProblem, setupRegularizationProblem, to_general_form, to_standard_form, gcv_tr, gcv_svd, invert, Lₖ, NelderMead
 
 
-function numberPolynomials(n::Int64, d::Int64)
-	x, y = max(d, n), min(d, n)
-	return UInt128(prod(UInt128(x + 1):UInt128(d + n)) ÷ factorial(UInt128(y))) |> Int
-end
-
-
-function reverse_columns!(x)
-	for row in axes(x, 1)
-		x[row, :] = reverse(x[row, :])
-	end
-end
 
 function train!(apc::aPC{T}, TrainingInput::RowVecs, TrainingOutput::RowVecs) where {T <: Real}
 	@info "=> aPC Toolbox: Training Arbitrary Polynomial Chaos ..."
