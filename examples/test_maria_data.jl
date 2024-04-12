@@ -1,22 +1,15 @@
 using Revise
 using DrWatson
-# using PProf
-@quickactivate "aPC.jl"
+@quickactivate "APCE.jl"
 module Runner
 using DrWatson
-# import Pkg 
 using PrettyTables
-# Pkg.instantiate()
 using PropDicts
-# using PProf
 using Logging
 using TerminalLoggers: TerminalLogger
 using ProgressLogging
 using Logging
-using LoggingExtras
-# using PProf
 using BenchmarkTools
-# using ProfileView
 using Makie
 using CairoMakie
 using MAT
@@ -29,18 +22,30 @@ debug_logging = ConsoleLogger(stderr, Logging.Debug)
 info_logging = ConsoleLogger(stderr, Logging.Info)
 # Here you may include files from the source directory
 global_logger(debug_logging)
-include(srcdir("APC.jl"))
-using .APC
+include(srcdir("APCE.jl"))
+using .APCE
 using TimerOutputs
 const to = TimerOutput()
 
+function partitionTrainTest(data; at = 0.7,rng=Xoshiro())
+    num_samples = size(data, 1)
+    shuffled_indices = shuffle(rng,1:num_samples)
+    split_index = floor(Int, at * num_samples)
+
+    train_indices = view(shuffled_indices, 1:split_index)
+    test_indices = view(shuffled_indices, (split_index + 1):num_samples)
+
+    X_train = data[train_indices]
+    X_test = data[test_indices]
+
+    return X_train,  X_test
+end
 
 function run()
 	err = []
 	ts = []
 	ps = []
 	# degress = 1:1:5
-	
 
 	FT = Float64
 	@timeit to "lod_data" begin
@@ -49,20 +54,21 @@ function run()
 		print(keys(file))
 		# Extracting the variables
 		# Input_distributions = file["Xtr"] |> Array{FT}
-		indall = 1:1000
+		@info size(file["Xtr"])
+		indall = 1:2000
 		rng = Xoshiro(42)
 
 		itrain,itest = partitionTrainTest(indall;at= 0.75, rng )
 		TrainingInput = file["Xtr"][itrain, :] |> Array{FT}
-		TrainingOutput = file["Ytr"][itrain, 60:62] |> Array{FT}
+		TrainingOutput = file["Ytr"][itrain, 1:30] |> Array{FT}
 		@info "" size(TrainingInput)
 
 		ValidationInput = file["Xtr"][itest, :] |> Array{FT}
-		ValidationOutput = file["Ytr"][itest, 60:62] |> Array{FT}
+		ValidationOutput = file["Ytr"][itest, 1:30] |> Array{FT}
 	end
 	degree = 7
 	@info "" size(TrainingOutput, 2)
-	apc_instance = @timeit to "aPC_instance" aPC(TrainingInput, degree; outdim = size(TrainingOutput, 2), OrthonormalRepresentation = true, qnorm = 0.3,normalize_data=true)
+	apc_instance = @timeit to "aPC_instance" APCE.aPCE(TrainingInput, degree; outdim = size(TrainingOutput, 2), OrthonormalRepresentation = true, qnorm = 0.3,normalize_data=true)
 	@assert apc_instance.NumberOfTerms<2000 "Too many coefficients."
 
 	# TrainingInput = GaussianCollocation2(apc_instance)
@@ -72,7 +78,7 @@ function run()
 	# TrainingInput = @timeit to "GaussianCollocation" GaussianCollocation(apc_instance; strategy = :PCM)
 	# TrainingInput = @timeit to "KMeansCollocation" KMeansCollocation(apc_instance)
 	@info "" size(TrainingInput)
-	@timeit to "training" train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion = true,reg_mode=3)
+	@timeit to "training" train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion = false,reg_mode=3)
 
 
 	PredictionOutput = @timeit to "prediction" predict(apc_instance, TrainingInput)

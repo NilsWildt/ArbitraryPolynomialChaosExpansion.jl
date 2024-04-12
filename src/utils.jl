@@ -1,19 +1,4 @@
-# Probably from KernelFunctions.jl  
-using Polyester
-@inbounds function evalpoly_two(x, cs::AbstractArray)
-	i = lastindex(cs)
-	out = cs[i]
-	i -= 1
-	fi = firstindex(cs)
-	 while i > fi
-		out = muladd(out, x, cs[i])
-		out = muladd(out, x, cs[i-1])
-		i -= 2
-	end
-
-	return i == fi ? muladd(out, x, @inbounds(cs[fi])) : out
-end
-
+using Random
 """
 # Returns
 - `X_train`: The training set features.
@@ -46,18 +31,18 @@ end
     end
     # Apply Horner's method
     derivative_value = derivative_coeffs[end]
-    @simd for i in (n - 1):-1:1
+    for i in (n - 1):-1:1
         derivative_value = derivative_value * x + derivative_coeffs[i]
     end
     
     return derivative_value
 end
 
-@views function evaluate_polynomial_horner_array( x,coeffs)
+@inbounds function evaluate_polynomial_horner_array( x,coeffs)
     results = Vector(undef, length(x))
-    @batch for (i, xi) in enumerate(x)
+     for (i, xi) in enumerate(x)
         result = 0.0
-       @simd for coeff in reverse(coeffs)
+       for coeff in reverse(coeffs)
             result = result * xi + coeff
         end
         results[i] = result
@@ -66,13 +51,10 @@ end
 end
 
 
-
-
 function numberPolynomials(n::Int64, d::Int64)
 	x, y = max(d, n), min(d, n)
 	return UInt128(prod(UInt128(x + 1):UInt128(d + n)) ÷ factorial(UInt128(y))) |> Int
 end
-
 
 @inbounds function reverse_columns!(x)
 	@views for row in axes(x, 1)
@@ -103,19 +85,6 @@ macro check_args(K, param, cond, desc=string(cond))
     end
 end
 
-function deprecated_obsdim(obsdim::Union{Int,Nothing})
-    _obsdim = if obsdim === nothing
-        Base.depwarn(
-            "implicit `obsdim=2` argument is deprecated and now has to be passed " *
-            "explicitly to specify that each column corresponds to one observation",
-            :vec_of_vecs,
-        )
-        2
-    else
-        obsdim
-    end
-    return _obsdim
-end
 
 function vec_of_vecs(X::AbstractMatrix; obsdim::Union{Int,Nothing}=nothing)
     _obsdim = deprecated_obsdim(obsdim)
