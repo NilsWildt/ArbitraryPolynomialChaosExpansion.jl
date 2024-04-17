@@ -3,7 +3,7 @@ module Main
 using DrWatson
 using PropDicts
 # using PProf
-@quickactivate "deep-aPCE"
+@quickactivate "APCE"
 using Logging
 using TerminalLoggers: TerminalLogger
 using ProgressLogging

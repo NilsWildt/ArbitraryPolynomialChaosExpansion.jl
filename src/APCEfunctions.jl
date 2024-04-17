@@ -30,6 +30,7 @@ using LazyArrays
 using LazyGrids
 using LinearAlgebra
 using LineSearches
+using Estrin
 using MKL
 # using BLISBLAS
 using Polyester
@@ -142,9 +143,10 @@ end
 			degree = @views MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
 			coeffs = @views OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
 			# p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
+			p  = Poly(coeffs)
 			for j ∈ 1:NCpoints  # For each input sample
 				x = @views TrainingInput[j, ii]
-				Psi[i, j] *= evalpoly_two(x, coeffs)  # Evaluate the polynomial at x and multiply
+				Psi[i, j] *= p(x)  # Evaluate the polynomial at x and multiply
 				# Psi[i,j] *= evalpoly(x, p)
 			end
 		end
@@ -177,7 +179,7 @@ end
 			Vc = zeros(degree + 1)
 			PolyCoeff_NonNorm = copy(Hankel)
 			for i ∈ 0:degree
-				@batch for j ∈ 0:degree
+				 for j ∈ 0:degree
 					if i < degree
 						Hankel[i+1, j+1] = @views m[i+j+1] # put in the moment
 					elseif (i == degree) && (j < degree)
@@ -189,7 +191,7 @@ end
 				# fr1 = copy(Hankel); # Control Hankel only considering the raw moments without division by max(abs) in each row
 				Hankel[i+1, :] = @views Hankel[i+1, :] / maximum(abs.(@views Hankel[i+1, :]))
 			end
-			@batch for i ∈ 0:degree
+			 for i ∈ 0:degree
 				if (i < degree)
 					Vc[i+1] = 0
 				elseif (i == degree)
@@ -380,7 +382,7 @@ end
 
 @views function evaluate_polynomial_horner_array(x, coeffs)
 	results = Vector(undef, length(x))
-	@batch for (i, xi) in enumerate(x)
+	 for (i, xi) in enumerate(x)
 		result = 0.0
 		@simd for coeff in reverse(coeffs)
 			result = result * xi + coeff
@@ -402,7 +404,7 @@ function train(Ψ::AbstractArray{T}, y_rhs; bayesian_inversion = :true, reg_mode
 	if bayesian_inversion
 		@info "Using bayesian regularization y_rhs find the expansion coefficients"
 		x₀ = coeffs # Quite a good first guess :) And pinv is 
-		for i in axes(y_rhs, 2) #@batch stride=true 
+		for i in axes(y_rhs, 2) # stride=true 
 			@info "Bayesian regularization for axis $i"
 			coeffs[:, i] .= invert(Ψ, y_rhs[:, i], Lₖx₀(reg_mode, view(x₀, :, i)); alg = :gcv_svd, method = LBFGS(linesearch = LineSearches.BackTracking()))
 		end

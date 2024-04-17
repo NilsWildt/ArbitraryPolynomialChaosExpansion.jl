@@ -1,6 +1,6 @@
 using Revise
 using DrWatson
-@quickactivate "APCE.jl"
+@quickactivate "APCE"
 module Runner
 using DrWatson
 using PrettyTables
@@ -60,15 +60,15 @@ function run()
 
 		itrain,itest = partitionTrainTest(indall;at= 0.75, rng )
 		TrainingInput = file["Xtr"][itrain, :] |> Array{FT}
-		TrainingOutput = file["Ytr"][itrain, 1:30] |> Array{FT}
+		TrainingOutput = file["Ytr"][itrain, 40:45] |> Array{FT}
 		@info "" size(TrainingInput)
 
 		ValidationInput = file["Xtr"][itest, :] |> Array{FT}
-		ValidationOutput = file["Ytr"][itest, 1:30] |> Array{FT}
+		ValidationOutput = file["Ytr"][itest, 40:45] |> Array{FT}
 	end
-	degree = 7
+	degree = 5
 	@info "" size(TrainingOutput, 2)
-	apc_instance = @timeit to "aPC_instance" APCE.aPCE(TrainingInput, degree; outdim = size(TrainingOutput, 2), OrthonormalRepresentation = true, qnorm = 0.3,normalize_data=true)
+	apc_instance = @timeit to "aPC_instance" APCE.aPCE(TrainingInput, degree; outdim = size(TrainingOutput, 2), OrthonormalRepresentation = true, qnorm = 0.2,normalize_data=true)
 	@assert apc_instance.NumberOfTerms<2000 "Too many coefficients."
 
 	# TrainingInput = GaussianCollocation2(apc_instance)
@@ -78,7 +78,7 @@ function run()
 	# TrainingInput = @timeit to "GaussianCollocation" GaussianCollocation(apc_instance; strategy = :PCM)
 	# TrainingInput = @timeit to "KMeansCollocation" KMeansCollocation(apc_instance)
 	@info "" size(TrainingInput)
-	@timeit to "training" train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion = false,reg_mode=3)
+	@timeit to "training" train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion = true, reg_mode=3)
 
 
 	PredictionOutput = @timeit to "prediction" predict(apc_instance, TrainingInput)

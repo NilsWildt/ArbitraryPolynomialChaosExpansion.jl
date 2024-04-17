@@ -144,26 +144,13 @@ function train!(aPCE::aPCE{T}, TrainingInput, y_rhs; bayesian_inversion = :true,
 	# Psi_inv = pinv(Psi;rtol=0.6)
 	# @debug "" size(y_rhs) typeof(y_rhs)  size(aPCE.ExpansionCoefficients) size(Psi_inv) size(Psi)
 	@tensoropt aPCE.ExpansionCoefficients[i, k] = Psi_inv[i, j] * y_rhs[j, k]
-	# aPCE.ExpansionCoefficients = Psi_inv * y_rhs
-	# @info "" size(C) typeof(C)
-	# aPCE.ExpansionCoefficients .= C
-	# @debug "" Psi_inv * y_rhs typeof(Psi_inv * y_rhs)
-	# @einsum ExpansionCoefficients[i,k] := Psi_inv[i,j] * y_rhs[i,k]
-	# aPCE.ExpansionCoefficients .= ExpansionCoefficients
+
 	if bayesian_inversion
 		@info "Using bayesian regularization y_rhs find the expansion coefficients"
 		x₀ = aPCE.ExpansionCoefficients # Quite a good first guess :) And pinv is quite stable.
-		# aPCE.ExpansionCoefficients .= reshape(reduce(hcat,[invert(Psi, y_rhs[:, i], Lₖx₀(2, @view x₀[:,i]);  alg = :gcv_svd, method = LBFGS(linesearch=LineSearches.BackTracking())) for i in axes(y_rhs, 2)]), :, aPCE.output_dimensions)
-		# aPCE.ExpansionCoefficients .= reshape(reduce(hcat,[invert(Psi, y_rhs[:, i], Lₖx₀(0, @view x₀[:,i]);  alg = :gcv_svd, method = LBFGS(linesearch=LineSearches.BackTracking())) for i in axes(y_rhs, 2)]), :, aPCE.output_dimensions)
-		# aPCE.ExpansionCoefficients .= reshape(reduce(hcat,[solve(setupRegularizationProblem(Psi,y_rhs[:,i],@view x₀[:,i])) for i in axes(y_rhs, 2)]), :, aPCE.output_dimensions)
-		# x̂ = deepcopy(abs.(aPCE.ExpansionCoefficients .= reshape(reduce(hcat,[solve(setupRegularizationProblem(Psi,y_rhs[:,i],@view x₀[:,i])) for i in axes(y_rhs, 2)]), :, aPCE.output_dimensions)
-		# ))
+	
 		for i in axes(y_rhs, 2)
 			@info "Bayesian regularization for axis $i"
-			# lower = zeros(size(Psi, 2)) .+ 0.001
-			# upper = ones(size(lower)) .+ 80
-			# x₀[x₀[:, i].<0.0, i] .= 0.1
-			# aPCE.ExpansionCoefficients[:, i] .= invert(Psi'*Psi .+ 1.0*Diagonal(ones(size(Psi,2))), Psi'*y_rhs[:, i], Lₖx₀(3, view(x₀,:, i));alg = :gcv_svd, method = LBFGS(linesearch = LineSearches.BackTracking()))
 			aPCE.ExpansionCoefficients[:, i] .= invert(Psi, y_rhs[:, i], Lₖx₀(reg_mode, view(x₀, :, i)); alg = :gcv_svd
 			, method = LBFGS(linesearch = LineSearches.BackTracking()))
 		end
@@ -172,9 +159,6 @@ function train!(aPCE::aPCE{T}, TrainingInput, y_rhs; bayesian_inversion = :true,
 		res = (@views sqrt(mean((Psi * aPCE.ExpansionCoefficients[:, k] .- y_rhs[:, k]) .^ 2)))
 		@info "Error for axis $k" res
 	end
-	# @warn "SPYING"
-	# display(UnicodePlots.spy(sparse(aPCE.ExpansionCoefficients)))
-	# @info "" sqrt(mean((Psi * aPCE.ExpansionCoefficients .- y_rhs) .^ 2))
 	return nothing
 end
 
