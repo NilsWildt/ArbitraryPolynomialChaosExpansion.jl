@@ -169,3 +169,8 @@ function predict(aPCE::aPCE{T}, PredictionInput) where {T <: Real}
 	@tensoropt PredictionOutput[k, j] := Psi[i, k] * aPCE.ExpansionCoefficients[i, j]
 	return PredictionOutput
 end
+
+function create_Polynomial_Degrees(input_dimensions, degree; qnorm = 1.0)
+	MultivariatePolynomialDegrees = aPCE_MultivariatePolynomialDegrees(input_dimensions, degree; qnorm = qnorm)
+	return MultivariatePolynomialDegrees
+end

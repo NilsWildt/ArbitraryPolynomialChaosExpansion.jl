@@ -6,7 +6,7 @@ using Zygote
 using ChainRulesCore
 using ForwardDiff
 using Zygote: @adjoint
-
+using ChainRules
 
 function ChainRulesCore.frule((_, Δx), ::typeof(reverse_columns!), x)
 	Δx_reversed = similar(Δx)
@@ -39,10 +39,19 @@ function ∂create_basis(x, degree; qnorm = 1.0)
 	return Zygote.jacobian(x -> create_basis(x, degree; qnorm = qnorm), x) |> first
 end
 
+function ensure_matrix(arr)
+    if ndims(arr) == 1
+        return reshape(arr, (length(arr), 1))
+    else
+        return arr
+    end
+end
+
 function ChainRulesCore.rrule(::typeof(compose_Ψ), x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
 	OrthonormalBasis = create_basis(x, degree)
 	Ψforward = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
-	Nterms = size(MultivariatePolynomialDegrees, 1)
+	Nterms = size(MultivariatePolynomialDegrees, 1)	
+	x = ensure_matrix(x)
 	NCpoints, inpDim = size(x)
 	# project_x = ProjectTo(x)
 	function compose_Ψ_pullback(dy_raw)
