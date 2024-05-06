@@ -50,25 +50,25 @@ function run()
 	FT = Float64
 	@timeit to "lod_data" begin
 		#  Loading Input distributions, Training Data and Validation Data 
-		file = matread(datadir("training_data.mat"))
+		file = matread(datadir("gw_training_data.mat"))
 		print(keys(file))
 		# Extracting the variables
 		# Input_distributions = file["Xtr"] |> Array{FT}
-		@info size(file["Xtr"])
-		indall = 1:2000
+		# @info size(file["Xtr"])
+		indall = 1:1000
 		rng = Xoshiro(42)
-
+@info ""  file["TrainingOutput"]
 		itrain,itest = partitionTrainTest(indall;at= 0.75, rng )
-		TrainingInput = file["Xtr"][itrain, :] |> Array{FT}
-		TrainingOutput = file["Ytr"][itrain, 40:45] |> Array{FT}
+		TrainingInput = file["TrainingInput"][indall, :] |> Array{FT}
+		TrainingOutput = file["TrainingOutput"][indall, 1:15] |> Array{FT}
 		@info "" size(TrainingInput)
 
-		ValidationInput = file["Xtr"][itest, :] |> Array{FT}
-		ValidationOutput = file["Ytr"][itest, 40:45] |> Array{FT}
+		ValidationInput = file["ValidationInput"][indall, :] |> Array{FT}
+		ValidationOutput = file["ValidationOutput"][indall, 1:15] |> Array{FT}
 	end
-	degree = 5
+	degree = 3
 	@info "" size(TrainingOutput, 2)
-	apc_instance = @timeit to "aPC_instance" APCE.aPCE(TrainingInput, degree; outdim = size(TrainingOutput, 2), OrthonormalRepresentation = true, qnorm = 0.2,normalize_data=true)
+	apc_instance = @timeit to "aPC_instance" APCE.aPCE(TrainingInput, degree; outdim = size(TrainingOutput, 2), OrthonormalRepresentation = true, qnorm = 0.7,normalize_data=true)
 	@assert apc_instance.NumberOfTerms<2000 "Too many coefficients."
 
 	# TrainingInput = GaussianCollocation2(apc_instance)
