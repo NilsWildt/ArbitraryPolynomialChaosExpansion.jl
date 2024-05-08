@@ -7,6 +7,7 @@ using ChainRulesCore
 using ForwardDiff
 using Zygote: @adjoint
 using ChainRules
+using DifferentiationInterface
 
 function ChainRulesCore.frule((_, Δx), ::typeof(reverse_columns!), x)
 	Δx_reversed = similar(Δx)
@@ -51,11 +52,12 @@ function ChainRulesCore.rrule(::typeof(compose_Ψ), x, MultivariatePolynomialDeg
 	OrthonormalBasis = create_basis(x, degree)
 	Ψforward = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
 	Nterms = size(MultivariatePolynomialDegrees, 1)	
-	x = ensure_matrix(x)
+	# x = ensure_matrix(x)
 	NCpoints, inpDim = size(x)
-	# project_x = ProjectTo(x)
+	project_x = ProjectTo(x)
 	function compose_Ψ_pullback(dy_raw)
-		dy = unthunk(dy_raw)
+		# @info "" size(dy_raw)
+		dy =  unthunk(dy_raw)
 		∂x = ones(NCpoints, Nterms * NCpoints)
 		for j in 1:NCpoints
 			for i in 1:Nterms
@@ -81,10 +83,22 @@ function ChainRulesCore.rrule(::typeof(compose_Ψ), x, MultivariatePolynomialDeg
 		end
 		# @info "" mean(dy)
 		# (∇,) = AD.jacobian(AD.ForwardDiffBackend(), x ->  compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree), x	)
-		∂∂ = sum(dy' * ∂x; dims = 2)
-		# @info "" size(∂∂)
+		∂∂ = @thunk sum(@thunk dy'*∂x; dims = 2)
+		# ∂∂ = dy' * ∂x
+		# @ignore_derivatives begin
+		# 	@info "" size(∂∂) size(dy') size(∂x) size(x) 
+		# 	# @info repeat(∂∂,1,NCpoints)'
+		# 	# @info project_x(dy) 
+		# 	# @info project_x(∂∂)
+		# 	# @info size(project_x(x)) 
+		# 	@info size(repeat(∂∂,1,length(x)))
+		# 	display(dy)
+		# 	# @info dy dy_raw
+		# end
 		return (ChainRules.NoTangent(), ∂∂, ChainRules.NoTangent(), ChainRules.NoTangent(), ChainRules.NoTangent())
 	end
 	# @warn "Something in this derivative is still wrong, use ForwardDiff for now"
 	return Ψforward, compose_Ψ_pullback
 end
+
+

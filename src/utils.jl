@@ -20,47 +20,12 @@ function partitionTrainTest(data; at = 0.7,rng=Xoshiro())
     return X_train,  X_test
 end
 
-@views function evaluate_derivative_horner(x,coeffs) 
-    n = length(coeffs) - 1
-    if n == 0
-        return 0.0  # The derivative of a constant polynomial is 0
-    end
-    derivative_coeffs = [i * coeffs[i + 1] for i in 1:n]  # Compute coefficients for the derivative
-    if isempty(derivative_coeffs)
-        return 0.0
-    end
-    # Apply Horner's method
-    derivative_value = derivative_coeffs[end]
-    for i in (n - 1):-1:1
-        derivative_value = derivative_value * x + derivative_coeffs[i]
-    end
-    
-    return derivative_value
-end
-
-@inbounds function evaluate_polynomial_horner_array( x,coeffs)
-    results = Vector(undef, length(x))
-     for (i, xi) in enumerate(x)
-        result = 0.0
-       for coeff in reverse(coeffs)
-            result = result * xi + coeff
-        end
-        results[i] = result
-    end
-    return results
-end
-
 
 function numberPolynomials(n::Int64, d::Int64)
 	x, y = max(d, n), min(d, n)
 	return UInt128(prod(UInt128(x + 1):UInt128(d + n)) ÷ factorial(UInt128(y))) |> Int
 end
 
-@inbounds function reverse_columns!(x)
-	@views for row in axes(x, 1)
-		x[row, :] = reverse(x[row, :])
-	end
-end
 
 # Macro for checking arguments
 macro check_args(K, param, cond, desc=string(cond))

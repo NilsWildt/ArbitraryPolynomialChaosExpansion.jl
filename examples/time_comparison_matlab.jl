@@ -3,7 +3,7 @@ module Main
 using DrWatson
 using PropDicts
 # using PProf
-@quickactivate "aPC.jl"
+@quickactivate "APCE.jl"
 using Logging
 using TerminalLoggers: TerminalLogger
 using ProgressLogging
@@ -25,7 +25,7 @@ debug_logging = ConsoleLogger(stderr, Logging.Debug)
 info_logging = ConsoleLogger(stderr, Logging.Info)
 # Here you may include files from the source directory
 global_logger(debug_logging)
-include(srcdir("APC.jl"))
+include(srcdir("APCE.jl"))
 using .APC
 
 using TimerOutputs

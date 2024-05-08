@@ -66,7 +66,7 @@ using CPUSummary
 using Einsum
 # using DifferentiationInterface
 BLAS.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
-
+using Tullio
 
 @info "Benchmarking Matrix mutplication speed" LinearAlgebra.peakflops(; parallel = true)
 
@@ -135,7 +135,7 @@ end
 	NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
 	NCpoints = size(TrainingInput, 1)
 	Psi = ones(eltype(TrainingInput), NumberOfTerms, NCpoints)
-
+	# OrthonormalBasis = T.(OrthonormalBasis)
 	# Function to evaluate polynomials for a given term and input sample
 	@inbounds for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
 		# product = 1.0  # Initialize the product for this term and sample
@@ -154,6 +154,28 @@ end
 	return Psi
 end
 
+@polly function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{T}) where {T <: ForwardDiff.Dual}
+	NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
+	NCpoints = size(TrainingInput, 1)
+	Psi = ones(eltype(TrainingInput), NumberOfTerms, NCpoints)
+
+	# Function to evaluate polynomials for a given term and input sample
+	@inbounds for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
+		# product = 1.0  # Initialize the product for this term and sample
+		for ii ∈ 1:InputDimensions  # For each dimension of the input
+			degree = @views MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
+			coeffs = @views OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
+			p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
+			# p  = Poly(coeffs)
+			for j ∈ 1:NCpoints  # For each input sample
+				x = @views TrainingInput[j, ii]
+				Psi[i, j] *= p(x)  # Evaluate the polynomial at x and multiply
+				# Psi[i,j] *= evalpoly(x, p)
+			end
+		end
+	end
+	return Psi
+end
 
 
 @polly function aPCE_OrthonormalBasis(Data, Degree; normalize_data = false)
@@ -176,7 +198,7 @@ end
 		OrthogonalBasis = zeros(T, dd + 1, dd + 1) # Allocate once for all :)
 		@inbounds for degree ∈ 0:dd
 			Hankel = @views OrthogonalBasis[1:degree+1, 1:degree+1]
-			Vc = zeros(degree + 1)
+			Vc = zeros(T,degree + 1)
 			PolyCoeff_NonNorm = copy(Hankel)
 			for i ∈ 0:degree
 				 for j ∈ 0:degree
@@ -271,12 +293,10 @@ function UniGridCollocation(apc, M = 10)
 	return Z
 end
 
-
 function numberPolynomials(n, d)
 	x, y = max(d, n), min(d, n)
 	return UInt128(prod(UInt128(x + 1):UInt128(d + n)) ÷ factorial(UInt128(y))) |> Int
 end
-
 
 function reverse_columns!(x)
 	@inbounds for row in axes(x, 1)
@@ -284,7 +304,6 @@ function reverse_columns!(x)
 	end
 	return x
 end
-
 
 function create_basis(x, degree; qnorm = 1.0)
 	@ignore_derivatives begin

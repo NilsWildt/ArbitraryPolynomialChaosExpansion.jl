@@ -24,6 +24,9 @@ info_logging = ConsoleLogger(stderr, Logging.Info)
 global_logger(debug_logging)
 include(srcdir("APCE.jl"))
 using .APCE
+# using Preferences
+# set_preferences!(APCE, "precompile_workload" => false; force=true)
+
 using TimerOutputs
 const to = TimerOutput()
 
@@ -57,7 +60,7 @@ function run()
 		# @info size(file["Xtr"])
 		indall = 1:1000
 		rng = Xoshiro(42)
-@info ""  file["TrainingOutput"]
+		@info ""  file["TrainingOutput"]
 		itrain,itest = partitionTrainTest(indall;at= 0.75, rng )
 		TrainingInput = file["TrainingInput"][indall, :] |> Array{FT}
 		TrainingOutput = file["TrainingOutput"][indall, 1:15] |> Array{FT}
@@ -66,9 +69,9 @@ function run()
 		ValidationInput = file["ValidationInput"][indall, :] |> Array{FT}
 		ValidationOutput = file["ValidationOutput"][indall, 1:15] |> Array{FT}
 	end
-	degree = 3
+	degree = 5
 	@info "" size(TrainingOutput, 2)
-	apc_instance = @timeit to "aPC_instance" APCE.aPCE(TrainingInput, degree; outdim = size(TrainingOutput, 2), OrthonormalRepresentation = true, qnorm = 0.7,normalize_data=true)
+	apc_instance = @timeit to "aPC_instance" APCE.aPCE(TrainingInput, degree; outdim = size(TrainingOutput, 2), OrthonormalRepresentation = true, qnorm = 0.6, normalize_data=true)
 	@assert apc_instance.NumberOfTerms<2000 "Too many coefficients."
 
 	# TrainingInput = GaussianCollocation2(apc_instance)
