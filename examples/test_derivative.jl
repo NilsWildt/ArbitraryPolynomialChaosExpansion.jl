@@ -136,7 +136,7 @@ function run()
 	OrthonormalBasis = create_basis(TrainingInput, d_expansion)
 	# 
 
-	function compute_loss(expansion_coefficients::AbstractArray{T}, x, y, xvalid, yvalid, d_expansion = d_expansion) where {T <: Real}
+	function compute_loss(expansion_coefficients, x, y, xvalid, yvalid, d_expansion = d_expansion)
 		out = evaluate_Ψ(x, expansion_coefficients, MultivariatePolynomialDegrees, OrthonormalBasis, d_expansion)
 		return sqrt(mean(((out .- ValidationOutput) .^ 2)))
 	end
@@ -158,6 +158,7 @@ function run()
 	scenarios = [
 		JacobianScenario(obj; x = Float64.(flat), ref = ∇f),
 		# JacobianScenario(obj; x = Float32.(flat), ref = ∇f),
+		# JacobianScenario(obj; x = Float16.(flat), ref = ∇f)
 	]
 	@info ""
 	# JacobianScenario(obj; x=Float32.(flat), ref=∇f)
@@ -166,7 +167,7 @@ function run()
 		backends,  # the backends you want to compare
 		scenarios,  # the scenarios you defined,.
 		correctness = true,  # compares values against the reference
-		type_stability = true,  # checks type stability with JET.jl
+		type_stability = false,  # checks type stability with JET.jl
 		detailed = true,  # prints a detailed test set
 	)
 

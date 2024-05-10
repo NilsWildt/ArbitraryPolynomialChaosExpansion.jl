@@ -70,7 +70,7 @@ function ChainRulesCore.rrule(::typeof(compose_Ψ), x, MultivariatePolynomialDeg
 						all_prod *= evalpoly(x[j, kk], coeffs)
 					end
 					# Derivative for dimension ii
-					# dc = derivative_coeffs(OrthonormalBasis[MultivariatePolynomialDegrees[i, ii] + 1, :, ii])
+					# dc = derivative_coeffs(OrthonormalBasis[evaluate_Ψ[i, ii] + 1, :, ii])
 					degree = MultivariatePolynomialDegrees[i, ii] + 1
 					coeffs = @views OrthonormalBasis[degree, 1:degree, ii]
 					derivative_eval = evalpoly(x[j, ii], Polynomials.derivative(Polynomial(coeffs)))

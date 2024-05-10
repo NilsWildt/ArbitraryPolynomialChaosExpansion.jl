@@ -143,7 +143,7 @@ end
 			degree = @views MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
 			coeffs = @views OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
 			# p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
-			p  = Poly(coeffs)
+			p = Poly(coeffs)
 			for j ∈ 1:NCpoints  # For each input sample
 				x = @views TrainingInput[j, ii]
 				Psi[i, j] *= p(x)  # Evaluate the polynomial at x and multiply
@@ -198,10 +198,10 @@ end
 		OrthogonalBasis = zeros(T, dd + 1, dd + 1) # Allocate once for all :)
 		@inbounds for degree ∈ 0:dd
 			Hankel = @views OrthogonalBasis[1:degree+1, 1:degree+1]
-			Vc = zeros(T,degree + 1)
+			Vc = zeros(T, degree + 1)
 			PolyCoeff_NonNorm = copy(Hankel)
 			for i ∈ 0:degree
-				 for j ∈ 0:degree
+				for j ∈ 0:degree
 					if i < degree
 						Hankel[i+1, j+1] = @views m[i+j+1] # put in the moment
 					elseif (i == degree) && (j < degree)
@@ -213,7 +213,7 @@ end
 				# fr1 = copy(Hankel); # Control Hankel only considering the raw moments without division by max(abs) in each row
 				Hankel[i+1, :] = @views Hankel[i+1, :] / maximum(abs.(@views Hankel[i+1, :]))
 			end
-			 for i ∈ 0:degree
+			for i ∈ 0:degree
 				if (i < degree)
 					Vc[i+1] = 0
 				elseif (i == degree)
@@ -401,7 +401,7 @@ end
 
 @views function evaluate_polynomial_horner_array(x, coeffs)
 	results = Vector(undef, length(x))
-	 for (i, xi) in enumerate(x)
+	for (i, xi) in enumerate(x)
 		result = 0.0
 		@simd for coeff in reverse(coeffs)
 			result = result * xi + coeff
