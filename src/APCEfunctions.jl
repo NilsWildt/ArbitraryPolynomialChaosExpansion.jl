@@ -257,38 +257,38 @@ end
 end
 
 
-function KMeansCollocation(apc, M = 10)
+function KMeansCollocation(InputDistribution, M = 10)
 	alg = InducingPoints.KmeansAlg(M)
-	Z = inducingpoints(alg, reduce(hcat, apc.InputDistribution)')
+	Z = inducingpoints(alg, reduce(hcat, InputDistribution)')
 	Z = reduce(hcat, Z) |> Array |> transpose |> RowVecs
 	return Z
 end
 
-function kDPPCollocation(apc, M = 10)
+function kDPPCollocation(InputDistribution, M = 10)
 	kernel = SqExponentialKernel()
 	alg = kDPP(M)
-	Z = inducingpoints(alg, reduce(hcat, apc.InputDistribution)'; kernel)
+	Z = inducingpoints(alg, reduce(hcat, InputDistribution)'; kernel)
 	Z = reduce(hcat, Z) |> Array |> transpose |> RowVecs
 	return Z
 end
 
-function RandomSubsetCollocation(apc, M = 10)
+function RandomSubsetCollocation(InputDistribution, M = 10)
 	alg = RandomSubset(M)
-	Z = inducingpoints(alg, reduce(hcat, apc.InputDistribution)')
+	Z = inducingpoints(alg, reduce(hcat, InputDistribution)')
 	Z = reduce(hcat, Z) |> Array |> transpose |> RowVecs
 	return Z
 end
 
-function CoverTreeCollocation(apc, c = 0.2)
+function CoverTreeCollocation(InputDistribution, c = 0.2)
 	alg = CoverTree(c)
-	Z = inducingpoints(alg, reduce(hcat, apc.InputDistribution)')
+	Z = inducingpoints(alg, reduce(hcat, InputDistribution)')
 	Z = reduce(hcat, Z) |> Array |> transpose |> RowVecs
 	return Z
 end
 
-function UniGridCollocation(apc, M = 10)
+function UniGridCollocation(InputDistribution, M = 10)
 	alg = UniGrid(M)
-	Z = inducingpoints(alg, reduce(hcat, apc.InputDistribution)')
+	Z = inducingpoints(alg, reduce(hcat, InputDistribution)')
 	Z = reduce(hcat, Z) |> Array |> transpose |> RowVecs
 	return Z
 end

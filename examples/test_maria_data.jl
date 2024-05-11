@@ -21,7 +21,7 @@ mkpath(loggingdir())
 debug_logging = ConsoleLogger(stderr, Logging.Debug)
 info_logging = ConsoleLogger(stderr, Logging.Info)
 # Here you may include files from the source directory
-global_logger(debug_logging)
+global_logger(info_logging)
 include(srcdir("APCE.jl"))
 using .APCE
 # using Preferences
@@ -63,18 +63,18 @@ function run()
 		@info ""  file["TrainingOutput"]
 		itrain,itest = partitionTrainTest(indall;at= 0.75, rng )
 		TrainingInput = file["TrainingInput"][indall, :] |> Array{FT}
-		TrainingOutput = file["TrainingOutput"][indall, 1:15] |> Array{FT}
+		TrainingOutput = file["TrainingOutput"][indall, :] |> Array{FT}
 		@info "" size(TrainingInput)
 
 		ValidationInput = file["ValidationInput"][indall, :] |> Array{FT}
-		ValidationOutput = file["ValidationOutput"][indall, 1:15] |> Array{FT}
+		ValidationOutput = file["ValidationOutput"][indall, :] |> Array{FT}
 	end
-	degree = 5
+	degree = 3
 	@info "" size(TrainingOutput, 2)
 	apc_instance = @timeit to "aPC_instance" APCE.aPCE(TrainingInput, degree; outdim = size(TrainingOutput, 2), OrthonormalRepresentation = true, qnorm = 0.6, normalize_data=true)
 	@assert apc_instance.NumberOfTerms<2000 "Too many coefficients."
 
-	# TrainingInput = GaussianCollocation2(apc_instance)
+	# TrainingInput = KMeansCollocation(apc_instance)
 	# @debug "" TrainingInput
 	# display(	@report_call GaussianCollocation(apc_instance; strategy = :PCM) )
 	# @descend GaussianCollocation(apc_instance; strategy = :PCM)
