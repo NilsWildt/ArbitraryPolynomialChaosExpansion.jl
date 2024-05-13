@@ -144,7 +144,7 @@ end
 			coeffs = @views OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
 			# p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
 			p = Poly(coeffs)
-			for j ∈ 1:NCpoints  # For each input sample
+			@batch for j ∈ 1:NCpoints  # For each input sample
 				x = @views TrainingInput[j, ii]
 				Psi[i, j] *= p(x)  # Evaluate the polynomial at x and multiply
 				# Psi[i,j] *= evalpoly(x, p)
@@ -167,7 +167,7 @@ end
 			coeffs = @views OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
 			p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
 			# p  = Poly(coeffs)
-			for j ∈ 1:NCpoints  # For each input sample
+			@batch for j ∈ 1:NCpoints  # For each input sample
 				x = @views TrainingInput[j, ii]
 				Psi[i, j] *= p(x)  # Evaluate the polynomial at x and multiply
 				# Psi[i,j] *= evalpoly(x, p)
@@ -201,7 +201,7 @@ end
 			Vc = zeros(T, degree + 1)
 			PolyCoeff_NonNorm = copy(Hankel)
 			for i ∈ 0:degree
-				for j ∈ 0:degree
+				@batch for j ∈ 0:degree
 					if i < degree
 						Hankel[i+1, j+1] = @views m[i+j+1] # put in the moment
 					elseif (i == degree) && (j < degree)

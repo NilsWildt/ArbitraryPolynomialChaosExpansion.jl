@@ -171,8 +171,6 @@ function run()
 		detailed = true,  # prints a detailed test set
 	)
 
-
-
 	benchmark_result = benchmark_differentiation(backends, scenarios)
 	df = DataFrames.DataFrame(benchmark_result)
 	function formatter(v, i, j)
@@ -192,10 +190,7 @@ function run()
 		header = names(df),
 		formatters = formatter,
 	)
-
 	Markdown.parse(table) |> display
-
-
 end
 
 
