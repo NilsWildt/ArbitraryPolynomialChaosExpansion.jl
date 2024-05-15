@@ -32,7 +32,7 @@ mutable struct aPCE{T <: Real}
 		if qnorm != 1.0
 			@info "qnorm reduced the number of terms from $(numberPolynomials(ExpansionDegree, input_dimensions)) to $NumberOfTerms"
 		end
-		OrthonormalBasis = create_basis(InputDistribution, ExpansionDegree; qnorm = qnorm)
+		OrthonormalBasis = create_basis(InputDistribution, ExpansionDegree)
 		ExpansionCoefficients = spzeros(T, NumberOfTerms, outdim)
 
 		return new{T}(
