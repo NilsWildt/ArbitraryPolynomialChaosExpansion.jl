@@ -242,6 +242,10 @@ function aPCE_OrthonormalBasis(Data, Degree; normalize_data = false)
 		for l ∈ 0:(2*dd+1)
 			m[l+1] = sum(Data .^ l) / NumberOfDataPoints
 		end
+		# if any(isnan, m)
+		# 	@warn "NaNs in the moments"
+		# 	@info "" Data NumberOfDataPoints 
+		# end
 		OrthonormalBasis = zeros(T, dd + 1, dd + 1)
 		OrthogonalBasis = zeros(T, dd + 1, dd + 1) # Allocate once for all :)
 		@inbounds for degree ∈ 0:dd
@@ -272,7 +276,7 @@ function aPCE_OrthonormalBasis(Data, Degree; normalize_data = false)
 			try
 				Vp .= Hankel \ Vc
 			catch
-				@warn "Hankel matrix singular, trying pseudo inverse."
+				@warn "Hankel matrix singular, trying pseudo inverse." #  Vp Hankel Vc
 				Vp .= pinv(Hankel) * Vc
 			end
 			# Vp = Hankel \ Vc
@@ -391,19 +395,12 @@ function compose_Ψ_Zygote(x::AbstractArray{T}, MultivariatePolynomialDegrees, O
 	return Ψ
 end
 
-function evaluate_Ψ(x, coeffs, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name)
+function evaluate_Ψ(x, coeffs, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name) 
+	T = eltype(coeffs)
 	Ψ = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
-	# This when Zygote is used.
-	# @info "" typeof(x) typeof(coeffs) name
-	# display(UnicodePlots.spy(sparse(Ψ)))
-	# display(Ψ)
-	# @infiltrate
-	# MAT.matwrite("sergey_layer1_evaluation1.mat",Dict(
-    #       "x" => x,
-    #        "Psi" => Ψ, "ONB" => OrthonormalBasis, "MVPD"=>MultivariatePolynomialDegrees); compress = true)
-
 	@tensoropt PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
-	return PredictionOutput
+	# @info "" typeof(x) typeof(coeffs) typeof(MultivariatePolynomialDegrees) typeof(OrthonormalBasis) typeof(degree) typeof(name)
+	return T.(PredictionOutput)
 end
 
 function evaluate_Ψ(x, coeffs::ReverseDiff.TrackedArray, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name)
@@ -412,7 +409,7 @@ function evaluate_Ψ(x, coeffs::ReverseDiff.TrackedArray, MultivariatePolynomial
 	return PredictionOutput
 end
 
-function evaluate_Ψ(x, coeffs::AbstractMatrix{ForwardDiff.Dual}, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name)
+function evaluate_Ψ(x, coeffs::AbstractVecOrMat{ForwardDiff.Dual}, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name) 
 	Ψ = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
 	@einsum PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
 	return PredictionOutput
@@ -423,8 +420,6 @@ function evaluate_Ψ(x, coeffs::Tracker.TrackedArray, MultivariatePolynomialDegr
 	@einsum PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
 	return PredictionOutput
 end
-
-
 
 
 function coeffs_from_basis(OrthonormalBasis, degree, ii)
@@ -470,7 +465,10 @@ end
 	@simd for i in (n-1):-1:1
 		derivative_value = derivative_value * x + derivative_coeffs[i]
 	end
-
+	if isnan(derivative_value) || isinf(derivative_value)
+		@warn "NaN or Inf in the derivative"
+		@infiltrate
+	end
 	return derivative_value
 end
 
