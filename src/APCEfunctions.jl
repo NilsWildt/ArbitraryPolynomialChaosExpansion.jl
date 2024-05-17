@@ -167,8 +167,8 @@ function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariateP
 		for ii ∈ 1:InputDimensions  # For each dimension of the input
 			degree = @views MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
 			coeffs = @views OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
-			p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
-			# p = Poly(coeffs)
+			# p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
+			p = Poly(coeffs)
 			@batch for j ∈ 1:NCpoints  # For each input sample
 				x = @views TrainingInput[j, ii]
 				Psi[i, j] *= p(x)  # Evaluate the polynomial at x and multiply
