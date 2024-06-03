@@ -8,6 +8,7 @@ using ForwardDiff
 using Zygote: @adjoint
 using ChainRules
 using DifferentiationInterface
+using DispatchDoctor: @stable
 
 function ChainRulesCore.frule((_, Δx), ::typeof(reverse_columns!), x)
 	Δx_reversed = similar(Δx)
@@ -18,8 +19,8 @@ function ChainRulesCore.frule((_, Δx), ::typeof(reverse_columns!), x)
 	return y, Δx_reversed
 end
 
-function ChainRulesCore.rrule(::typeof(reverse_columns!), x)
-	function reverse_columns_pullback(Δy)
+@stable function ChainRulesCore.rrule(::typeof(reverse_columns!), x)
+ function reverse_columns_pullback(Δy)
 		Δx = similar(Δy)
 		for row in axes(Δy, 1)
 			Δx[row, :] = reverse(Δy[row, :])
@@ -30,17 +31,17 @@ function ChainRulesCore.rrule(::typeof(reverse_columns!), x)
 	return y, reverse_columns_pullback
 end
 
-function ∂Ψ(x, degree)
+@stable function ∂Ψ(x, degree)
 	input_dimensions = size(x, 2)
 	MultivariatePolynomialDegrees = create_Polynomial_Degrees(input_dimensions, degree; qnorm = 1.0)
 	OrthonormalBasis = create_basis(x, degree; qnorm = 1.0)
 	return Zygote.jacobian(x -> aPCE_PsiPolynomialMatrix(MultivariatePolynomialDegrees, OrthonormalBasis, x), x) |> first
 end
-function ∂create_basis(x, degree; qnorm = 1.0)
+@stable function ∂create_basis(x, degree; qnorm = 1.0)
 	return Zygote.jacobian(x -> create_basis(x, degree; qnorm = qnorm), x) |> first
 end
 
-function ensure_matrix(arr)
+@stable function ensure_matrix(arr)
 	if ndims(arr) == 1
 		return reshape(arr, (length(arr), 1))
 	else
@@ -48,7 +49,7 @@ function ensure_matrix(arr)
 	end
 end
 
-function ChainRulesCore.rrule(::typeof(compose_Ψ), x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
+@stable function ChainRulesCore.rrule(::typeof(compose_Ψ), x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
 	Ψforward = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
 	Nterms = size(MultivariatePolynomialDegrees, 1)
 	NCpoints, inpDim = size(x)

@@ -1,36 +1,81 @@
-using Revise
-using DrWatson
-@quickactivate "APCE"
-module Runner
-using DrWatson
-using PrettyTables
-using PropDicts
-using Logging
-using TerminalLoggers: TerminalLogger
-using ProgressLogging
-using Logging
-using BenchmarkTools
-using Makie
-using StaticArrays
-using CairoMakie
-using MAT
-using Random
-loggingdir(args...) = projectdir("output", "logs", args...)
-mkpath(loggingdir())
-# io = open(loggingdir("debug.txt"), "w")
-# file_logger = ConsoleLogger(io, Logging.Debug)
-debug_logging = ConsoleLogger(stderr, Logging.Debug)
-info_logging = ConsoleLogger(stderr, Logging.Info)
-# Here you may include files from the source directory
-global_logger(info_logging)
-include(srcdir("APCE.jl"))
-using .APCE
-# using Preferences
-# set_preferences!(APCE, "precompile_workload" => false; force=true)
+### A Pluto.jl notebook ###
+# v0.19.42
 
-using TimerOutputs
-const to = TimerOutput()
+using Markdown
+using InteractiveUtils
 
+# ╔═╡ 4e32423b-8a3a-45d6-b00c-276c7936dc5a
+import Pkg
+
+# ╔═╡ 685184f1-3d61-40d9-a30f-82a17d1e48c5
+begin
+	using Revise
+	using DrWatson
+	using PrettyTables
+	using PropDicts
+	using Logging
+	using TerminalLoggers: TerminalLogger
+	using ProgressLogging
+	using Logging
+	using BenchmarkTools
+	using Makie
+	using CairoMakie
+	using MAT
+	using Random
+	using MethodAnalysis
+	using JET
+	loggingdir(args...) = projectdir("output", "logs", args...)
+	mkpath(loggingdir())
+	# io = open(loggingdir("debug.txt"), "w")
+	# file_logger = ConsoleLogger(io, Logging.Debug)
+	debug_logging = ConsoleLogger(stderr, Logging.Debug)
+	info_logging = ConsoleLogger(stderr, Logging.Info)
+	# Here you may include files from the source directory
+	global_logger(info_logging)
+	include(srcdir("APCE.jl"))
+	using .APCE
+	import .APCE:train!
+	import .APCE:predict
+	import .APCE:UQ
+	
+	using Test
+	
+	# using Preferences
+	# set_preferences!(APCE, "precompile_workload" => false; force=true)
+	using TimerOutputs
+
+end
+
+# ╔═╡ e390926a-3b59-4019-90b3-578c493d7867
+Pkg.activate(normpath(raw"\\iws-ls3-cifs.tik.uni-stuttgart.de\shared\users\ac125867\03_projects\32_aPC_julia\APCE.jl"))
+
+# ╔═╡ f7847c56-f124-4716-b38c-4582752807d6
+
+
+# ╔═╡ 5cd351d0-5635-486d-b890-61bfc7af7c46
+report_file(normpath(raw"\\iws-ls3-cifs.tik.uni-stuttgart.de\shared\users\ac125867\03_projects\32_aPC_julia\APCE.jl\examples\test_maria_data.jl"))
+
+# ╔═╡ 22c1871f-0a7f-425e-9194-ac6a26de6f4c
+report_package("APCE")
+
+# ╔═╡ 2a3366e0-cf21-4ea6-a626-4789dd1ab002
+begin
+	mis = methodinstances(APCE)    # get all the compiled methodinstances for functions owned by the package
+	# Now let's filter out the ones that pass without issue
+	badmis = filter(mis) do mi
+	    !isempty(JET.get_reports(report_call(mi)))
+		# JET.get_reports(report_call(mi))
+	end
+	badmis
+end
+
+# ╔═╡ 534e7802-63f3-43d5-99d6-2f25cd33b3ba
+# JET.report_file(normpath(raw"\\iws-ls3-cifs.tik.uni-stuttgart.de\shared\users\ac125867\03_projects\32_aPC_julia\APCE.jl\examples\test_maria_data.jl"))
+
+# ╔═╡ 63931b1e-fba0-49e8-a19f-9102ac5f144b
+	const to = TimerOutput()
+
+# ╔═╡ 829cb50a-90c0-4017-9533-2c28e11c7213
 function partitionTrainTest(data; at = 0.7,rng=Xoshiro())
     num_samples = size(data, 1)
     shuffled_indices = shuffle(rng,1:num_samples)
@@ -45,6 +90,7 @@ function partitionTrainTest(data; at = 0.7,rng=Xoshiro())
     return X_train,  X_test
 end
 
+# ╔═╡ cf0f8cfd-69d6-4b68-bdfd-8a8ca4dadc61
 function run()
 	err = []
 	ts = []
@@ -52,7 +98,6 @@ function run()
 	# degress = 1:1:5
 
 	FT = Float64
-
 	@timeit to "lod_data" begin
 		#  Loading Input distributions, Training Data and Validation Data 
 		file = matread(datadir("gw_training_data.mat"))
@@ -60,30 +105,18 @@ function run()
 		# Extracting the variables
 		# Input_distributions = file["Xtr"] |> Array{FT}
 		# @info size(file["Xtr"])
-		n = 1000
-		indall = 1:n
-		m = 10
-		dims = 1:m
+		indall = 1:100
 		rng = Xoshiro(42)
 		@info ""  file["TrainingOutput"]
-		# itrain,itest = partitionTrainTest(indall;at= 0.75, rng )
-		TrainingInput = file["TrainingInput"][indall, dims]
-		@info size(TrainingInput)
-		# TrianingInput =  SMatrix{n,m}(TrainingInput)
-
-		TrainingOutput = file["TrainingOutput"][indall, dims]
+		itrain,itest = partitionTrainTest(indall;at= 0.75, rng )
+		TrainingInput = file["TrainingInput"][indall, :] |> Array{FT}
+		TrainingOutput = file["TrainingOutput"][indall, :] |> Array{FT}
 		@info "" size(TrainingInput)
 
-		ValidationInput = file["ValidationInput"][indall, dims]
-		ValidationOutput = file["ValidationOutput"][indall, dims]
+		ValidationInput = file["ValidationInput"][indall, :] |> Array{FT}
+		ValidationOutput = file["ValidationOutput"][indall, :] |> Array{FT}
 	end
-
-	# |>  SMatrix{n,m}
-	# |>  SMatrix{n,m}
-	# |>  SMatrix{n,m}
-	# |>  SMatrix{n,m}
-
-	degree = 5
+	degree = 2
 	@info "" size(TrainingOutput, 2)
 	apc_instance = @timeit to "aPC_instance" APCE.aPCE(TrainingInput, degree; outdim = size(TrainingOutput, 2), OrthonormalRepresentation = true, qnorm = 0.6, normalize_data=true)
 	@assert apc_instance.NumberOfTerms<2000 "Too many coefficients."
@@ -153,5 +186,24 @@ function run()
 	display(to)
 	return fig
 end
-run()
-end
+
+# ╔═╡ 2d55378b-b7cb-49b8-8222-422aa0d4358c
+run() |> display
+
+# ╔═╡ 79bd0750-328b-4189-ad77-08cf4fe8fdae
+to
+
+# ╔═╡ Cell order:
+# ╠═4e32423b-8a3a-45d6-b00c-276c7936dc5a
+# ╠═f7847c56-f124-4716-b38c-4582752807d6
+# ╠═e390926a-3b59-4019-90b3-578c493d7867
+# ╠═685184f1-3d61-40d9-a30f-82a17d1e48c5
+# ╠═5cd351d0-5635-486d-b890-61bfc7af7c46
+# ╠═22c1871f-0a7f-425e-9194-ac6a26de6f4c
+# ╠═2a3366e0-cf21-4ea6-a626-4789dd1ab002
+# ╠═534e7802-63f3-43d5-99d6-2f25cd33b3ba
+# ╠═63931b1e-fba0-49e8-a19f-9102ac5f144b
+# ╠═829cb50a-90c0-4017-9533-2c28e11c7213
+# ╠═cf0f8cfd-69d6-4b68-bdfd-8a8ca4dadc61
+# ╠═2d55378b-b7cb-49b8-8222-422aa0d4358c
+# ╠═79bd0750-328b-4189-ad77-08cf4fe8fdae

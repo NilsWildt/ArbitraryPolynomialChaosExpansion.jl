@@ -3,6 +3,7 @@
 # This software is released under the MIT License.
 # https://opensource.org/licenses/MIT
 using Einsum
+using DispatchDoctor: @stable
 
 export aPCE
 mutable struct aPCE{T <: Real}
@@ -13,11 +14,11 @@ mutable struct aPCE{T <: Real}
 	const NumberOfTerms::Int64
 	const MultivariatePolynomialDegrees::AbstractArray{Int64}
 	const OrthonormalRepresentation::Bool
-	const OrthonormalBasis::Array{T}
+	const OrthonormalBasis::AbstractArray{T}
 	ExpansionCoefficients::Matrix{T}
 
 	# Constructor
-	function aPCE(
+	@stable function aPCE(
 		InputDistribution::AbstractVecOrMat{T},
 		ExpansionDegree::Int64;
 		outdim::Int64 = 1,
@@ -52,7 +53,7 @@ end
 import Base.show
 
 
-function show(io::IO, aPCE::aPCE)
+@stable function show(io::IO, aPCE::aPCE)
 	println(io, "=> aPCE Toolbox: Prediction using Arbitrary Polynomial Chaos ...")
 	println(io, "aPCE{$(typeof(aPCE).parameters[1])} Summary:")
 	println(io, "Input Dimensions: ", aPCE.input_dimensions)
@@ -67,7 +68,7 @@ function show(io::IO, aPCE::aPCE)
 end
 
 
-function UQ(apc::aPCE{T}; axis = 1) where {T <: Real}
+@stable function UQ(apc::aPCE{T}; axis = 1) where {T <: Real}
 	# @info "=> aPCE Toolbox: UQ Arbitrary Polynomial Chaos ..."
 	# @info "Computing the mean and variance of the output for dimension $axis"
 	lc = Array{T}(apc.ExpansionCoefficients[:, axis])
@@ -78,13 +79,13 @@ end
 
 
 
-function aPCE_PsiPolynomialMatrix(aPCE::aPCE{T}, TrainingInput) where {T <: Real}
+@stable function aPCE_PsiPolynomialMatrix(aPCE::aPCE{T}, TrainingInput)::Matrix{T} where {T <: Real}
 	Psi = aPCE_PsiPolynomialMatrix(TrainingInput, aPCE.MultivariatePolynomialDegrees, aPCE.OrthonormalBasis)
 	return Psi
 end
 
 
-function GaussianCollocation(aPCE::aPCE{T}; strategy = :PCM) where {T <: Real}
+@stable function GaussianCollocation(aPCE::aPCE{T}; strategy = :PCM) where {T <: Real}
 	@info aPCE
 	polynomial_roots = zeros(aPCE.input_dimensions, aPCE.ExpansionDegree + 1)
 	@inbounds for d ∈ Base.oneto(Int64(aPCE.input_dimensions))
@@ -120,8 +121,9 @@ end
 
 
 
-function train!(aPCE::aPCE{T}, TrainingInput, y_rhs; bayesian_inversion = :true, reg_mode = 3) where {T <: Real}
+@stable function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion = :true, reg_mode = 3)
 	@info "=> aPCE Toolbox: Training Arbitrary Polynomial Chaos ..."
+	T = eltype(TrainingInput)
 	@info aPCE
 	if size(y_rhs,2) == 1
 		y_rhs = reshape(y_rhs, :, 1)
@@ -163,14 +165,14 @@ function train!(aPCE::aPCE{T}, TrainingInput, y_rhs; bayesian_inversion = :true,
 end
 
 
-function predict(aPCE::aPCE{T}, PredictionInput) where {T <: Real}
+@stable function predict(aPCE::aPCE{T}, PredictionInput) where {T <: Real}
 	@info "=> aPCE Toolbox: Prediction using Arbitrary Polynomial Chaos ..."
 	Psi = aPCE_PsiPolynomialMatrix(aPCE, PredictionInput)
 	@tensoropt PredictionOutput[k, j] := Psi[i, k] * aPCE.ExpansionCoefficients[i, j]
 	return PredictionOutput
 end
 
-function create_Polynomial_Degrees(input_dimensions, degree; qnorm = 1.0)
+@stable function create_Polynomial_Degrees(input_dimensions, degree; qnorm = 1.0)
 	MultivariatePolynomialDegrees = aPCE_MultivariatePolynomialDegrees(input_dimensions, degree; qnorm = qnorm)
 	return MultivariatePolynomialDegrees
 end

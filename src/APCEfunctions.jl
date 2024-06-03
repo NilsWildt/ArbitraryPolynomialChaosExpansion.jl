@@ -43,6 +43,8 @@ using Strided
 using TensorOperations
 using UnicodePlots # To use spy from SparseArrays
 using ChainRulesCore
+using UnrolledUtilities
+using DispatchDoctor: @stable
 # using FastLevenbergMarquardt
 # using DifferentiableFactorizations
 # using BackwardsLinalg
@@ -78,7 +80,7 @@ LinearAlgebra.BLAS.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
 
 
 
-function normalization_functions(matrix)
+@stable function normalization_functions(matrix)
 	# Calculate mean and std for each column
 	col_means = StatsBase.mean(matrix, dims = 1)
 	col_stds = StatsBase.std(matrix, dims = 1)
@@ -90,9 +92,9 @@ function normalization_functions(matrix)
 end
 
 
-function aPCE_MultivariatePolynomialDegrees(num_dimensions, max_degree; qnorm = 1.0)
+@stable function aPCE_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T; qnorm = 1.0)::Matrix{Int64} where {T<:Integer}
 	# Initialize the indices for the first parameter
-	range_ = 0:max_degree |> collect
+	range_ = 0:max_degree |> collect 
 	indices = reshape(range_, :, 1)  # Make it a column vector
 	@inbounds for di in 1:num_dimensions-1
 		indices = repeat(indices, inner = (max_degree + 1, 1))
@@ -133,7 +135,7 @@ end
 #     return Psi
 # end
 
-function aPCE_PsiPolynomialMatrix_zygote(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis) where {T <: Real}
+@stable function aPCE_PsiPolynomialMatrix_zygote(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis) where {T <: Real}
 	NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
 	NCpoints = size(TrainingInput, 1)
 	Psi = Zygote.Buffer(ones(eltype(TrainingInput), NumberOfTerms, NCpoints))
@@ -156,7 +158,7 @@ function aPCE_PsiPolynomialMatrix_zygote(TrainingInput::AbstractArray{T}, Multiv
 	return copy(Psi)
 end
 
-function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{T}) where {T <: Real}
+@stable function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{T}) where {T <: Real}
 	NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
 	NCpoints = size(TrainingInput, 1)
 	Psi = ones(eltype(TrainingInput), NumberOfTerms, NCpoints)
@@ -179,7 +181,7 @@ function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariateP
 	return Psi
 end
 
-function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{S}) where {S,T <: Real}
+@stable function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{S}) where {S,T <: Real}
 	NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
 	NCpoints = size(TrainingInput, 1)
 	Psi = ones(eltype(TrainingInput), NumberOfTerms, NCpoints)
@@ -201,7 +203,7 @@ function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariateP
 	return Psi
 end
 
-function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{T}) where {T <: ForwardDiff.Dual}
+@stable function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{T}) where {T <: ForwardDiff.Dual}
 # @polly function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis) where {T <: Number}
 	NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
 	NCpoints = size(TrainingInput, 1)
@@ -226,9 +228,9 @@ function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariateP
 end
 
 
-function aPCE_OrthonormalBasis(Data, Degree; normalize_data = false)
+@stable function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S; normalize_data = false) where {T<:Real,S<:Integer}
 	ChainRulesCore.ignore_derivatives() do 
-		T = eltype(Data)
+		# T = eltype(Data)
 		d = Degree #Degree of polinomial expansion
 		dd = d #Degree of polinomial for roots defenition
 		NumberOfDataPoints = length(Data)
@@ -345,19 +347,19 @@ function UniGridCollocation(InputDistribution, M = 10)
 	return Z
 end
 
-function numberPolynomials(n, d)
+@stable function numberPolynomials(n, d)
 	x, y = max(d, n), min(d, n)
 	return UInt128(prod(UInt128(x + 1):UInt128(d + n)) ÷ factorial(UInt128(y))) |> Int
 end
 
-function reverse_columns!(x)
+@stable function reverse_columns!(x)
 	@inbounds for row in axes(x, 1)
 		x[row, :] = reverse(@views x[row, :])
 	end
 	return x
 end
 
-function create_basis(x, degree;normalize_data=true)
+@stable function create_basis(x, degree;normalize_data=true)
 	@ignore_derivatives begin
 		input_dimensions = size(x, 2)
 		OrthonormalBasis = zeros(eltype(x), degree + 1, degree + 1, input_dimensions)
@@ -369,7 +371,7 @@ function create_basis(x, degree;normalize_data=true)
 	end
 end
 
-function create_basis!(OrthonormalBasis, x, degree;normalize_data=false)
+@stable function create_basis!(OrthonormalBasis, x, degree;normalize_data=false)
 	@ignore_derivatives begin
 		input_dimensions = size(x, 2)
 		# OrthonormalBasis = eltype(x).(OrthonormalBasis)
@@ -386,24 +388,24 @@ function create_basis!(OrthonormalBasis, x, degree;normalize_data=false)
 end
 
 
-function compose_Ψ(x::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis, degree) where T
+@stable function compose_Ψ(x::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis, degree) where T
 	Ψ = aPCE_PsiPolynomialMatrix(x, MultivariatePolynomialDegrees, OrthonormalBasis)' |> Matrix{T}
 	return Ψ
 end
 
-function compose_Ψ_zygote(x::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis, degree) where T
+@stable function compose_Ψ_zygote(x::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis, degree) where T
 	Ψ = aPCE_PsiPolynomialMatrix_zygote(x, MultivariatePolynomialDegrees, OrthonormalBasis)' |> Matrix{T}
 	return Ψ
 end
 
-function evaluate_Ψ_zygote(x, coeffs, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name) 
+@stable function evaluate_Ψ_zygote(x, coeffs, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name) 
 	T = eltype(coeffs)
 	Ψ = compose_Ψ_zygote(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
 	@tensoropt PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
 	# @info "" typeof(x) typeof(coeffs) typeof(MultivariatePolynomialDegrees) typeof(OrthonormalBasis) typeof(degree) typeof(name)
 	return T.(PredictionOutput)
 end
-function evaluate_Ψ(x, coeffs, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name) 
+@stable function evaluate_Ψ(x, coeffs, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name) 
 	T = eltype(coeffs)
 	Ψ = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
 	@tensoropt PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
@@ -411,30 +413,30 @@ function evaluate_Ψ(x, coeffs, MultivariatePolynomialDegrees, OrthonormalBasis,
 	return T.(PredictionOutput)
 end
 
-function evaluate_Ψ(x, coeffs::ReverseDiff.TrackedArray, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name)
+@stable function evaluate_Ψ(x, coeffs::ReverseDiff.TrackedArray, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name)
 	Ψ = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
 	@einsum PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
 	return PredictionOutput
 end
 
-function evaluate_Ψ(x, coeffs::AbstractVecOrMat{T}, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name) where {T<:ForwardDiff.Dual}
+@stable function evaluate_Ψ(x, coeffs::AbstractVecOrMat{T}, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name) where {T<:ForwardDiff.Dual}
 	Ψ = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
 	@einsum PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
 	return PredictionOutput
 end
 
-function evaluate_Ψ(x, coeffs::Tracker.TrackedArray, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name)
+@stable function evaluate_Ψ(x, coeffs::Tracker.TrackedArray, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name)
 	Ψ = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
 	@einsum PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
 	return PredictionOutput
 end
 
 
-function coeffs_from_basis(OrthonormalBasis, degree, ii)
+@stable function coeffs_from_basis(OrthonormalBasis, degree, ii)
 	return OrthonormalBasis[degree, 1:degree, ii]
 end
 
-function derivative_coeffs(coeffs)
+@stable function derivative_coeffs(coeffs)
 	if length(coeffs) <= 1
 		return [zero(eltype(coeffs))]  # Derivative of a constant polynomial is zero.
 	end
@@ -442,7 +444,7 @@ function derivative_coeffs(coeffs)
 end
 
 
-@inbounds function evalpoly_two(x, cs::AbstractArray)
+@stable function evalpoly_two(x, cs::AbstractArray)
 	i = lastindex(cs)
 	out = cs[i]
 	i -= 1
@@ -457,7 +459,7 @@ end
 end
 
 
-@views function evaluate_derivative_horner(x, coeffs)
+@stable function evaluate_derivative_horner(x, coeffs)
 	n = length(coeffs) - 1
 	if n == 0
 		return 0.0  # The derivative of a constant polynomial is 0
@@ -478,7 +480,7 @@ end
 	return derivative_value
 end
 
-@views function evaluate_polynomial_horner_array(x, coeffs)
+@stable function evaluate_polynomial_horner_array(x, coeffs)
 	results = Vector(undef, length(x))
 	for (i, xi) in enumerate(x)
 		result = 0.0
@@ -490,7 +492,7 @@ end
 	return results
 end
 
-function train(Ψ::AbstractArray{T}, y_rhs; bayesian_inversion = :true, reg_mode = 3) where {T <: Real}
+@stable function train(Ψ::AbstractArray{T}, y_rhs; bayesian_inversion = :true, reg_mode = 3) where {T <: Real}
 	NumberOfTerms = size(Ψ, 2)
 	output_dimensions = size(y_rhs, 2)
 	coeffs = zeros(T, NumberOfTerms, output_dimensions)
