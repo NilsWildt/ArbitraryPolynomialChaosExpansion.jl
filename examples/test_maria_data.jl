@@ -76,7 +76,7 @@ function run()
 
 	degree = 3
 	@info "" size(TrainingOutput, 2)
-	apc_instance = @timeit to "aPC_instance" APCE.aPCE(Input_distribution, degree; outdim = size(TrainingOutput, 2), OrthonormalRepresentation = true, qnorm = 0.8, normalize_data = true)
+	apc_instance = @timeit to "aPC_instance" APCE.aPCE(Input_distribution, degree; outdim = size(TrainingOutput, 2), OrthonormalRepresentation = true, qnorm = 0.2, normalize_data = true)
 	@assert apc_instance.NumberOfTerms < 5000 "Too many coefficients: $(apc_instance.NumberOfTerms)"
 
 	# TrainingInput = KMeansCollocation(apc_instance)
