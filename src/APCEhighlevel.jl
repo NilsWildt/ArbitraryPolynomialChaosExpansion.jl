@@ -137,15 +137,23 @@ end
 	# NumberOfTerms, InputDimensions = size(aPCE.MultivariatePolynomialDegrees)
 	# NCpoints = size(TrainingInput, 1)
 	# Psi = SMatrix{NumberOfTerms,NCpoints}(aPCE_PsiPolynomialMatrix(aPCE, TrainingInput)')
-	Psi = Matrix{T}(aPCE_PsiPolynomialMatrix(aPCE, TrainingInput)')
+	Psi = aPCE_PsiPolynomialMatrix(aPCE, TrainingInput)' |> Matrix{T}
 	# @warn "SPYING"
 	display(UnicodePlots.spy(sparse(Psi)))
 	# @debug "" size(TrainingInput) size(TrainingOutput) size(Psi) typeof(Psi) typeof(TrainingOutput) typeof(TrainingInput) size(aPCE.ExpansionCoefficients) typeof(aPCE.ExpansionCoefficients)
 	# Psi_inv = pinv(Psi;rtol= sqrt(eps(real(float(oneunit(eltype(Psi)))))) )
+
+
 	Psi_inv = pinv(Psi; rtol = sqrt(eps(real(float(oneunit(eltype(Psi)))))))
-	# Psi_inv = pinv(Psi;rtol=0.6)
-	# @debug "" size(y_rhs) typeof(y_rhs)  size(aPCE.ExpansionCoefficients) size(Psi_inv) size(Psi)
-	@tensoropt aPCE.ExpansionCoefficients[i, k] = Psi_inv[i, j] * y_rhs[j, k]
+	@tullio aPCE.ExpansionCoefficients[i, k] = Psi_inv[i, j] * y_rhs[j, k]
+
+	#! Other options!
+	# for k in axes(y_rhs, 2)
+	# 	@info "using lsqnonneg" k
+	# 	aPCE.ExpansionCoefficients[:, k] .= lsqnonneg(Psi,y_rhs[:,k])
+	# 	# aPCE.ExpansionCoefficients[:, k] .= flts(Psi,y_rhs[:,k]; outliers=0.1, verbose = true)
+	# end
+
 
 	if bayesian_inversion
 		@info "Using bayesian regularization y_rhs find the expansion coefficients"

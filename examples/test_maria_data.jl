@@ -31,18 +31,18 @@ using .APCE
 using TimerOutputs
 const to = TimerOutput()
 
-function partitionTrainTest(data; at = 0.7,rng=Xoshiro())
-    num_samples = size(data, 1)
-    shuffled_indices = shuffle(rng,1:num_samples)
-    split_index = floor(Int, at * num_samples)
+function partitionTrainTest(data; at = 0.7, rng = Xoshiro())
+	num_samples = size(data, 1)
+	shuffled_indices = shuffle(rng, 1:num_samples)
+	split_index = floor(Int, at * num_samples)
 
-    train_indices = view(shuffled_indices, 1:split_index)
-    test_indices = view(shuffled_indices, (split_index + 1):num_samples)
+	train_indices = view(shuffled_indices, 1:split_index)
+	test_indices = view(shuffled_indices, (split_index+1):num_samples)
 
-    X_train = data[train_indices]
-    X_test = data[test_indices]
+	X_train = data[train_indices]
+	X_test = data[test_indices]
 
-    return X_train,  X_test
+	return X_train, X_test
 end
 
 function run()
@@ -58,35 +58,26 @@ function run()
 		file = matread(datadir("gw_training_data.mat"))
 		print(keys(file))
 		# Extracting the variables
-		# Input_distributions = file["Xtr"] |> Array{FT}
+		Input_distribution = file["Input_distribution"][:, :] #|> SMatrix{n, m} # Take the full basis!!!
 		# @info size(file["Xtr"])
 		n = 1000
-		indall = 1:n
-		m = 10
-		dims = 1:m
+		m = 23
+		m_out = 15
 		rng = Xoshiro(42)
-		@info ""  file["TrainingOutput"]
+		@info "" file["TrainingOutput"]
 		# itrain,itest = partitionTrainTest(indall;at= 0.75, rng )
-		TrainingInput = file["TrainingInput"][indall, dims]
+		TrainingInput = file["TrainingInput"][1:n, 1:m] #|> SMatrix{n, m}
 		@info size(TrainingInput)
-		# TrianingInput =  SMatrix{n,m}(TrainingInput)
-
-		TrainingOutput = file["TrainingOutput"][indall, dims]
+		TrainingOutput = file["TrainingOutput"][1:n, 1:m_out] #|> SMatrix{n, m_out}
 		@info "" size(TrainingInput)
-
-		ValidationInput = file["ValidationInput"][indall, dims]
-		ValidationOutput = file["ValidationOutput"][indall, dims]
+		ValidationInput = file["ValidationInput"][1:n, 1:m] #|> SMatrix{n, m}
+		ValidationOutput = file["ValidationOutput"][1:n, 1:m_out] #|> SMatrix{n, m_out}
 	end
 
-	# |>  SMatrix{n,m}
-	# |>  SMatrix{n,m}
-	# |>  SMatrix{n,m}
-	# |>  SMatrix{n,m}
-
-	degree = 5
+	degree = 3
 	@info "" size(TrainingOutput, 2)
-	apc_instance = @timeit to "aPC_instance" APCE.aPCE(TrainingInput, degree; outdim = size(TrainingOutput, 2), OrthonormalRepresentation = true, qnorm = 0.6, normalize_data=true)
-	@assert apc_instance.NumberOfTerms<2000 "Too many coefficients."
+	apc_instance = @timeit to "aPC_instance" APCE.aPCE(Input_distribution, degree; outdim = size(TrainingOutput, 2), OrthonormalRepresentation = true, qnorm = 0.8, normalize_data = true)
+	@assert apc_instance.NumberOfTerms < 5000 "Too many coefficients: $(apc_instance.NumberOfTerms)"
 
 	# TrainingInput = KMeansCollocation(apc_instance)
 	# @debug "" TrainingInput
@@ -95,12 +86,15 @@ function run()
 	# TrainingInput = @timeit to "GaussianCollocation" GaussianCollocation(apc_instance; strategy = :PCM)
 	# TrainingInput = @timeit to "KMeansCollocation" KMeansCollocation(apc_instance)
 	@info "" size(TrainingInput)
-	@timeit to "training" train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion = true, reg_mode=3)
-
+	@timeit to "training" train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion = true, reg_mode = 3)
 
 	PredictionOutput = @timeit to "prediction" predict(apc_instance, TrainingInput)
 	ValidationPredictionOutput = @timeit to "prediction" predict(apc_instance, ValidationInput)
 
+	# Back to regular matrices:
+	# TrainingOutput = Matrix(TrainingOutput)
+	# ValidationOutput = Matrix(ValidationOutput)
+	# PredictionOutput = Matrix(PredictionOutput)
 
 	uq = UQ(apc_instance)
 	data = ["Mean" uq.OutputMean[1] mean(ValidationOutput); "Var" uq.OutputVar[1] var(ValidationOutput)]
@@ -114,20 +108,20 @@ function run()
 	gratio = (1.0 + sqrt(5.0)) / 2.0
 	# Assuming TrainingOutput, PredictionOutput, ValidationOutput, and ValidationPredictionOutput are defined
 	num_plots = size(TrainingOutput, 2) * 2 # Total number of plots (training + validation for each column)
-	
+
 	# Aim for a square layout
 	num_columns = ceil(sqrt(num_plots / gratio))
 	num_rows = ceil(num_plots / num_columns)
-	
+
 	# Set dimensions for each subplot
 	subplot_width = 300 # Width in pixels for each subplot
 	subplot_height = subplot_width / gratio # Height determined by golden ratio
-	
+
 	# Calculate total figure dimensions
 	fig_width = subplot_width * num_columns
 	fig_height = subplot_height * num_rows
 	fig = Figure(size = (fig_width, fig_height))
-	
+
 	# Visualization of Training and Validation Performance
 	plot_index = 1 # Track the plot index across both rows and columns
 	for i in 1:size(TrainingOutput, 2)
@@ -136,7 +130,7 @@ function run()
 		ax1 = Axis(fig[row, col], title = "Training Performance $i", xlabel = "Training Response", ylabel = "Prediction Response")
 		scatter!(ax1, TrainingOutput[:, i], PredictionOutput[:, i], color = :red, marker = :circle)
 		plot_index += 1
-	
+
 		row, col = divrem(plot_index - 1, Int(num_columns)) .+ (1, 1)
 		# Plot validation performance
 		ax2 = Axis(fig[row, col], title = "Validation Performance $i", xlabel = "Validation Reference", ylabel = "Validation Response")

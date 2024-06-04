@@ -22,6 +22,7 @@ using StaticArrays
 import Optim: NewtonTrustRegion, Options, optimize, minimizer, minimum, LBFGS, IPNewton
 using RegularizationTools
 import RegularizationTools: Lₖx₀, solve, RegularizationProblem, setupRegularizationProblem, to_general_form, to_standard_form, gcv_tr, gcv_svd, invert, Lₖ, NelderMead, LₖB, Lₖx₀B, LₖDₓ, Lₖx₀Dₓ, LₖDₓB, Lₖx₀DₓB
+using TotalLeastSquares
 using Combinatorics
 # using CUDA
 # using Enzyme
@@ -92,9 +93,9 @@ LinearAlgebra.BLAS.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
 end
 
 
-@stable function aPCE_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T; qnorm = 1.0)::Matrix{T} where {T<:Integer}
+@stable function aPCE_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T; qnorm = 1.0)::Matrix{T} where {T <: Integer}
 	# Initialize the indices for the first parameter
-	range_ = 0:max_degree |> collect 
+	range_ = 0:max_degree |> collect
 	indices = reshape(range_, :, 1)  # Make it a column vector
 	@inbounds for di in 1:num_dimensions-1
 		indices = repeat(indices, inner = (max_degree + 1, 1))
@@ -141,7 +142,7 @@ end
 	Psi = Zygote.Buffer(ones(eltype(TrainingInput), NumberOfTerms, NCpoints))
 	# OrthonormalBasis = T.(OrthonormalBasis)
 	# Function to evaluate polynomials for a given term and input sample
-	for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
+	@inbounds for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
 		# product = 1.0  # Initialize the product for this term and sample
 		for ii ∈ 1:InputDimensions  # For each dimension of the input
 			degree = MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
@@ -181,7 +182,7 @@ end
 	return Psi
 end
 
-@stable function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{S}) where {S,T <: Real}
+@stable function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{S}) where {S, T <: Real}
 	NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
 	NCpoints = size(TrainingInput, 1)
 	Psi = ones(eltype(TrainingInput), NumberOfTerms, NCpoints)
@@ -204,7 +205,7 @@ end
 end
 
 @stable function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{T}) where {T <: ForwardDiff.Dual}
-# @polly function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis) where {T <: Number}
+	# @polly function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis) where {T <: Number}
 	NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
 	NCpoints = size(TrainingInput, 1)
 	Psi = ones(eltype(TrainingInput), NumberOfTerms, NCpoints)
@@ -228,8 +229,8 @@ end
 end
 
 
-@stable function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S; normalize_data = false) where {T<:Real,S<:Integer}
-	ChainRulesCore.ignore_derivatives() do 
+@stable function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S; normalize_data = false) where {T <: Real, S <: Integer}
+	ChainRulesCore.ignore_derivatives() do
 		# T = eltype(Data)
 		d = Degree #Degree of polinomial expansion
 		dd = d #Degree of polinomial for roots defenition
@@ -359,19 +360,19 @@ end
 	return x
 end
 
-@stable function create_basis(x, degree;normalize_data=true)
+@stable function create_basis(x, degree; normalize_data = true)
 	@ignore_derivatives begin
 		input_dimensions = size(x, 2)
 		OrthonormalBasis = zeros(eltype(x), degree + 1, degree + 1, input_dimensions)
 		@inbounds for i in 1:input_dimensions
-			tmp = aPCE_OrthonormalBasis(x[:, i], degree;normalize_data=normalize_data)
+			tmp = aPCE_OrthonormalBasis(x[:, i], degree; normalize_data = normalize_data)
 			OrthonormalBasis[:, :, i] = tmp
 		end
 		return OrthonormalBasis
 	end
 end
 
-@stable function create_basis!(OrthonormalBasis, x, degree;normalize_data=false)
+@stable function create_basis!(OrthonormalBasis, x, degree; normalize_data = false)
 	@ignore_derivatives begin
 		input_dimensions = size(x, 2)
 		# OrthonormalBasis = eltype(x).(OrthonormalBasis)
@@ -380,7 +381,7 @@ end
 		end
 		# OrthonormalBasis = zeros(eltype(x), degree + 1, degree + 1, input_dimensions)
 		@inbounds for i in 1:input_dimensions
-			tmp = aPCE_OrthonormalBasis(x[:, i], degree;normalize_data=normalize_data)
+			tmp = aPCE_OrthonormalBasis(x[:, i], degree; normalize_data = normalize_data)
 			OrthonormalBasis[:, :, i] = tmp
 		end
 		return OrthonormalBasis
@@ -398,14 +399,14 @@ end
 	return Ψ
 end
 
-@stable function evaluate_Ψ_zygote(x, coeffs, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name) 
+@stable function evaluate_Ψ_zygote(x, coeffs, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name)
 	T = eltype(coeffs)
 	Ψ = compose_Ψ_zygote(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
 	@tensoropt PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
 	# @info "" typeof(x) typeof(coeffs) typeof(MultivariatePolynomialDegrees) typeof(OrthonormalBasis) typeof(degree) typeof(name)
 	return T.(PredictionOutput)
 end
-@stable function evaluate_Ψ(x, coeffs, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name) 
+@stable function evaluate_Ψ(x, coeffs, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name)
 	T = eltype(coeffs)
 	Ψ = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
 	@tensoropt PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
@@ -419,7 +420,7 @@ end
 	return PredictionOutput
 end
 
-@stable function evaluate_Ψ(x, coeffs::AbstractVecOrMat{T}, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name) where {T<:ForwardDiff.Dual}
+@stable function evaluate_Ψ(x, coeffs::AbstractVecOrMat{T}, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name) where {T <: ForwardDiff.Dual}
 	Ψ = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
 	@einsum PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
 	return PredictionOutput
@@ -499,8 +500,13 @@ end
 	# Ψ = Matrix{T}(Ψ)
 	# display(UnicodePlots.spy(sparse(Ψ)))
 	Psi_inv = pinv(Ψ; rtol = sqrt(eps(real(float(oneunit(eltype(Ψ)))))))
+	@einsum coeffs[i, k] = Psi_inv[i, j] * y_rhs[j, k] # tensoropt einsum
 
-	@einsum coeffs[i, k] = Psi_inv[i, j] * y_rhs[j, k] # tensoropt
+	# for k in axes(y_rhs, 2)
+	# 	@info "using rtls" k
+	# 	coeffs[:, k] .= rtls(Ψ,y_rhs[:,k])
+	# end
+
 	if bayesian_inversion
 		@info "Using bayesian regularization y_rhs find the expansion coefficients"
 		x₀ = coeffs # Quite a good first guess :) And pinv is 
@@ -516,4 +522,72 @@ end
 		end
 	end
 	return coeffs
+end
+
+@stable function lsqnonneg(C::Matrix, d::Vector, tol::Real = -1, itmax_factor::Real = 3)
+	# Set the tolerance
+	(m, n) = size(C)
+	tol = (tol == -1) ? 10 * eps() * norm(C, 1) * (maximum(size(C)) + 1) : tol
+	itmax = itmax_factor * n
+	# Initialize vector of n zeros and Infs (to be used later)
+	wz = zeros(n)
+	# Initialize set of non-active columns to null
+	P = falses(n)
+	# Initialize set of active columns to all and the initial point to zeros
+	Z = trues(n)
+	x = zeros(n)
+	Ctrans = transpose(C)
+	resid = d - C * x
+	w = Ctrans * resid
+	# Set up iteration criterion
+	outeriter = 0
+	iter = 0
+	exitflag = 1
+	# Outer loop to put variables into set to hold positive coefficients
+	@inbounds while any(Z) && any(w[Z] .> tol)
+		# print("On iteration $(outeriter)\n")
+		outeriter += 1
+		# Reset intermediate solution z
+		z = zeros(n)
+		# Create wz, a Lagrange multiplier vector of variables in the zero set.
+		# wz must have the same size as w to preserve the correct indices, so
+		# set multipliers to -Inf for variables outside of the zero set.
+		wz[P] .= -Inf  # Use broadcasting here
+		wz[Z] .= w[Z]  # Use broadcasting here
+		# Find variable with largest Lagrange multiplier
+		t = argmax(wz)
+		# Move variable t from zero set to positive set
+		P[t] = true
+		Z[t] = false
+		# Compute intermediate solution using only variables in positive set
+		z[P] = C[:, findall(P)] \ d  # Use findall to get column indices
+		# Inner loop to remove elements from the positive set which no longer belong
+		while any(z[P] .<= 0)
+			# print("entering inner loop\n")
+			iter += 1
+			if iter > itmax
+				println("lsqnonneg: IterationCountExceeded")
+				exitflag = 0
+				iterations = outeriter
+				resnorm = sum(resid .* resid)
+				x = z
+				lambda = w
+				return x
+			end
+			# Find indices where intermediate solution z is approximately negative
+			Q = (z .<= 0) .& P
+			# Choose new x subject to keeping new x nonnegative
+			alpha = minimum(x[Q] ./ (x[Q] .- z[Q]))
+			x .= x .+ alpha .* (z .- x)  # Use broadcasting here
+			# Reset Z and P given intermediate values of x
+			Z .= ((abs.(x) .< tol) .& P) .| Z  # Use broadcasting here
+			P .= .~Z  # Use broadcasting here
+			z = zeros(n)        # Reset z
+			z[P] = C[:, findall(P)] \ d     # Re-solve for z using findall
+		end
+		x = z
+		resid = d - C * x
+		w = Ctrans * resid
+	end
+	return x
 end
