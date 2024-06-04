@@ -92,7 +92,7 @@ LinearAlgebra.BLAS.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
 end
 
 
-@stable function aPCE_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T; qnorm = 1.0)::Matrix{Int64} where {T<:Integer}
+@stable function aPCE_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T; qnorm = 1.0)::Matrix{T} where {T<:Integer}
 	# Initialize the indices for the first parameter
 	range_ = 0:max_degree |> collect 
 	indices = reshape(range_, :, 1)  # Make it a column vector

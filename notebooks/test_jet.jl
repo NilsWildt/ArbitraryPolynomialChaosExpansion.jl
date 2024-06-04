@@ -50,7 +50,13 @@ end
 Pkg.activate(normpath(raw"\\iws-ls3-cifs.tik.uni-stuttgart.de\shared\users\ac125867\03_projects\32_aPC_julia\APCE.jl"))
 
 # ╔═╡ f7847c56-f124-4716-b38c-4582752807d6
-
+html"""<style>
+main {
+    max-width: 96%;
+    margin-left: 1%;
+    margin-right: 2% !important;
+}
+"""
 
 # ╔═╡ 5cd351d0-5635-486d-b890-61bfc7af7c46
 report_file(normpath(raw"\\iws-ls3-cifs.tik.uni-stuttgart.de\shared\users\ac125867\03_projects\32_aPC_julia\APCE.jl\examples\test_maria_data.jl"))
@@ -195,7 +201,7 @@ to
 
 # ╔═╡ Cell order:
 # ╠═4e32423b-8a3a-45d6-b00c-276c7936dc5a
-# ╠═f7847c56-f124-4716-b38c-4582752807d6
+# ╟─f7847c56-f124-4716-b38c-4582752807d6
 # ╠═e390926a-3b59-4019-90b3-578c493d7867
 # ╠═685184f1-3d61-40d9-a30f-82a17d1e48c5
 # ╠═5cd351d0-5635-486d-b890-61bfc7af7c46
