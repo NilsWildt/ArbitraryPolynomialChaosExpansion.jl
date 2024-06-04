@@ -409,7 +409,7 @@ end
 @stable function evaluate_Ψ(x, coeffs, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name)
 	T = eltype(coeffs)
 	Ψ = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
-	@tensoropt PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
+	@tullio PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
 	# @info "" typeof(x) typeof(coeffs) typeof(MultivariatePolynomialDegrees) typeof(OrthonormalBasis) typeof(degree) typeof(name)
 	return T.(PredictionOutput)
 end
