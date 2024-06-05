@@ -24,6 +24,7 @@ using RegularizationTools
 import RegularizationTools: Lₖx₀, solve, RegularizationProblem, setupRegularizationProblem, to_general_form, to_standard_form, gcv_tr, gcv_svd, invert, Lₖ, NelderMead, LₖB, Lₖx₀B, LₖDₓ, Lₖx₀Dₓ, LₖDₓB, Lₖx₀DₓB
 using TotalLeastSquares
 using Combinatorics
+using OMEinsum
 # using CUDA
 # using Enzyme
 using InducingPoints
@@ -73,7 +74,7 @@ using Tullio
 using Infiltrator
 
 
-export create_basis!, evaluate_Ψ_zygote
+export create_basis!, evaluate_Ψ_zygote, GaussianCollocation
 @info "Benchmarking Matrix mutplication speed" LinearAlgebra.peakflops(; parallel = true)
 
 Strided.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
@@ -172,7 +173,7 @@ end
 			coeffs = @views OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
 			# p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
 			p = Poly(coeffs)
-			@batch for j ∈ 1:NCpoints  # For each input sample
+			for j ∈ 1:NCpoints  # For each input sample # @batch
 				x = @views TrainingInput[j, ii]
 				Psi[i, j] *= p(x)  # Evaluate the polynomial at x and multiply
 				# Psi[i,j] *= evalpoly(x, p)
@@ -194,7 +195,7 @@ end
 			degree = @views MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
 			coeffs = @views OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
 			p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial this dispatch uses cating.
-			@batch for j ∈ 1:NCpoints  # For each input sample
+			for j ∈ 1:NCpoints  # For each input sample @batch
 				x = @views TrainingInput[j, ii]
 				Psi[i, j] *= p(x)  # Evaluate the polynomial at x and multiply
 				# Psi[i,j] *= evalpoly(x, p)
@@ -218,7 +219,7 @@ end
 			coeffs = @views OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
 			p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
 			# p  = Poly(coeffs)
-			@batch for j ∈ 1:NCpoints  # For each input sample
+			for j ∈ 1:NCpoints  # For each input sample @batch
 				x = @views TrainingInput[j, ii]
 				Psi[i, j] *= p(x)  # Evaluate the polynomial at x and multiply
 				# Psi[i,j] *= evalpoly(x, p)
@@ -256,7 +257,7 @@ end
 			Vc = zeros(T, degree + 1)
 			PolyCoeff_NonNorm = copy(Hankel)
 			for i ∈ 0:degree
-				@batch for j ∈ 0:degree
+				for j ∈ 0:degree # @batch
 					if i < degree
 						Hankel[i+1, j+1] = @views m[i+j+1] # put in the moment
 					elseif (i == degree) && (j < degree)
@@ -311,6 +312,40 @@ end
 	end
 end
 
+
+@stable function GaussianCollocation(input_dimensions, ExpansionDegree, OrthonormalBasis::AbstractArray{T},
+	InputDistribution::AbstractArray{T}, NumberOfTerms; strategy = :PCM) where {T <: Real}
+	# @info input_dimensions
+	polynomial_roots = zeros(T, input_dimensions, ExpansionDegree + 1)
+	@inbounds for d ∈ Base.oneto(Int64(input_dimensions))
+		polynomial_basis = @views OrthonormalBasis[:, :, d]
+		# @debug "" polynomial_basis
+		polynomial_roots[d, :] = @view reinterpret(T, PolynomialRoots.roots(@views polynomial_basis[ExpansionDegree+2, :]))[1:2:end-1]
+	end
+	PointsVector = 1:ExpansionDegree+1 |> collect
+	UniqueCombinations = stack(reduce(vcat, (Iterators.product([PointsVector for _ in 1:input_dimensions]...))))'
+
+	sort_indices = sortperm(sum(UniqueCombinations; dims = 2); dims = 1)
+	SortUniqueCombinations = UniqueCombinations[sort_indices[:], :]
+	if strategy == :FT
+		TrainingInput = SortUniqueCombinations
+		return Array(view(TrainingInput, :, (1:size(TrainingInput, 2))))
+	elseif strategy == :PCM
+		temp = abs.(polynomial_roots .- StatsBase.mean(InputDistribution; dims = 1)[:, :][1])
+		temp_sort = mapslices(sortperm, temp, dims = 2)
+		@inbounds for i in axes(polynomial_roots, 1)
+			polynomial_roots[i, :] = @views polynomial_roots[i, temp_sort[i, :]]
+		end
+		collocation_points = zeros(T, NumberOfTerms, input_dimensions)
+		@inbounds for i in 1:NumberOfTerms
+			for j in axes(SortUniqueCombinations, 2)
+				collocation_points[i, j] = @views polynomial_roots[j, Int(SortUniqueCombinations[i, j])]
+			end
+		end
+		collocation_points = @strided sortslices(collocation_points, dims = 1, by = x -> x[1])
+		return Array(view(collocation_points, :, (1:size(collocation_points, 2))))
+	end
+end
 
 function KMeansCollocation(InputDistribution, M = 10)
 	alg = InducingPoints.KmeansAlg(M)
