@@ -20,7 +20,7 @@ function ChainRulesCore.frule((_, Δx), ::typeof(reverse_columns!), x)
 end
 
 @stable function ChainRulesCore.rrule(::typeof(reverse_columns!), x)
- function reverse_columns_pullback(Δy)
+	function reverse_columns_pullback(Δy)
 		Δx = similar(Δy)
 		for row in axes(Δy, 1)
 			Δx[row, :] = reverse(Δy[row, :])
@@ -50,6 +50,8 @@ end
 end
 
 @stable function ChainRulesCore.rrule(::typeof(compose_Ψ), x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
+	# @info "" typeof(x) typeof(MultivariatePolynomialDegrees) typeof(OrthonormalBasis) typeof(degree)
+	x = ensure_matrix(x)
 	Ψforward = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
 	Nterms = size(MultivariatePolynomialDegrees, 1)
 	NCpoints, inpDim = size(x)
@@ -59,14 +61,20 @@ end
 		@inbounds for i in 1:Nterms
 			for j in 1:NCpoints
 				for ii in 1:inpDim
-					oldval = ∂x[i, ii]
+					# oldval = ∂x[i, ii]
 					∂x[i, ii] = 1.0
-					@batch for kk in 1:inpDim
+					@batch for kk in 1:inpDim # @batch
 						degree_k = MultivariatePolynomialDegrees[i, kk] + 1
 						coeffs = @views OrthonormalBasis[degree_k, 1:degree_k, kk]
+						# pp = Polynomials.Polynomial(coeffs)
 						if ii == kk
+							# n = length(coeffs) - 1
+							# p = Poly([i * coeffs[i+1] for i in 1:n])
 							∂x[i, ii] *= evaluate_derivative_horner(x[j, ii], coeffs)
+							# ∂x[i, ii] *= p(x[j, ii])
 						else
+							# p = Poly(coeffs)
+							# ∂x[i, ii] *= p(x[j, ii])
 							∂x[i, ii] *= evalpoly_two(x[j, ii], coeffs)
 						end
 					end
