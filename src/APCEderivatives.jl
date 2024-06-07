@@ -9,6 +9,7 @@ using Zygote: @adjoint
 using ChainRules
 using DifferentiationInterface
 using DispatchDoctor: @stable
+using ComponentArrays
 
 function ChainRulesCore.frule((_, Δx), ::typeof(reverse_columns!), x)
 	Δx_reversed = similar(Δx)
@@ -49,41 +50,79 @@ end
 	end
 end
 
-@stable function ChainRulesCore.rrule(::typeof(compose_Ψ), x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
-	# @info "" typeof(x) typeof(MultivariatePolynomialDegrees) typeof(OrthonormalBasis) typeof(degree)
-	x = ensure_matrix(x)
-	Ψforward = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
-	Nterms = size(MultivariatePolynomialDegrees, 1)
-	NCpoints, inpDim = size(x)
-	function compose_Ψ_pullback(dy_raw)
-		dy = unthunk(dy_raw)
-		∂x = ones(Nterms, inpDim)
-		@inbounds for i in 1:Nterms
-			for j in 1:NCpoints
-				for ii in 1:inpDim
-					# oldval = ∂x[i, ii]
-					∂x[i, ii] = 1.0
-					@batch for kk in 1:inpDim # @batch
-						degree_k = MultivariatePolynomialDegrees[i, kk] + 1
-						coeffs = @views OrthonormalBasis[degree_k, 1:degree_k, kk]
-						# pp = Polynomials.Polynomial(coeffs)
-						if ii == kk
-							# n = length(coeffs) - 1
-							# p = Poly([i * coeffs[i+1] for i in 1:n])
-							∂x[i, ii] *= evaluate_derivative_horner(x[j, ii], coeffs)
-							# ∂x[i, ii] *= p(x[j, ii])
-						else
-							# p = Poly(coeffs)
-							# ∂x[i, ii] *= p(x[j, ii])
-							∂x[i, ii] *= evalpoly_two(x[j, ii], coeffs)
-						end
-					end
-				end
-			end
-		end
-		∂∂ = @thunk reduce(hcat, [dy * ∂x[:, i] for i in 1:inpDim])
-		return (NoTangent(), ∂∂, NoTangent(), @thunk(dy * Ψforward'), NoTangent())
-	end
+# @stable function ChainRulesCore.rrule(::typeof(compose_Ψ), x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
+# 	# @info "" typeof(x) typeof(MultivariatePolynomialDegrees) typeof(OrthonormalBasis) typeof(degree)
+# 	x = ensure_matrix(x)
+# 	Ψforward = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
+# 	Nterms = size(MultivariatePolynomialDegrees, 1)
+# 	NCpoints, inpDim = size(x)
+# 	function compose_Ψ_pullback(dy_raw)
+# 		dy = unthunk(dy_raw)
+# 		∂x = ones(Nterms, inpDim)
+# 		@inbounds for i in 1:Nterms
+# 			for j in 1:NCpoints
+# 				for ii in 1:inpDim
+# 					# oldval = ∂x[i, ii]
+# 					∂x[i, ii] = 1.0
+# 					@batch for kk in 1:inpDim # @batch
+# 						degree_k = MultivariatePolynomialDegrees[i, kk] + 1
+# 						coeffs = @views OrthonormalBasis[degree_k, 1:degree_k, kk]
+# 						# pp = Polynomials.Polynomial(coeffs)
+# 						if ii == kk
+# 							# n = length(coeffs) - 1
+# 							# p = Poly([i * coeffs[i+1] for i in 1:n])
+# 							∂x[i, ii] *= evaluate_derivative_horner(x[j, ii], coeffs)
+# 							# ∂x[i, ii] *= p(x[j, ii])
+# 						else
+# 							# p = Poly(coeffs)
+# 							# ∂x[i, ii] *= p(x[j, ii])
+# 							∂x[i, ii] *= evalpoly_two(x[j, ii], coeffs)
+# 						end
+# 					end
+# 				end
+# 			end
+# 		end
+# 		∂∂ = @thunk reduce(hcat, [dy * ∂x[:, i] for i in 1:inpDim])
+# 		return (NoTangent(), ∂∂, NoTangent(), @thunk(dy * Ψforward'), NoTangent())
+# 	end
+# 	return Ψforward, compose_Ψ_pullback
+# end
 
-	return Ψforward, compose_Ψ_pullback
-end
+# @stable function ChainRulesCore.rrule(::typeof(compose_Ψ), x::ComponentArrays.ComponentVector, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
+# 	# @info "" typeof(x) typeof(MultivariatePolynomialDegrees) typeof(OrthonormalBasis) typeof(degree)
+# 	OrthonormalBasis = create_basis(x.value, Layer.d_expansion; normalize_data = Layer.normalize_data) #
+# 	x = ensure_matrix(x.value)
+# 	Ψforward = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
+# 	Nterms = size(MultivariatePolynomialDegrees, 1)
+# 	NCpoints, inpDim = size(x)
+# 	function compose_Ψ_pullback(dy_raw)
+# 		dy = unthunk(dy_raw)
+# 		∂x = ones(Nterms, inpDim)
+# 		@inbounds for i in 1:Nterms
+# 			for j in 1:NCpoints
+# 				for ii in 1:inpDim
+# 					# oldval = ∂x[i, ii]
+# 					∂x[i, ii] = 1.0
+# 					@batch for kk in 1:inpDim # @batch
+# 						degree_k = MultivariatePolynomialDegrees[i, kk] + 1
+# 						coeffs = @views OrthonormalBasis[degree_k, 1:degree_k, kk]
+# 						# pp = Polynomials.Polynomial(coeffs)
+# 						if ii == kk
+# 							# n = length(coeffs) - 1
+# 							# p = Poly([i * coeffs[i+1] for i in 1:n])
+# 							∂x[i, ii] *= evaluate_derivative_horner(x[j, ii], coeffs)
+# 							# ∂x[i, ii] *= p(x[j, ii])
+# 						else
+# 							# p = Poly(coeffs)
+# 							# ∂x[i, ii] *= p(x[j, ii])
+# 							∂x[i, ii] *= evalpoly_two(x[j, ii], coeffs)
+# 						end
+# 					end
+# 				end
+# 			end
+# 		end
+# 		∂∂ = @thunk reduce(hcat, [dy * ∂x[:, i] for i in 1:inpDim])
+# 		return (NoTangent(), ∂∂, NoTangent(), ComponentVector(prior = zeros(size(x)), value = @thunk(dy * Ψforward')), NoTangent())
+# 	end
+# 	return Ψforward, compose_Ψ_pullback
+# end
