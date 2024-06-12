@@ -74,7 +74,7 @@ using Tullio
 using Infiltrator
 
 
-export create_basis!, evaluate_Ψ_zygote, GaussianCollocation
+export create_basis!, evaluate_Ψ_zygote, GaussianCollocation, evaluate_Ψ!
 @info "Benchmarking Matrix mutplication speed" LinearAlgebra.peakflops(; parallel = true)
 
 Strided.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
@@ -150,7 +150,7 @@ end
 			coeffs = OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
 			p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
 			# p = Poly(coeffs)
-			for j ∈ 1:NCpoints  # For each input sample
+			@batch for j ∈ 1:NCpoints  # For each input sample
 				x = TrainingInput[j, ii]
 				Psi[i, j] *= p(x)  # Evaluate the polynomial at x and multiply
 				# Psi[i,j] *= evalpoly(x, p)
@@ -163,7 +163,7 @@ end
 @stable function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{T}) where {T <: Real}
 	NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
 	NCpoints = size(TrainingInput, 1)
-	Psi = ones(eltype(TrainingInput), NumberOfTerms, NCpoints)
+	Psi = ones(T, NumberOfTerms, NCpoints)
 	# OrthonormalBasis = T.(OrthonormalBasis)
 	# Function to evaluate polynomials for a given term and input sample
 	@inbounds for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
@@ -171,9 +171,9 @@ end
 		for ii ∈ 1:InputDimensions  # For each dimension of the input
 			degree = @views MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
 			coeffs = @views OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
-			# p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
-			p = Poly(coeffs)
-			for j ∈ 1:NCpoints  # For each input sample # @batch
+			p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
+			# p = Poly(coeffs)
+			@batch for j ∈ 1:NCpoints  # For each input sample # @batch
 				x = @views TrainingInput[j, ii]
 				Psi[i, j] *= p(x)  # Evaluate the polynomial at x and multiply
 				# Psi[i,j] *= evalpoly(x, p)
@@ -186,7 +186,7 @@ end
 @stable function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{S}) where {S, T <: Real}
 	NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
 	NCpoints = size(TrainingInput, 1)
-	Psi = ones(eltype(TrainingInput), NumberOfTerms, NCpoints)
+	Psi = ones(S, NumberOfTerms, NCpoints)
 	# OrthonormalBasis = T.(OrthonormalBasis)
 	# Function to evaluate polynomials for a given term and input sample
 	@inbounds for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
@@ -195,7 +195,7 @@ end
 			degree = @views MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
 			coeffs = @views OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
 			p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial this dispatch uses cating.
-			for j ∈ 1:NCpoints  # For each input sample @batch
+			@batch for j ∈ 1:NCpoints  # For each input sample @batch
 				x = @views TrainingInput[j, ii]
 				Psi[i, j] *= p(x)  # Evaluate the polynomial at x and multiply
 				# Psi[i,j] *= evalpoly(x, p)
@@ -219,7 +219,7 @@ end
 			coeffs = @views OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
 			p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
 			# p  = Poly(coeffs)
-			for j ∈ 1:NCpoints  # For each input sample @batch
+			@batch for j ∈ 1:NCpoints  # For each input sample @batch
 				x = @views TrainingInput[j, ii]
 				Psi[i, j] *= p(x)  # Evaluate the polynomial at x and multiply
 				# Psi[i,j] *= evalpoly(x, p)
@@ -230,8 +230,8 @@ end
 end
 
 
-@stable function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S; normalize_data = false) where {T <: Real, S <: Integer}
-	ChainRulesCore.ignore_derivatives() do
+@stable function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S; normalize_data = false) where {T , S <: Integer}
+	# ChainRulesCore.ignore_derivatives() do
 		# T = eltype(Data)
 		d = Degree #Degree of polinomial expansion
 		dd = d #Degree of polinomial for roots defenition
@@ -257,7 +257,7 @@ end
 			Vc = zeros(T, degree + 1)
 			PolyCoeff_NonNorm = copy(Hankel)
 			for i ∈ 0:degree
-				for j ∈ 0:degree # @batch
+				@batch for j ∈ 0:degree # @batch
 					if i < degree
 						Hankel[i+1, j+1] = @views m[i+j+1] # put in the moment
 					elseif (i == degree) && (j < degree)
@@ -309,7 +309,7 @@ end
 			end
 		end
 		return OrthonormalBasis
-	end
+	# end
 end
 
 
@@ -396,7 +396,7 @@ end
 end
 
 @stable function create_basis(x, degree; normalize_data = true)
-	@ignore_derivatives begin
+	# @ignore_derivatives begin
 		input_dimensions = size(x, 2)
 		OrthonormalBasis = zeros(eltype(x), degree + 1, degree + 1, input_dimensions)
 		@inbounds for i in 1:input_dimensions
@@ -404,11 +404,11 @@ end
 			OrthonormalBasis[:, :, i] = tmp
 		end
 		return OrthonormalBasis
-	end
+	# end
 end
 
 @stable function create_basis!(OrthonormalBasis, x, degree; normalize_data = false)
-	@ignore_derivatives begin
+	# @ignore_derivatives begin
 		input_dimensions = size(x, 2)
 		# OrthonormalBasis = eltype(x).(OrthonormalBasis)
 		if eltype(OrthonormalBasis) != eltype(x)
@@ -420,7 +420,7 @@ end
 			OrthonormalBasis[:, :, i] = tmp
 		end
 		return OrthonormalBasis
-	end
+	# end
 end
 
 
@@ -441,13 +441,22 @@ end
 	# @info "" typeof(x) typeof(coeffs) typeof(MultivariatePolynomialDegrees) typeof(OrthonormalBasis) typeof(degree) typeof(name)
 	return T.(PredictionOutput)
 end
+
 @stable function evaluate_Ψ(x, coeffs, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name)
 	T = eltype(coeffs)
-	Ψ = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
+	Ψ = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree) .|> T
 	@tullio PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
-	# @info "" typeof(x) typeof(coeffs) typeof(MultivariatePolynomialDegrees) typeof(OrthonormalBasis) typeof(degree) typeof(name)
 	return T.(PredictionOutput)
 end
+
+@stable function evaluate_Ψ!(PredictionOutput,x, coeffs, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name)
+	T = eltype(coeffs)
+	Ψ = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree) .|> T
+	PredictionOutput = T.(PredictionOutput)
+	@tullio PredictionOutput[k, j] = Ψ[k, i] * coeffs[i, j]
+	return nothing
+end
+
 
 @stable function evaluate_Ψ(x, coeffs::ReverseDiff.TrackedArray, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name)
 	Ψ = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
