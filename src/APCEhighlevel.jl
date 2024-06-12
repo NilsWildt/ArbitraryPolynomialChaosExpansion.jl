@@ -24,11 +24,13 @@ mutable struct aPCE{T <: Real}
 		outdim::Int64 = 1,
 		OrthonormalRepresentation::Bool = true,
 		qnorm::Float64 = 1.0,
+		s_marginals = 1.0,
+		s_interactions = 1.0,
 		normalize_data=true,
 	) where T
 		input_dimensions = Int64(size(InputDistribution, 2))
 		@debug "" qnorm
-		MultivariatePolynomialDegrees = aPCE_MultivariatePolynomialDegrees(input_dimensions, ExpansionDegree; qnorm = qnorm)
+		MultivariatePolynomialDegrees = aPCE_MultivariatePolynomialDegrees(input_dimensions, ExpansionDegree,s_marginals,s_interactions)
 		NumberOfTerms = min(size(MultivariatePolynomialDegrees, 1), numberPolynomials(ExpansionDegree, input_dimensions))
 		if qnorm != 1.0
 			@info "qnorm reduced the number of terms from $(numberPolynomials(ExpansionDegree, input_dimensions)) to $NumberOfTerms"
@@ -181,6 +183,6 @@ end
 end
 
 @stable function create_Polynomial_Degrees(input_dimensions, degree; qnorm = 1.0)
-	MultivariatePolynomialDegrees = aPCE_MultivariatePolynomialDegrees(input_dimensions, degree; qnorm = qnorm)
+	MultivariatePolynomialDegrees = aPCE_MultivariatePolynomialDegrees(input_dimensions, degree)
 	return MultivariatePolynomialDegrees
 end

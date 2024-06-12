@@ -15,16 +15,91 @@ begin
 	using PrettyTables
 	using AlgebraOfGraphics
 	using CairoMakie
+	using Combinatorics
+	using StaticArrays
 end
+
 
 # ╔═╡ d0c6cc89-3f25-417b-bab2-3239466472be
 function filter_indices_sparsity(indices, max_degree, qnorm) 
     normalized_indices = indices ./ (max_degree + 1)
     summed_indices = sum((normalized_indices).^qnorm, dims = 2)
     rooted_indices = summed_indices .^ (1.0 / qnorm)
-    mask = rooted_indices .<= 5.0
+    mask = rooted_indices .<= 1.0
     idx_to_keep = vec(mask)
     return idx_to_keep
+end
+
+# ╔═╡ 2916125e-322c-4be0-8738-1ca0ecf6511d
+# @stable function aPCE_MultivariatePolynomialDegrees2(num_dimensions::T, max_degree::T; qnorm = 1.0)::Matrix{T} where {T <: Integer}
+# 	# Initialize the indices for the first parameter
+# 	range_ = 0:max_degree |> collect
+# 	indices = reshape(range_, :, 1)  # Make it a column vector
+# 	@inbounds for di in 1:num_dimensions-1
+# 		indices = repeat(indices, inner = (max_degree + 1, 1))
+# 		front = repeat(range_, outer = div(lastindex(indices), (max_degree + 1)) ÷ di)
+# 		indices = hcat(front,indices)#ApplyArray(hcat, front, indices)
+# 		if qnorm != 1.0
+# 			# idx_to_keep = vec(1.0./ (max_degree + 1) .*sum(( (max_degree .-indices)) .^ qnorm, dims = 2) .^ (1.0 / qnorm) .<= 1.0)
+# 				# idx_to_keep = vec(1.0./ (max_degree + 1) .*sum(( (indices)) .^ qnorm, dims = 2) .^ (1.0 / qnorm) .>= 1.0)
+# 			idx_to_keep = filter_indices_sparsity(indices,max_degree,qnorm)
+# 			indices = indices[idx_to_keep, :]
+# 			# @info "Q-norm removed $(length(idx_to_keep)-sum(idx_to_keep)) terms"
+# 		else
+# 			indices = indices[vec(sum(indices; dims = 2)).<=max_degree, :]
+# 		end
+# 	end
+# 	indices = sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
+# 	reverse_columns!(indices)
+# 	return indices
+# end
+
+
+# ╔═╡ 18169379-1ca3-4dff-af95-283e23b3aac0
+@stable function aPCE_MultivariatePolynomialDegrees2(num_dimensions::Int64=3, max_degree::Int64=3, d_marginals::Int64=3, d_interactions::Int64=2)::Matrix{Int64}
+    valid_rows = []
+
+    # Recursive function to generate combinations
+    function generate_combinations(current_combination::Vector{Int}, current_index::Int)
+        if current_index > num_dimensions
+            # Check sum of the current combination
+            total_sum = sum(current_combination)
+            if total_sum <= max_degree
+                # Check individual dimension constraints
+                if all(x -> x <= d_marginals, current_combination)
+                    # Check interaction constraint (sum of any two non-zero elements)
+                    valid = true
+                    for i in 1:num_dimensions-1
+                        for j in i+1:num_dimensions
+                            if current_combination[i] != 0 && current_combination[j] != 0
+                                if current_combination[i] + current_combination[j] > d_interactions
+                                    valid = false
+                                    break
+                                end
+                            end
+                        end
+                        if !valid
+                            break
+                        end
+                    end
+                    if valid
+                        push!(valid_rows, copy(current_combination))
+                    end
+                end
+            end
+        else
+            for i in 0:max_degree
+                current_combination[current_index] = i
+                generate_combinations(current_combination, current_index + 1)
+            end
+        end
+    end
+
+    # Start generating combinations
+    generate_combinations(zeros(Int, num_dimensions), 1)
+
+    # Convert the collected valid rows to a matrix
+    return hcat(valid_rows...)'
 end
 
 # ╔═╡ d4cbe83e-6b8a-4192-9ac8-a906904709d8
@@ -46,31 +121,6 @@ end
 		indices = ApplyArray(hcat, front, indices)
 		if qnorm != 1.0
 			idx_to_keep = vec(sum((indices ./ (max_degree + 1)) .^ qnorm, dims = 2) .^ (1.0 / qnorm) .<= 1.0)
-			indices = indices[idx_to_keep, :]
-			# @info "Q-norm removed $(length(idx_to_keep)-sum(idx_to_keep)) terms"
-		else
-			indices = indices[vec(sum(indices; dims = 2)).<=max_degree, :]
-		end
-	end
-	indices = sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
-	reverse_columns!(indices)
-	return indices
-end
-
-
-# ╔═╡ 2916125e-322c-4be0-8738-1ca0ecf6511d
-@stable function aPCE_MultivariatePolynomialDegrees2(num_dimensions::T, max_degree::T; qnorm = 1.0)::Matrix{T} where {T <: Integer}
-	# Initialize the indices for the first parameter
-	range_ = 0:max_degree |> collect
-	indices = reshape(range_, :, 1)  # Make it a column vector
-	@inbounds for di in 1:num_dimensions-1
-		indices = repeat(indices, inner = (max_degree + 1, 1))
-		front = repeat(range_, outer = div(lastindex(indices), (max_degree + 1)) ÷ di)
-		indices = hcat(front,indices)#ApplyArray(hcat, front, indices)
-		if qnorm != 1.0
-			# idx_to_keep = vec(1.0./ (max_degree + 1) .*sum(( (max_degree .-indices)) .^ qnorm, dims = 2) .^ (1.0 / qnorm) .<= 1.0)
-				# idx_to_keep = vec(1.0./ (max_degree + 1) .*sum(( (indices)) .^ qnorm, dims = 2) .^ (1.0 / qnorm) .>= 1.0)
-			idx_to_keep = filter_indices_sparsity(indices,max_degree,qnorm)
 			indices = indices[idx_to_keep, :]
 			# @info "Q-norm removed $(length(idx_to_keep)-sum(idx_to_keep)) terms"
 		else
@@ -147,6 +197,7 @@ function ex_info(MVPD)
     var_order = var_orders(MVPD)
     mean_of_vars = mean(var_order)
     var_of_vars = var(var_order)
+    @info "ALL:" MVPD
     
     # Log the metrics
     @info "Same order:" same_order_count
@@ -174,11 +225,11 @@ function ex_info(MVPD)
 end
 
 # ╔═╡ 2c8c87e0-030a-47f6-ae8f-65544af7cdc3
-function compare(f, qnorm1=0.1, dim=2, maxorder=6)
+function compare(f, qnorm1=0.1, dim=3, maxorder=6)
     @info "Comparison between qnorm=1 and " qnorm1
-    MVPD1 = f(dim, maxorder; qnorm = qnorm1)
+    MVPD1 = f(dim, maxorder,3,3)
     display("---------------------------------------------------")
-    MVPD2 = f(dim, maxorder; qnorm = 1.0)
+    MVPD2 = f(dim, maxorder,3,3)
     display("----------Intersect-------------------------------")
     s1 = Set([eachrow(MVPD1)]...)
     s2 = Set([eachrow(MVPD2)]...)
@@ -256,7 +307,7 @@ let
 	       visual(Scatter)
 	
 	# Display the plot
-	draw(plt1, axis=(title="Same Order Values by qnorm",))
+	draw(plt1, axis=(title="Varmean",))
 end
 
 # ╔═╡ 60e2ea48-394f-4627-9d93-d91926a46d96
@@ -323,26 +374,242 @@ begin
 	A
 end
 
+# ╔═╡ fb944e30-8d43-4b39-aa86-78afe4b2395c
+compare(aPCE_MultivariatePolynomialDegrees,0.10,3,3)
+
+# ╔═╡ 4c335605-04ca-48f6-8f65-8b9e923ab50f
+@stable function degrees_by_construction(num_dimensions::Int64=3, max_degree=3, d_marginals=3, d_interactions=2)::Matrix{Int64}
+	# Initialize the indices for the first parameter
+	range_ = 0:max_degree |> collect
+	indices = reshape(range_, :, 1)  # Make it a column vector
+	@inbounds for di in 1:num_dimensions-1
+		indices = repeat(indices, inner = (max_degree + 1, 1))
+		front = repeat(range_, outer = div(lastindex(indices), (max_degree + 1)) ÷ di)
+		indices = hcat(front,indices)#ApplyArray(hcat, front, indices)
+		indices = indices[vec(sum(indices; dims = 2)).<=max_degree, :]
+	end
+	indices = sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
+	reverse_columns!(indices)
+	return indices' 
+end
+
+
+# ╔═╡ a87d9f5d-615f-4a9a-9f53-6059a0dba5ec
+degrees_by_construction()
+
+# ╔═╡ fa2c2be1-1582-4f61-b99f-912b7364f121
+# degrees_by_construction2(3,3,3,2) # num_dim, max_deg, d_m, d_i
+
+# ╔═╡ 63302d47-6d4d-4ae4-84e0-925327344aaa
+@stable function degrees_by_construction3(num_dimensions::Int64=3, max_degree::Int64=3, d_marginals::Int64=3, d_interactions::Int64=2)::Matrix{Int64}
+    valid_rows = []
+
+    # Inline function to check if the sum of the current combination is within max_degree
+    sum_within_limit(combination) = sum(combination) <= max_degree
+
+    # Inline function to check if all elements are within d_marginals
+    elements_within_marginals(combination) = all(x -> x <= d_marginals, combination)
+
+    # Inline function to check the interaction constraint
+     function interactions_within_limit(combination)
+        non_zero_indices = findall(x -> x != 0, combination)
+        for i in 1:length(non_zero_indices)-1
+            for j in i+1:length(non_zero_indices)
+                @views if (combination[non_zero_indices[i]] + combination[non_zero_indices[j]] > d_interactions) ||
+                   (sum(combination[:,i]) >  d_interactions)
+                    return false
+                end
+            end
+        end
+        return true
+    end
+
+    # Recursive function to generate combinations
+      function generate_combinations!(valid_rows, current_combination::Vector{Int}, current_index::Int)
+        if current_index > num_dimensions
+            if sum_within_limit(current_combination) && 
+               elements_within_marginals(current_combination) &&
+               interactions_within_limit(current_combination)
+                push!(valid_rows, copy(current_combination))
+            end
+        else
+            for i in 0:max_degree
+                current_combination[current_index] = i
+                generate_combinations!(valid_rows, current_combination, current_index + 1)
+            end
+        end
+    end
+
+    # Start generating combinations
+    generate_combinations!(valid_rows, zeros(Int, num_dimensions), 1)
+    # Convert the collected valid rows to a matrix
+    indices = hcat(valid_rows...)'
+    indices = sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
+    
+    return indices
+end
+
+# ╔═╡ 42cc9d2e-a897-4eb6-88f2-db0b4c215870
+@timev degrees_by_construction3(3,3,3,2)
+
+# ╔═╡ 18319398-cb37-483b-826b-64e3e977af6c
+@stable function degrees_by_construction6(num_dimensions::T=3, max_degree::T=3, d_marginals::T=3, d_interactions::T=2)::Matrix{T} where {T<:Integer}
+	# Initialize the indices for the first parameter
+	function we_want_to_keep(current_combination)
+            if sum(current_combination) <= max_degree
+                zeroinds = iszero.(current_combination)
+                szeroinds = sum(zeroinds)
+                if szeroinds == (num_dimensions - 1)
+                    if current_combination[.!zeroinds][1] <= d_marginals
+                        return true
+                    end
+                elseif (num_dimensions - szeroinds) >= 1
+                    if sum(current_combination[.!zeroinds]) <= d_interactions
+                        return true
+                    end
+                end
+            end
+		return false
+	end
+	range_ = 0:max_degree |> collect
+	indices = reshape(range_, :, 1)  # Make it a column vector
+	@inbounds for di in 1:num_dimensions-1
+		indices = repeat(indices, inner = (max_degree + 1, 1))
+		front = repeat(range_, outer = div(lastindex(indices), (max_degree + 1)) ÷ di)
+		indices = ApplyArray(hcat, front, indices)
+		indices = indices[vec(sum(indices; dims = 2)).<=max_degree, :]
+	end
+	# NOw kill the ones we don't want:
+	# indices = indices[[we_want_to_keep(i) for i in eachrow(indices)],:]
+	keep_mask = map(we_want_to_keep, eachrow(indices))
+    indices = indices[keep_mask, :]
+	indices = vcat(indices,zeros(T,num_dimensions)')
+	indices = sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
+	# reverse_columns!(indices)
+	return indices
+end
+
+
+# ╔═╡ a070f9a8-5230-4621-8bb4-477030bca0bc
+@timev degrees_by_construction6(23,3,2,2)
+
+# ╔═╡ 16b8be50-de5d-4187-bcfc-b1843850cbed
+2600*23
+
+# ╔═╡ 152b39b8-fd5e-4d66-836b-6355353e307f
+@stable function degrees_by_construction4(num_dimensions::Int64=3, max_degree::Int64=3, d_marginals::Int64=3, d_interactions::Int64=2)::Matrix{Int64}
+   range_ = 0:max_degree |> collect
+	indices = reshape(range_, :, 1)  # Make it a column vector
+	for di in 1:num_dimensions-1
+		indices = repeat(indices, inner = (max_degree + 1, 1))
+		front = repeat(range_, outer = div(lastindex(indices), (max_degree + 1)) ÷ di)
+		indices = ApplyArray(hcat, front, indices)
+        # First throw out too big combinations
+		dimsum = vec(sum(indices; dims = 2))
+		throw_out = dimsum_smaller_max = dimsum .<= max_degree
+		indices = indices[throw_out,:]
+    end
+	keeplist = ones(Bool,size(indices,1))
+	for i in axes(indices,1) # Iterate rows
+		## Remove marginals -- all except for one dimension is zero
+		zeroinds = iszero.(@views indices[i,:])
+		szeroinds = sum(zeroinds)
+		# Kick the ones where we have only one dimension but are greater than the d_marginal..
+		if szeroinds == (num_dimensions-1)
+			if @views indices[i,.!zeroinds][1] > d_marginals
+				keeplist[i] = false
+			end
+		elseif (num_dimensions-szeroinds) >=1 
+			if sum(@views indices[i,:]) > d_interactions
+				keeplist[i] = false
+			end
+		end
+	end
+	@info keeplist
+	indices = indices[keeplist,:]
+    indices = Matrix{Int64}(sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end])
+    # reverse_columns!(indices)
+    return indices
+end
+
+# ╔═╡ c8e69472-aa78-42b3-89c2-7954cdb255ab
+@timev degrees_by_construction4(23,3,3,2)
+
+# ╔═╡ eb274067-4989-4ca8-bffd-ac068a07add1
+# @timev degrees_by_construction5(23,3,3,2)
+
+# ╔═╡ 0302d1c1-9c1a-4ed7-9599-73bfa8f51d35
+@timev aPCE_MultivariatePolynomialDegrees(23,3)
+
+# ╔═╡ 14d33e34-0126-4fee-ab0d-b96138a7200c
+function degrees_by_construction5(num_dimensions::T=3, max_degree::T=3, d_marginals::T=3, d_interactions::T=2)::SparseMatrixCSC{T, T} where {T<:Integer}
+    indices = [@SVector zeros(T,num_dimensions)]
+    # Define a recursive function to generate combinations
+
+	# zeroinds = zeros(Bool,num_dimensions)
+	
+    @polly @inline function generate_combinations!(indices, 
+                                    current_combination, 
+                                    current_dim::T, 
+                                    num_dimensions::T, 
+                                    max_degree::T, 
+                                    d_marginals::T, 
+                                    d_interactions::T) where {T<:Integer}
+      if current_dim > num_dimensions
+            if sum(current_combination) <= max_degree
+                zeroinds = iszero.(current_combination)
+                szeroinds = sum(zeroinds)
+                if szeroinds == (num_dimensions - 1)
+                    if current_combination[.!zeroinds][1] <= d_marginals
+                        push!(indices, current_combination)
+                    end
+                elseif (num_dimensions - szeroinds) >= 1
+                    if sum(current_combination[.!zeroinds]) <= d_interactions
+                        push!(indices, current_combination)
+                    end
+                end
+            end
+        else
+            for val in 0:max_degree
+                current_combination[current_dim] = val
+                generate_combinations!(indices, current_combination, current_dim + 1, num_dimensions, max_degree, d_marginals, d_interactions)
+            end
+        end
+    end
+    # Initialize the first combination and start recursion
+    initial_combination = sparse(zeros(Int64, num_dimensions))
+    generate_combinations!(indices, initial_combination, 1, num_dimensions, max_degree, d_marginals, d_interactions)
+    return reduce(hcat,indices)'
+end
+
+
+# ╔═╡ 8f502bc1-ff7c-412b-917c-dc8fadf29249
+@timev degrees_by_construction5(12,3,3,2)
+
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
 AlgebraOfGraphics = "cbdf2221-f076-402e-a563-3d30da359d67"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+Combinatorics = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 DispatchDoctor = "8d63f2c5-f18a-4cf2-ba9d-b3f60fc568c8"
 LazyArrays = "5078a376-72f3-5289-bfd5-ec5146d43c02"
 PrettyTables = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"
 
 [compat]
 AlgebraOfGraphics = "~0.6.19"
 CairoMakie = "~0.11.11"
+Combinatorics = "~1.0.2"
 DataFrames = "~1.6.1"
 DispatchDoctor = "~0.4.4"
 LazyArrays = "~2.0.4"
 PrettyTables = "~2.3.2"
+StaticArrays = "~1.9.4"
 StatsBase = "~0.34.3"
 UnicodePlots = "~3.6.4"
 """
@@ -353,7 +620,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.10.4"
 manifest_format = "2.0"
-project_hash = "e38265207998b0acc2b5e8880c98d6f60763c7e9"
+project_hash = "4846974fe8146d15ea4935b58328d6a241c8bbfd"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -524,6 +791,11 @@ deps = ["ColorTypes", "FixedPointNumbers", "Reexport"]
 git-tree-sha1 = "362a287c3aa50601b0bc359053d5c2468f0e7ce0"
 uuid = "5ae59095-9a9b-59fe-a467-6f913c188581"
 version = "0.12.11"
+
+[[deps.Combinatorics]]
+git-tree-sha1 = "08c8b6831dc00bfea825826be0bc8336fc369860"
+uuid = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
+version = "1.0.2"
 
 [[deps.Compat]]
 deps = ["TOML", "UUIDs"]
@@ -1900,6 +2172,7 @@ version = "3.5.0+0"
 # ╠═393c8e70-23fe-11ef-1321-3d8ad40e425c
 # ╠═d0c6cc89-3f25-417b-bab2-3239466472be
 # ╠═2916125e-322c-4be0-8738-1ca0ecf6511d
+# ╠═18169379-1ca3-4dff-af95-283e23b3aac0
 # ╟─d4cbe83e-6b8a-4192-9ac8-a906904709d8
 # ╠═6042fe2e-9d5b-4a15-a5b5-e0ca9ba9b644
 # ╠═8fa0aa85-1b70-425e-bbf0-5399ea1b7ab0
@@ -1920,5 +2193,20 @@ version = "3.5.0+0"
 # ╠═93b0c931-107f-4328-81b5-8f7466908853
 # ╠═6869b874-732f-43cf-a546-2922303709da
 # ╠═ff2031e8-c818-48d1-8f63-768766e7b1bc
+# ╠═fb944e30-8d43-4b39-aa86-78afe4b2395c
+# ╠═4c335605-04ca-48f6-8f65-8b9e923ab50f
+# ╠═a87d9f5d-615f-4a9a-9f53-6059a0dba5ec
+# ╠═fa2c2be1-1582-4f61-b99f-912b7364f121
+# ╠═42cc9d2e-a897-4eb6-88f2-db0b4c215870
+# ╠═63302d47-6d4d-4ae4-84e0-925327344aaa
+# ╠═18319398-cb37-483b-826b-64e3e977af6c
+# ╠═a070f9a8-5230-4621-8bb4-477030bca0bc
+# ╠═16b8be50-de5d-4187-bcfc-b1843850cbed
+# ╠═c8e69472-aa78-42b3-89c2-7954cdb255ab
+# ╠═152b39b8-fd5e-4d66-836b-6355353e307f
+# ╠═eb274067-4989-4ca8-bffd-ac068a07add1
+# ╠═8f502bc1-ff7c-412b-917c-dc8fadf29249
+# ╠═0302d1c1-9c1a-4ed7-9599-73bfa8f51d35
+# ╠═14d33e34-0126-4fee-ab0d-b96138a7200c
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
