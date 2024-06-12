@@ -51,56 +51,51 @@ function run()
 	ps = []
 	# degress = 1:1:5
 
-	FT = Float64
+	FT = Float32
 
 	@timeit to "lod_data" begin
 		#  Loading Input distributions, Training Data and Validation Data 
 		file = matread(datadir("gw_training_data.mat"))
 		print(keys(file))
 		# Extracting the variables
-		Input_distribution = file["Input_distribution"][:, :] #|> SMatrix{n, m} # Take the full basis!!!
 		# @info size(file["Xtr"])
 		n = 1000
 		m = 23
 		m_out = 15
 		rng = Xoshiro(42)
+		Input_distribution = file["Input_distribution"][:, 1:m] .|> FT #|> SMatrix{n, m} # Take the full basis!!!
 		@info "" file["TrainingOutput"]
 		# itrain,itest = partitionTrainTest(indall;at= 0.75, rng )
-		TrainingInput = file["TrainingInput"][1:n, 1:m] #|> SMatrix{n, m}
+		TrainingInput = file["TrainingInput"][1:n, 1:m] .|> FT #|> SMatrix{n, m}
 		@info size(TrainingInput)
-		TrainingOutput = file["TrainingOutput"][1:n, 1:m_out] #|> SMatrix{n, m_out}
+		TrainingOutput = file["TrainingOutput"][:, 1:m_out] .|> FT #|> SMatrix{n, m_out}
 		@info "" size(TrainingInput)
-		ValidationInput = file["ValidationInput"][1:n, 1:m] #|> SMatrix{n, m}
-		ValidationOutput = file["ValidationOutput"][1:n, 1:m_out] #|> SMatrix{n, m_out}
+		ValidationInput = file["ValidationInput"][1:n, 1:m] .|> FT #|> SMatrix{n, m}
+		ValidationOutput = file["ValidationOutput"][:, 1:m_out] .|> FT#|> SMatrix{n, m_out}
 	end
-
-	degree = 3
+	degree = 4
+	s_marginals = FT(0.2)
+	s_interactions = FT(0.5)
 	@info "" size(TrainingOutput, 2)
-	apc_instance = @timeit to "aPC_instance" APCE.aPCE(Input_distribution, degree; outdim = size(TrainingOutput, 2), OrthonormalRepresentation = true, qnorm = 0.2, normalize_data = true)
+	apc_instance = @timeit to "aPC_instance" APCE.aPCE(Input_distribution, degree; outdim = size(TrainingOutput, 2), OrthonormalRepresentation = true, s_marginals = s_marginals, s_interactions = s_interactions, normalize_data = true)
+	@warn "" apc_instance.NumberOfTerms apc_instance.NumberOfTerms / m_out
 	@assert apc_instance.NumberOfTerms < 5000 "Too many coefficients: $(apc_instance.NumberOfTerms)"
-
 	# TrainingInput = KMeansCollocation(apc_instance)
 	# @debug "" TrainingInput
 	# display(	@report_call GaussianCollocation(apc_instance; strategy = :PCM) )
 	# @descend GaussianCollocation(apc_instance; strategy = :PCM)
 	# TrainingInput = @timeit to "GaussianCollocation" GaussianCollocation(apc_instance; strategy = :PCM)
 	# TrainingInput = @timeit to "KMeansCollocation" KMeansCollocation(apc_instance)
-	@info "" size(TrainingInput)
-	@timeit to "training" train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion = true, reg_mode = 3)
-
+	@timeit to "training" train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion = true, reg_order = 0)
 	PredictionOutput = @timeit to "prediction" predict(apc_instance, TrainingInput)
 	ValidationPredictionOutput = @timeit to "prediction" predict(apc_instance, ValidationInput)
-
 	# Back to regular matrices:
 	# TrainingOutput = Matrix(TrainingOutput)
 	# ValidationOutput = Matrix(ValidationOutput)
 	# PredictionOutput = Matrix(PredictionOutput)
-
 	uq = UQ(apc_instance)
 	data = ["Mean" uq.OutputMean[1] mean(ValidationOutput); "Var" uq.OutputVar[1] var(ValidationOutput)]
-
 	headers = ["Type", "aPCE", "Data"]
-
 	# Display the table
 	pretty_table(data; header = headers)
 
@@ -140,7 +135,7 @@ function run()
 	fig_path = normpath(plotsdir("maria_test2"))
 	@info fig_path
 	mkpath(fig_path)
-	# save(joinpath(fig_path,"training_validation_performance.png"), fig)
+	save(joinpath(fig_path, "training_validation_performance_$(degree)_$(s_marginals)_$(s_interactions).png"), fig)
 
 	display(fig)
 

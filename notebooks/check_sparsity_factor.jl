@@ -15,7 +15,10 @@ begin
 	using PrettyTables
 	using AlgebraOfGraphics
 	using CairoMakie
+	using Combinatorics
+	using StaticArrays
 end
+
 
 # ╔═╡ d0c6cc89-3f25-417b-bab2-3239466472be
 function filter_indices_sparsity(indices, max_degree, qnorm) 
@@ -394,8 +397,11 @@ end
 # ╔═╡ a87d9f5d-615f-4a9a-9f53-6059a0dba5ec
 degrees_by_construction()
 
-# ╔═╡ 398cc168-d2a3-449e-b496-3336cf0b00a5
-@stable function degrees_by_construction2(num_dimensions::Int64=3, max_degree::Int64=3, d_marginals::Int64=3, d_interactions::Int64=2)::Matrix{Int64}
+# ╔═╡ fa2c2be1-1582-4f61-b99f-912b7364f121
+# degrees_by_construction2(3,3,3,2) # num_dim, max_deg, d_m, d_i
+
+# ╔═╡ 63302d47-6d4d-4ae4-84e0-925327344aaa
+@stable function degrees_by_construction3(num_dimensions::Int64=3, max_degree::Int64=3, d_marginals::Int64=3, d_interactions::Int64=2)::Matrix{Int64}
     valid_rows = []
 
     # Inline function to check if the sum of the current combination is within max_degree
@@ -405,7 +411,7 @@ degrees_by_construction()
     elements_within_marginals(combination) = all(x -> x <= d_marginals, combination)
 
     # Inline function to check the interaction constraint
-    @inbounds function interactions_within_limit(combination)
+     function interactions_within_limit(combination)
         non_zero_indices = findall(x -> x != 0, combination)
         for i in 1:length(non_zero_indices)-1
             for j in i+1:length(non_zero_indices)
@@ -419,7 +425,7 @@ degrees_by_construction()
     end
 
     # Recursive function to generate combinations
-     @inbounds function generate_combinations!(valid_rows, current_combination::Vector{Int}, current_index::Int)
+      function generate_combinations!(valid_rows, current_combination::Vector{Int}, current_index::Int)
         if current_index > num_dimensions
             if sum_within_limit(current_combination) && 
                elements_within_marginals(current_combination) &&
@@ -443,29 +449,167 @@ degrees_by_construction()
     return indices
 end
 
-# ╔═╡ fa2c2be1-1582-4f61-b99f-912b7364f121
-degrees_by_construction2(3,3,3,2) # num_dim, max_deg, d_m, d_i
+# ╔═╡ 42cc9d2e-a897-4eb6-88f2-db0b4c215870
+@timev degrees_by_construction3(3,3,3,2)
+
+# ╔═╡ 18319398-cb37-483b-826b-64e3e977af6c
+@stable function degrees_by_construction6(num_dimensions::T=3, max_degree::T=3, d_marginals::T=3, d_interactions::T=2)::Matrix{T} where {T<:Integer}
+	# Initialize the indices for the first parameter
+	function we_want_to_keep(current_combination)
+            if sum(current_combination) <= max_degree
+                zeroinds = iszero.(current_combination)
+                szeroinds = sum(zeroinds)
+                if szeroinds == (num_dimensions - 1)
+                    if current_combination[.!zeroinds][1] <= d_marginals
+                        return true
+                    end
+                elseif (num_dimensions - szeroinds) >= 1
+                    if sum(current_combination[.!zeroinds]) <= d_interactions
+                        return true
+                    end
+                end
+            end
+		return false
+	end
+	range_ = 0:max_degree |> collect
+	indices = reshape(range_, :, 1)  # Make it a column vector
+	@inbounds for di in 1:num_dimensions-1
+		indices = repeat(indices, inner = (max_degree + 1, 1))
+		front = repeat(range_, outer = div(lastindex(indices), (max_degree + 1)) ÷ di)
+		indices = ApplyArray(hcat, front, indices)
+		indices = indices[vec(sum(indices; dims = 2)).<=max_degree, :]
+	end
+	# NOw kill the ones we don't want:
+	# indices = indices[[we_want_to_keep(i) for i in eachrow(indices)],:]
+	keep_mask = map(we_want_to_keep, eachrow(indices))
+    indices = indices[keep_mask, :]
+	indices = vcat(indices,zeros(T,num_dimensions)')
+	indices = sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
+	# reverse_columns!(indices)
+	return indices
+end
+
+
+# ╔═╡ a070f9a8-5230-4621-8bb4-477030bca0bc
+@timev degrees_by_construction6(23,3,2,2)
+
+# ╔═╡ 16b8be50-de5d-4187-bcfc-b1843850cbed
+2600*23
+
+# ╔═╡ 152b39b8-fd5e-4d66-836b-6355353e307f
+@stable function degrees_by_construction4(num_dimensions::Int64=3, max_degree::Int64=3, d_marginals::Int64=3, d_interactions::Int64=2)::Matrix{Int64}
+   range_ = 0:max_degree |> collect
+	indices = reshape(range_, :, 1)  # Make it a column vector
+	for di in 1:num_dimensions-1
+		indices = repeat(indices, inner = (max_degree + 1, 1))
+		front = repeat(range_, outer = div(lastindex(indices), (max_degree + 1)) ÷ di)
+		indices = ApplyArray(hcat, front, indices)
+        # First throw out too big combinations
+		dimsum = vec(sum(indices; dims = 2))
+		throw_out = dimsum_smaller_max = dimsum .<= max_degree
+		indices = indices[throw_out,:]
+    end
+	keeplist = ones(Bool,size(indices,1))
+	for i in axes(indices,1) # Iterate rows
+		## Remove marginals -- all except for one dimension is zero
+		zeroinds = iszero.(@views indices[i,:])
+		szeroinds = sum(zeroinds)
+		# Kick the ones where we have only one dimension but are greater than the d_marginal..
+		if szeroinds == (num_dimensions-1)
+			if @views indices[i,.!zeroinds][1] > d_marginals
+				keeplist[i] = false
+			end
+		elseif (num_dimensions-szeroinds) >=1 
+			if sum(@views indices[i,:]) > d_interactions
+				keeplist[i] = false
+			end
+		end
+	end
+	@info keeplist
+	indices = indices[keeplist,:]
+    indices = Matrix{Int64}(sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end])
+    # reverse_columns!(indices)
+    return indices
+end
+
+# ╔═╡ c8e69472-aa78-42b3-89c2-7954cdb255ab
+@timev degrees_by_construction4(23,3,3,2)
+
+# ╔═╡ eb274067-4989-4ca8-bffd-ac068a07add1
+# @timev degrees_by_construction5(23,3,3,2)
+
+# ╔═╡ 0302d1c1-9c1a-4ed7-9599-73bfa8f51d35
+@timev aPCE_MultivariatePolynomialDegrees(23,3)
+
+# ╔═╡ 14d33e34-0126-4fee-ab0d-b96138a7200c
+function degrees_by_construction5(num_dimensions::T=3, max_degree::T=3, d_marginals::T=3, d_interactions::T=2)::SparseMatrixCSC{T, T} where {T<:Integer}
+    indices = [@SVector zeros(T,num_dimensions)]
+    # Define a recursive function to generate combinations
+
+	# zeroinds = zeros(Bool,num_dimensions)
+	
+    @polly @inline function generate_combinations!(indices, 
+                                    current_combination, 
+                                    current_dim::T, 
+                                    num_dimensions::T, 
+                                    max_degree::T, 
+                                    d_marginals::T, 
+                                    d_interactions::T) where {T<:Integer}
+      if current_dim > num_dimensions
+            if sum(current_combination) <= max_degree
+                zeroinds = iszero.(current_combination)
+                szeroinds = sum(zeroinds)
+                if szeroinds == (num_dimensions - 1)
+                    if current_combination[.!zeroinds][1] <= d_marginals
+                        push!(indices, current_combination)
+                    end
+                elseif (num_dimensions - szeroinds) >= 1
+                    if sum(current_combination[.!zeroinds]) <= d_interactions
+                        push!(indices, current_combination)
+                    end
+                end
+            end
+        else
+            for val in 0:max_degree
+                current_combination[current_dim] = val
+                generate_combinations!(indices, current_combination, current_dim + 1, num_dimensions, max_degree, d_marginals, d_interactions)
+            end
+        end
+    end
+    # Initialize the first combination and start recursion
+    initial_combination = sparse(zeros(Int64, num_dimensions))
+    generate_combinations!(indices, initial_combination, 1, num_dimensions, max_degree, d_marginals, d_interactions)
+    return reduce(hcat,indices)'
+end
+
+
+# ╔═╡ 8f502bc1-ff7c-412b-917c-dc8fadf29249
+@timev degrees_by_construction5(12,3,3,2)
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
 AlgebraOfGraphics = "cbdf2221-f076-402e-a563-3d30da359d67"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+Combinatorics = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 DispatchDoctor = "8d63f2c5-f18a-4cf2-ba9d-b3f60fc568c8"
 LazyArrays = "5078a376-72f3-5289-bfd5-ec5146d43c02"
 PrettyTables = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"
 
 [compat]
 AlgebraOfGraphics = "~0.6.19"
 CairoMakie = "~0.11.11"
+Combinatorics = "~1.0.2"
 DataFrames = "~1.6.1"
 DispatchDoctor = "~0.4.4"
 LazyArrays = "~2.0.4"
 PrettyTables = "~2.3.2"
+StaticArrays = "~1.9.4"
 StatsBase = "~0.34.3"
 UnicodePlots = "~3.6.4"
 """
@@ -476,7 +620,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.10.4"
 manifest_format = "2.0"
-project_hash = "e38265207998b0acc2b5e8880c98d6f60763c7e9"
+project_hash = "4846974fe8146d15ea4935b58328d6a241c8bbfd"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -647,6 +791,11 @@ deps = ["ColorTypes", "FixedPointNumbers", "Reexport"]
 git-tree-sha1 = "362a287c3aa50601b0bc359053d5c2468f0e7ce0"
 uuid = "5ae59095-9a9b-59fe-a467-6f913c188581"
 version = "0.12.11"
+
+[[deps.Combinatorics]]
+git-tree-sha1 = "08c8b6831dc00bfea825826be0bc8336fc369860"
+uuid = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
+version = "1.0.2"
 
 [[deps.Compat]]
 deps = ["TOML", "UUIDs"]
@@ -2048,6 +2197,16 @@ version = "3.5.0+0"
 # ╠═4c335605-04ca-48f6-8f65-8b9e923ab50f
 # ╠═a87d9f5d-615f-4a9a-9f53-6059a0dba5ec
 # ╠═fa2c2be1-1582-4f61-b99f-912b7364f121
-# ╠═398cc168-d2a3-449e-b496-3336cf0b00a5
+# ╠═42cc9d2e-a897-4eb6-88f2-db0b4c215870
+# ╠═63302d47-6d4d-4ae4-84e0-925327344aaa
+# ╠═18319398-cb37-483b-826b-64e3e977af6c
+# ╠═a070f9a8-5230-4621-8bb4-477030bca0bc
+# ╠═16b8be50-de5d-4187-bcfc-b1843850cbed
+# ╠═c8e69472-aa78-42b3-89c2-7954cdb255ab
+# ╠═152b39b8-fd5e-4d66-836b-6355353e307f
+# ╠═eb274067-4989-4ca8-bffd-ac068a07add1
+# ╠═8f502bc1-ff7c-412b-917c-dc8fadf29249
+# ╠═0302d1c1-9c1a-4ed7-9599-73bfa8f51d35
+# ╠═14d33e34-0126-4fee-ab0d-b96138a7200c
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
