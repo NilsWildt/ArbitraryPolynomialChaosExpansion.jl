@@ -123,7 +123,7 @@ end
 
 
 
-@stable function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion = :true, reg_mode = 3)
+@stable function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion = :true, reg_order = 3)
 	@info "=> aPCE Toolbox: Training Arbitrary Polynomial Chaos ..."
 	T = eltype(TrainingInput)
 	@info aPCE
@@ -163,7 +163,7 @@ end
 	
 		for i in axes(y_rhs, 2)
 			@info "Bayesian regularization for axis $i"
-			aPCE.ExpansionCoefficients[:, i] .= invert(Psi, y_rhs[:, i], Lₖx₀(reg_mode, view(x₀, :, i)); alg = :gcv_svd
+			aPCE.ExpansionCoefficients[:, i] .= invert(Psi, y_rhs[:, i], Lₖx₀(reg_order, view(x₀, :, i)); alg = :gcv_svd
 			, method = LBFGS(linesearch = LineSearches.BackTracking()))
 		end
 	end

@@ -61,7 +61,7 @@ function run()
 		# Extracting the variables
 		# @info size(file["Xtr"])
 		n = 1000
-		m = 23
+		m = 13
 		m_out = 15
 		rng = Xoshiro(42)
 		Input_distribution = file["Input_distribution"][:, 1:m] .|> FT #|> SMatrix{n, m} # Take the full basis!!!
@@ -80,8 +80,8 @@ function run()
 	@info "" size(TrainingOutput, 2)
 
 
-	function single_opt_runner(degree,s_marginals,s_interactions,bayesian_inversion)
-		apc_instance = @timeit to "aPC_instance" APCE.aPCE(Input_distribution, degree; outdim = size(TrainingOutput, 2), OrthonormalRepresentation = true, s_marginals = s_marginals, s_interactions = s_interactions, normalize_data = true)
+	function single_opt_runner(degree,s_marginals,s_interactions,bayesian_inversion,FT)
+		apc_instance = APCE.aPCE(Input_distribution.|> FT, degree; outdim = size(TrainingOutput, 2), OrthonormalRepresentation = true, s_marginals = s_marginals |> FT, s_interactions = s_interactions|> FT, normalize_data = true)
 		@warn "" apc_instance.NumberOfTerms apc_instance.NumberOfTerms / m_out
 		# @assert apc_instance.NumberOfTerms < 5000 "Too many coefficients: $(apc_instance.NumberOfTerms)"
 		# TrainingInput = KMeansCollocation(apc_instance)
@@ -90,9 +90,9 @@ function run()
 		# @descend GaussianCollocation(apc_instance; strategy = :PCM)
 		# TrainingInput = @timeit to "GaussianCollocation" GaussianCollocation(apc_instance; strategy = :PCM)
 		# TrainingInput = @timeit to "KMeansCollocation" KMeansCollocation(apc_instance)
-		@timeit to "training" train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion = bayesian_inversion, reg_mode = 3)
-		PredictionOutput = @timeit to "prediction" predict(apc_instance, TrainingInput)
-		ValidationPredictionOutput = @timeit to "prediction" predict(apc_instance, ValidationInput)
+		@timeit to "training" train!(apc_instance, TrainingInput.|> FT, TrainingOutput.|> FT; bayesian_inversion = bayesian_inversion, reg_order = 0)
+		PredictionOutput = @timeit to "prediction" predict(apc_instance, TrainingInput.|> FT)
+		ValidationPredictionOutput = @timeit to "prediction" predict(apc_instance, ValidationInput.|> FT)
 		uq = UQ(apc_instance)
 		data = ["Mean" mean(ValidationPredictionOutput) mean(ValidationOutput); "Var" var(ValidationPredictionOutput) var(ValidationOutput)]
 		headers = ["Type", "aPCE", "Data"]
@@ -135,7 +135,7 @@ function run()
 		fig_path = normpath(plotsdir("maria_test2"))
 		@info fig_path
 		mkpath(fig_path)
-		save(joinpath(fig_path, "training_validation_performance_$(degree)_$(s_marginals)_$(s_interactions).png"), fig)
+		save(joinpath(fig_path, "training_validation_performance_$(degree)_$(s_marginals)_$(s_interactions)_($bayesian_inversion)_$(FT).png"), fig)
 	
 		display(fig)
 	
@@ -147,12 +147,17 @@ function run()
 	# Main macro. The first argument to the for loop is always interpreted as the number of iterations (except for hyperband optimizer)
 		ho = @hyperopt for i=500,
 			sampler = RandomSampler(), # This is default if none provided
+			FT = [Float16,Float32,Float64],
 			degree = [1,2,3],
-			s_marginals = 0.0:0.1:1.0 |> collect .|> FT,
-			s_interactions = 0.0:0.1:1.0 |> collect .|> FT,
+			s_marginals = 0.0:0.1:1.0 |> collect ,
+			s_interactions = 0.0:0.1:1.0 |> collect ,
 			bayesian_inversion=[true,false]
 		@show degree s_marginals s_interactions bayesian_inversion
-		@show single_opt_runner(degree,s_interactions,s_marginals,bayesian_inversion)
+		@timeit to "$(degree)_$(s_marginals)_$(s_interactions)_($bayesian_inversion)_$(FT)"  try
+		@show single_opt_runner(degree,s_interactions,s_marginals,bayesian_inversion,FT)
+		catch 
+			Inf
+		end
 		end
 
 display(ho)
