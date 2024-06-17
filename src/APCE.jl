@@ -22,7 +22,7 @@ include("utils.jl")
 	@compile_workload begin
 		degree = 3
 		apc_instance = aPCE(TrainingInput, degree; outdim = size(TrainingOutput, 2), OrthonormalRepresentation = true, qnorm = 0.7, normalize_data = true)
-		train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion = true, reg_mode = 3)
+		train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion = true, reg_order = 3)
 		predict(apc_instance, TrainingInput)
 		UQ(apc_instance)
 	end
