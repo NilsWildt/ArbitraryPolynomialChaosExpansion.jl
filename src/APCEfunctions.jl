@@ -24,7 +24,7 @@ using RegularizationTools
 import RegularizationTools: Lₖx₀, solve, RegularizationProblem, setupRegularizationProblem, to_general_form, to_standard_form, gcv_tr, gcv_svd, invert, Lₖ, NelderMead, LₖB, Lₖx₀B, LₖDₓ, Lₖx₀Dₓ, LₖDₓB, Lₖx₀DₓB
 using TotalLeastSquares
 using Combinatorics
-using OMEinsum
+# using OMEinsum
 # using CUDA
 # using Enzyme
 using InducingPoints
@@ -590,6 +590,13 @@ end
 	# @info "" typeof(x) typeof(coeffs) typeof(MultivariatePolynomialDegrees) typeof(OrthonormalBasis) typeof(degree) typeof(name)
 	return T.(PredictionOutput)
 end
+
+@stable function evaluate_Ψ!(PredictionOutput, x, coeffs, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name)
+	# T = eltype(coeffs)
+	Ψ = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
+	@tensoropt PredictionOutput[k, j] = Ψ[k, i] * coeffs[i, j]
+end
+
 
 @stable function evaluate_Ψ(x, coeffs, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name)
 	T = eltype(coeffs)
