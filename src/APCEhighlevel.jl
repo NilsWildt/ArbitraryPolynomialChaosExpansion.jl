@@ -15,7 +15,7 @@ mutable struct aPCE{T<:Real}
     const OrthonormalRepresentation::Bool
     const OrthonormalBasis::AbstractArray{T}
     ExpansionCoefficients::Matrix{T}
-
+    do_gauss::Bool
 
     # Constructor
     @stable function aPCE(
@@ -27,17 +27,17 @@ mutable struct aPCE{T<:Real}
         s_marginals=1.0,
         s_interactions=1.0,
         normalize_data=true,
+        do_gauss=false,
     ) where {T}
         input_dimensions = Int64(size(InputDistribution, 2))
-        @debug "" qnorm
-        MultivariatePolynomialDegrees = aPCE_MultivariatePolynomialDegrees(input_dimensions, ExpansionDegree, s_marginals, s_interactions)
-        NumberOfTerms = min(size(MultivariatePolynomialDegrees, 1), numberPolynomials(ExpansionDegree, input_dimensions))
-        if qnorm != 1.0
-            @info "qnorm reduced the number of terms from $(numberPolynomials(ExpansionDegree, input_dimensions)) to $NumberOfTerms"
+        gauss_one_order_more = 0
+        if do_gauss
+            gauss_one_order_more = 1
         end
-        OrthonormalBasis = create_basis(InputDistribution, ExpansionDegree)
+        MultivariatePolynomialDegrees = aPCE_MultivariatePolynomialDegrees(input_dimensions, ExpansionDegree + gauss_one_order_more, s_marginals, s_interactions)
+        NumberOfTerms = min(size(MultivariatePolynomialDegrees, 1), numberPolynomials(ExpansionDegree, input_dimensions))
+        OrthonormalBasis = create_basis(InputDistribution, ExpansionDegree + gauss_one_order_more; normalize_data=normalize_data)
         ExpansionCoefficients = spzeros(T, NumberOfTerms, outdim)
-
         return new{T}(
             InputDistribution,
             input_dimensions,
@@ -48,6 +48,7 @@ mutable struct aPCE{T<:Real}
             OrthonormalRepresentation,
             OrthonormalBasis,
             ExpansionCoefficients,
+            do_gauss
         )
     end
 end
@@ -67,6 +68,7 @@ import Base.show
     println(io, "Multivariate Polynomial Degrees: ", size(aPCE.MultivariatePolynomialDegrees))
     println(io, "Orthonormal Basis: Dimensions ", size(aPCE.OrthonormalBasis))
     println(io, "Expansion Coefficients: Length ", length(aPCE.ExpansionCoefficients))
+    println(io, "do_gauss ", aPCE.do_gauss)
 end
 
 
@@ -79,22 +81,24 @@ end
     return (OutputMean=OutputMean, OutputVar=OutputVar)
 end
 
+# function aPCE_PsiPolynomialMatrix(aPCE::aPCE{T}, TrainingInput::Array{S})::Array{T} where {T<:Real,S<:Real}
+#     Psi = aPCE_PsiPolynomialMatrix(TrainingInput, aPCE.MultivariatePolynomialDegrees, aPCE.OrthonormalBasis)
+#     return Psi
+# end
 
-@stable function aPCE_PsiPolynomialMatrix(aPCE::aPCE{T}, TrainingInput)::Matrix{T} where {T <: Real}
-	Psi = aPCE_PsiPolynomialMatrix(TrainingInput, aPCE.MultivariatePolynomialDegrees, aPCE.OrthonormalBasis)
-	return Psi
-end
+# function aPCE_PsiPolynomialMatrix(aPCE::aPCE{T}, TrainingInput)::T where {T<:ForwardDiff.Dual}
+#     Psi = aPCE_PsiPolynomialMatrix(TrainingInput, aPCE.MultivariatePolynomialDegrees, aPCE.OrthonormalBasis)
+#     return Psi
+# end
 
-
-
-@stable function aPCE_PsiPolynomialMatrix(aPCE::aPCE{T}, TrainingInput) where {T<:ForwardDiff.Dual}
+function aPCE_PsiPolynomialMatrix(aPCE::aPCE{T}, TrainingInput::S)::S where {T<:Real,S<:AbstractArray}
+    # @info "" aPCE typeof(TrainingInput) typeof(aPCE)
     Psi = aPCE_PsiPolynomialMatrix(TrainingInput, aPCE.MultivariatePolynomialDegrees, aPCE.OrthonormalBasis)
     return Psi
 end
 
-@stable function GaussianCollocation(aPCE::aPCE{T}; strategy=:PCM) where {T<:Real}
-		@info aPCE
-   
+function GaussianCollocation(aPCE::aPCE{T}; strategy=:PCM) where {T<:Real}
+    @info aPCE
     PointsVector = 1:aPCE.ExpansionDegree+1 |> collect
     UniqueCombinations = stack(reduce(vcat, (Iterators.product([PointsVector for _ in 1:aPCE.input_dimensions]...))))'
 
@@ -105,12 +109,12 @@ end
         TrainingInput = SortUniqueCombinations
         return Array(view(TrainingInput, :, (1:size(TrainingInput, 2))))
     elseif strategy == :PCM
-			polynomial_roots = zeros(aPCE.input_dimensions, aPCE.ExpansionDegree + 1)
-			@inbounds for d ∈ Base.oneto(Int64(aPCE.input_dimensions))
-				polynomial_basis = @views aPCE.OrthonormalBasis[:, :, d]
-				@debug "" polynomial_basis
-				polynomial_roots[d, :] = @view reinterpret(T, PolynomialRoots.roots(@views polynomial_basis[aPCE.ExpansionDegree+2, :]))[1:2:end-1]
-			end
+        polynomial_roots = zeros(aPCE.input_dimensions, aPCE.ExpansionDegree + 1)
+        @inbounds for d ∈ Base.oneto(Int64(aPCE.input_dimensions))
+            polynomial_basis = @views aPCE.OrthonormalBasis[:, :, d]
+            @debug "" polynomial_basis
+            polynomial_roots[d, :] = @view reinterpret(T, PolynomialRoots.roots(@views polynomial_basis[aPCE.ExpansionDegree+2, :]))[1:2:end-1]
+        end
         temp = abs.(polynomial_roots .- StatsBase.mean(aPCE.InputDistribution; dims=1)[:, :][1])
         temp_sort = mapslices(sortperm, temp, dims=2)
         @inbounds for i in axes(polynomial_roots, 1)
