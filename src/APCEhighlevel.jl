@@ -23,7 +23,6 @@ mutable struct aPCE{T<:Real}
         ExpansionDegree::Int64;
         outdim::Int64=1,
         OrthonormalRepresentation::Bool=true,
-        qnorm::Float64=1.0,
         s_marginals=1.0,
         s_interactions=1.0,
         normalize_data=true,
