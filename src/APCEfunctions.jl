@@ -202,7 +202,7 @@ end
 @stable function aPCE_PsiPolynomialMatrix_zygote(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis) where {T <: Real}
 	NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
 	NCpoints = size(TrainingInput, 1)
-	Psi = Zygote.Buffer(ones(eltype(TrainingInput), NumberOfTerms, NCpoints))
+	Psi = Zygote.bufferfrom(ones(eltype(TrainingInput), NumberOfTerms, NCpoints))
 	# OrthonormalBasis = T.(OrthonormalBasis)
 	# Function to evaluate polynomials for a given term and input sample
 	@inbounds for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
@@ -242,9 +242,10 @@ end
 			end
 		end
 	end
-	return copy(Psi)
+	return Psi
 end
 
+# Need this function for Orthonormal Basis is a ForwardDiff.
 @stable function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{S}) where {S, T <: Real}
 	NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
 	NCpoints = size(TrainingInput, 1)
