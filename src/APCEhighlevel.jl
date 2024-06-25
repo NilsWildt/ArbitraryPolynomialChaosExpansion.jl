@@ -97,7 +97,7 @@ function aPCE_PsiPolynomialMatrix(aPCE::aPCE{T}, TrainingInput::S)::S where {T<:
 end
 
 function GaussianCollocation(aPCE::aPCE{T}; strategy=:PCM) where {T<:Real}
-    @info aPCE
+    # @info aPCE
     PointsVector = 1:aPCE.ExpansionDegree+1 |> collect
     UniqueCombinations = stack(reduce(vcat, (Iterators.product([PointsVector for _ in 1:aPCE.input_dimensions]...))))'
 
@@ -135,7 +135,7 @@ end
 @stable function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion=:true, reg_order=3)
     @info "=> aPCE Toolbox: Training Arbitrary Polynomial Chaos ..."
     T = eltype(TrainingInput)
-    @info aPCE
+    # @info aPCE
     if size(y_rhs, 2) == 1
         y_rhs = reshape(y_rhs, :, 1)
     end

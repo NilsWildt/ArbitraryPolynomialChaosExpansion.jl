@@ -267,7 +267,7 @@ end
     Psi = ones(eltype(TrainingInput), NumberOfTerms, NCpoints)
 
     # Function to evaluate polynomials for a given term and input sample
-    Threads.@threads for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
+    for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
         # product = 1.0  # Initialize the product for this term and sample
         for ii ∈ 1:InputDimensions  # For each dimension of the input
             degree = MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
