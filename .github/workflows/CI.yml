@@ -73,7 +73,6 @@ jobs:
           version: ${{ matrix.version }}
           arch: x64
       - uses: julia-actions/cache@v2
-      - uses: julia-actions/julia-buildpkg@v1
       - name: Update registry
         run: julia -e 'using Pkg; Pkg.Registry.update()'
       - uses: julia-actions/julia-runtest@v1

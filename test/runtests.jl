@@ -28,9 +28,9 @@ end
     @testset "aPC_OrthonormalBasis" begin
         @test aPC_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1) ≈ [1, -0.5, -2.0, 0.0, 1.5, -1.5, 0.0, 0.0, 4.5]
     end
-    @testset "aPC_MultivariatePolynomialDegrees" begin
-        @test APCE.aPC_MultivariatePolynomialDegrees(2, 1) == [0, 0, 1, 0, 1, 0]
-        @test APCE.aPC_MultivariatePolynomialDegrees(2, 2) == [0, 0, 1, 0, 1, 2, 0, 1, 0, 2, 1, 0]
+    @testset "aPCE_MultivariatePolynomialDegrees" begin
+        @test APCE.aPCE_MultivariatePolynomialDegrees(2, 1) == [0, 0, 1, 0, 1, 0]
+        @test APCE.aPCE_MultivariatePolynomialDegrees(2, 2) == [0, 0, 1, 0, 1, 2, 0, 1, 0, 2, 1, 0]
     end
     @testset "sort_two_arrays!" begin
         x = [3.0, 2.0, 1.0]
