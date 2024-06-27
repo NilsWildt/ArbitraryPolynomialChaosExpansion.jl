@@ -125,7 +125,7 @@ function GaussianCollocation(aPCE::aPCE{T}; strategy=:PCM) where {T<:Real}
                 collocation_points[i, j] = @views polynomial_roots[j, Int(SortUniqueCombinations[i, j])]
             end
         end
-        collocation_points = @strided sortslices(collocation_points, dims=1, by=x -> x[1])
+        collocation_points =  sortslices(collocation_points, dims=1, by=x -> x[1])
         return Array(view(collocation_points, :, (1:size(collocation_points, 2))))
     end
 end
@@ -166,21 +166,20 @@ end
     # end
 
 
-	if bayesian_inversion
-		@info "Using bayesian regularization y_rhs find the expansion coefficients"
-		x₀ = aPCE.ExpansionCoefficients # Quite a good first guess :) And pinv is quite stable.
-	
-		for i in axes(y_rhs, 2)
-			@info "Bayesian regularization for axis $i"
-			aPCE.ExpansionCoefficients[:, i] .= invert(Psi, y_rhs[:, i], Lₖx₀(reg_order, view(x₀, :, i)); alg = :gcv_svd
-			, method = LBFGS(linesearch = LineSearches.BackTracking()))
-		end
-	end
-	for k in axes(aPCE.ExpansionCoefficients, 2)
-		res = (@views sqrt(mean((Psi * aPCE.ExpansionCoefficients[:, k] .- y_rhs[:, k]) .^ 2)))
-		@info "Error for axis $k" res
-	end
-	return nothing
+    if bayesian_inversion
+        @info "Using bayesian regularization y_rhs find the expansion coefficients"
+        x₀ = aPCE.ExpansionCoefficients # Quite a good first guess :) And pinv is quite stable.
+
+        for i in axes(y_rhs, 2)
+            @info "Bayesian regularization for axis $i"
+            aPCE.ExpansionCoefficients[:, i] .= invert(Psi, y_rhs[:, i], Lₖx₀(reg_order, view(x₀, :, i)); alg=:gcv_svd, method=LBFGS(linesearch=LineSearches.BackTracking()))
+        end
+    end
+    for k in axes(aPCE.ExpansionCoefficients, 2)
+        res = (@views sqrt(mean((Psi * aPCE.ExpansionCoefficients[:, k] .- y_rhs[:, k]) .^ 2)))
+        @info "Error for axis $k" res
+    end
+    return nothing
 end
 
 
@@ -191,10 +190,11 @@ end
     return PredictionOutput
 end
 
-@stable function create_Polynomial_Degrees(input_dimensions, s_marginals=1.0, s_interactions=1.0)
-    MultivariatePolynomialDegrees = aPCE_MultivariatePolynomialDegrees(input_dimensions, s_marginals, s_interactions)
-    return MultivariatePolynomialDegrees
-end
+# @stable function create_Polynomial_Degrees(input_dimensions, max_degree, s_marginals, s_interactions)
+#     MultivariatePolynomialDegrees = aPCE_MultivariatePolynomialDegrees(input_dimensions, max_degree, s_marginals, s_interactions)
+#     return MultivariatePolynomialDegrees
+# end
+
 @stable function predict_from_coeffs(aPCE::aPCE{T}, PredictionInput, θ) where {T<:ForwardDiff.Dual}
     Psi = aPCE_PsiPolynomialMatrix(aPCE, PredictionInput)
     @einsum PredictionOutput[k, j] := Psi[i, k] * θ[i, j]

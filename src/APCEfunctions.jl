@@ -18,6 +18,7 @@
 # using Preconditioners
 # using SparseArrays
 # using StaticArrays
+
 using StaticArrays
 import Optim: NewtonTrustRegion, Options, optimize, minimizer, minimum, LBFGS, IPNewton
 using RegularizationTools
@@ -41,9 +42,10 @@ using PolynomialRoots
 using OnlineStats
 using Polynomials
 using PrettyTables
+using Memoize
 using SparseArrays
 using StatsBase
-using Strided
+# using Strided
 using TensorOperations
 using UnicodePlots # To use spy from SparseArrays
 using ChainRulesCore
@@ -76,10 +78,10 @@ using Tullio
 using Infiltrator
 
 
-export create_basis!, evaluate_Ψ_zygote, GaussianCollocation, evaluate_Ψ!
+export create_basis!, evaluate_Ψ_zygote, GaussianCollocation, evaluate_Ψ!, aPCE_MultivariatePolynomialDegrees
 @info "Benchmarking Matrix mutplication speed" LinearAlgebra.peakflops(; parallel=true)
 
-Strided.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
+# Strided.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
 LinearAlgebra.BLAS.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
 
 @stable function normalization_functions(matrix)
@@ -219,11 +221,11 @@ end
     return copy(Psi)
 end
 
-@stable function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{T}) where {T<:Real}
+@stable @inbounds function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{T}) where {T<:Real}
     NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
     NCpoints = size(TrainingInput, 1)
     Psi = ones(T, NumberOfTerms, NCpoints)
-    @inbounds for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
+    @batch for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
         for ii ∈ 1:InputDimensions  # For each dimension of the input
             degree = MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
             coeffs = @views OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
@@ -237,11 +239,29 @@ end
     return Psi
 end
 
+@stable function aPCE_PsiPolynomialMatrix!(Psi, TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{T}) where {T<:Real}
+    NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
+    NCpoints = size(TrainingInput, 1)
+    # Psi = ones(T, NumberOfTerms, NCpoints)
+    @inbounds for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
+        for ii ∈ 1:InputDimensions  # For each dimension of the input
+            degree = MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
+            coeffs = @views OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
+            # p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
+            p = Poly(coeffs)
+            x = @views TrainingInput[:, ii]
+            Psi[i, :] .*= p.(x)  # Evaluate the polynomial at x and multiply
+            # Psi[i,:] .*= map(xp->evalpoly(xp, p),x)
+        end
+    end
+    # return Psi
+end
+
 # Need this function for Orthonormal Basis is a ForwardDiff.
 @stable function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{S}) where {S,T<:Real}
     NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
     NCpoints = size(TrainingInput, 1)
-    Psi = ones(S, NumberOfTerms, NCpoints)
+    Psi = ones(T, NumberOfTerms, NCpoints)
     # OrthonormalBasis = T.(OrthonormalBasis)
     # Function to evaluate polynomials for a given term and input sample
     @inbounds for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
@@ -257,6 +277,27 @@ end
         end
     end
     return Psi
+end
+
+@stable function aPCE_PsiPolynomialMatrix!(Psi, TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{S}) where {S,T<:Real}
+    NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
+    NCpoints = size(TrainingInput, 1)
+    # Psi = ones(S, NumberOfTerms, NCpoints)
+    # OrthonormalBasis = T.(OrthonormalBasis)
+    # Function to evaluate polynomials for a given term and input sample
+    @inbounds for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
+        # product = 1.0  # Initialize the product for this term and sample
+        for ii ∈ 1:InputDimensions  # For each dimension of the input
+            degree = MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
+            coeffs = @views OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
+            p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
+            # p = Poly(coeffs)
+            x = @views TrainingInput[:, ii]
+            Psi[i, :] .*= p.(x)  # Evaluate the polynomial at x and multiply
+            # Psi[i,j] *= evalpoly(x, p)
+        end
+    end
+    # return Psi
 end
 
 
@@ -282,76 +323,93 @@ end
     return Psi
 end
 
+@stable @inbounds function aPCE_PsiPolynomialMatrix!(Psi, TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{T}) where {T<:ForwardDiff.Dual}
+    # @polly function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis) where {T <: Number}
+    NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
+    NCpoints = size(TrainingInput, 1)
+    # Psi = ones(eltype(TrainingInput), NumberOfTerms, NCpoints)
 
+    # Function to evaluate polynomials for a given term and input sample
+    Threads.@threads for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
+        # product = 1.0  # Initialize the product for this term and sample
+        for ii ∈ 1:InputDimensions  # For each dimension of the input
+            degree = MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
+            coeffs = @views OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
+            p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
+            # p = Poly(coeffs)
+            x = @views TrainingInput[:, ii]
+            Psi[i, :] .*= p.(x)  # Evaluate the polynomial at x and multiply
+            # Psi[i,j] *= evalpoly(x, p)
+        end
+    end
+    # return Psi
+end
 
+@inline function compute_moments!(m, Data::AbstractArray{T}, NumberOfDataPoints, dd) where {T<:Real}
+    current_power = ones(T, length(Data))  # Start with Data .^ 0 which is 1
+   @inbounds for l ∈ 0:(2*dd+1)
+        m[l+1] = sum(current_power) / NumberOfDataPoints
+        current_power .*= Data  # Increment the power of Data
+    end
+end
 
-@stable function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S; normalize_data=false) where {T<:Real,S<:Integer}
-    # T = eltype(Data)
+@stable @inbounds function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S; normalize_data=false) where {T<:Real,S<:Integer}
     d = Degree #Degree of polinomial expansion
     dd = d #Degree of polinomial for roots defenition
     NumberOfDataPoints = length(Data)
-    # VarOfData = var(Data)
-    # MeanOfData = 0.0
     if normalize_data
         MeanOfData = mean(Data)
         Data = Data ./ MeanOfData
     end
     m = zeros(T, 2 * dd + 2)
-    for l ∈ 0:(2*dd+1)
-        m[l+1] = sum(Data .^ l) / NumberOfDataPoints
+	for col in axes(Data,2)
+        compute_moments!(m, view(Data, :, col), NumberOfDataPoints, dd)
     end
-    # if any(isnan, m)
-    # 	@warn "NaNs in the moments"
-    # 	@info "" Data NumberOfDataPoints 
-    # end
     OrthonormalBasis = zeros(T, dd + 1, dd + 1)
-    OrthogonalBasis = zeros(T, dd + 1, dd + 1)
-    @inbounds for degree ∈ 0:dd
+    OrthogonalBasis = zeros(T, dd + 1, dd + 1) # Allocate once for all :)
+    for degree ∈ 0:dd
         Hankel = @views OrthogonalBasis[1:degree+1, 1:degree+1]
         Vc = zeros(T, degree + 1)
         PolyCoeff_NonNorm = copy(Hankel)
         for i ∈ 0:degree
-            @batch for j ∈ 0:degree # @batch
+            for j ∈ 0:degree # @batch
                 if i < degree
                     Hankel[i+1, j+1] = @views m[i+j+1] # put in the moment
                 elseif (i == degree) && (j < degree)
-                    Hankel[i+1, j+1] = 0.0
+                    Hankel[i+1, j+1] = zero(T)
                 elseif (i == degree) && (j == degree)
-                    Hankel[i+1, j+1] = 1.0
+                    Hankel[i+1, j+1] = one(T)
                 end
             end
-            # fr1 = copy(Hankel); # Control Hankel only considering the raw moments without division by max(abs) in each row
             Hankel[i+1, :] = @views Hankel[i+1, :] / maximum(abs.(@views Hankel[i+1, :]))
         end
         for i ∈ 0:degree
             if (i < degree)
-                Vc[i+1] = 0
+                Vc[i+1] = zero(T)
             elseif (i == degree)
-                Vc[i+1] = 1
+                Vc[i+1] = one(T)
             end
         end
-        Vp = zeros(T, size(Vc))
+        # Vp = zeros(T, size(Vc))
         try
-            Vp .= Hankel \ Vc
+             PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Hankel\Vc
         catch
             @warn "Hankel matrix singular, trying pseudo inverse." #  Vp Hankel Vc
-            Vp .= pinv(Hankel) * Vc
+             PolyCoeff_NonNorm[degree+1, 1:degree+1] .= pinv(Hankel) * Vc
         end
         # Vp = Hankel \ Vc
-        PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Vp
+        # PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Vp
         # @ignore_derivatives begin
         deviation = 100 * abs(sum(abs.(Hankel * PolyCoeff_NonNorm[degree+1, 1:degree+1])) - sum(abs.(Vc)))
-        ChainRulesCore.ignore_derivatives() do
-            if (deviation > 0.5)
-                @warn "Computational error of the linear solver is too high: $(round(deviation;digits=3))"
-            end
+        if (deviation > 0.5)
+            @warn "Computational error of the linear solver is too high: $(round(deviation;digits=3))"
         end
         #Normalization of polynomial coefficients
         P_norm = 0
-        @inbounds for i ∈ 1:NumberOfDataPoints
+        for i ∈ 1:NumberOfDataPoints
             Poly = 0
-            for k ∈ 0:degree
-                Poly += @views PolyCoeff_NonNorm[degree+1, k+1] * Data[i]^k
+             for k ∈ 0:degree
+                 Poly += @views PolyCoeff_NonNorm[degree+1, k+1] * Data[i]^k
             end
             P_norm += Poly^2 / NumberOfDataPoints
         end
@@ -360,12 +418,99 @@ end
         end
     end
     if normalize_data
-        @inbounds for k ∈ 1:lastindex(OrthonormalBasis, 2)
+        for k ∈ 1:lastindex(OrthonormalBasis, 2)
             OrthonormalBasis[:, k] = @views OrthonormalBasis[:, k] ./ (MeanOfData^(k - 1))
         end
     end
     return OrthonormalBasis
 end
+
+
+# @stable function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S; normalize_data=false) where {T<:Real,S<:Integer}
+#     # ChainRulesCore.ignore_derivatives() do
+#     # T = eltype(Data)
+#     d = Degree #Degree of polinomial expansion
+#     dd = d #Degree of polinomial for roots defenition
+#     NumberOfDataPoints = length(Data)
+#     # VarOfData = var(Data)
+#     # MeanOfData = 0.0
+#     if normalize_data
+#         MeanOfData = mean(Data)
+#         Data = Data ./ MeanOfData
+#     end
+#     m = zeros(T, 2 * dd + 2)
+#     for l ∈ 0:(2*dd+1)
+#         m[l+1] = sum(Data .^ l) / NumberOfDataPoints
+#     end
+#     # if any(isnan, m)
+#     # 	@warn "NaNs in the moments"
+#     # 	@info "" Data NumberOfDataPoints 
+#     # end
+#     OrthonormalBasis = zeros(T, dd + 1, dd + 1)
+#     OrthogonalBasis = zeros(T, dd + 1, dd + 1) # Allocate once for all :)
+#     @inbounds for degree ∈ 0:dd
+#         Hankel = @views OrthogonalBasis[1:degree+1, 1:degree+1]
+#         Vc = zeros(T, degree + 1)
+#         PolyCoeff_NonNorm = copy(Hankel)
+#         for i ∈ 0:degree
+#             for j ∈ 0:degree # @batch
+#                 if i < degree
+#                     Hankel[i+1, j+1] = @views m[i+j+1] # put in the moment
+#                 elseif (i == degree) && (j < degree)
+#                     Hankel[i+1, j+1] = zero(T)
+#                 elseif (i == degree) && (j == degree)
+#                     Hankel[i+1, j+1] = one(T)
+#                 end
+#             end
+#             # fr1 = copy(Hankel); # Control Hankel only considering the raw moments without division by max(abs) in each row
+#             Hankel[i+1, :] = @views Hankel[i+1, :] / maximum(abs.(@views Hankel[i+1, :]))
+#         end
+#         for i ∈ 0:degree
+#             if (i < degree)
+#                 Vc[i+1] = 0
+#             elseif (i == degree)
+#                 Vc[i+1] = 1
+#             end
+#         end
+#         Vp = zeros(T, size(Vc))
+#         try
+#             Vp .= Hankel \ Vc
+#         catch
+#             @warn "Hankel matrix singular, trying pseudo inverse." #  Vp Hankel Vc
+#             Vp .= pinv(Hankel) * Vc
+#         end
+#         # Vp = Hankel \ Vc
+#         PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Vp
+#         # @ignore_derivatives begin
+#         deviation = 100 * abs(sum(abs.(Hankel * PolyCoeff_NonNorm[degree+1, 1:degree+1])) - sum(abs.(Vc)))
+#         if (deviation > 0.5)
+#             @warn "Computational error of the linear solver is too high: $(round(deviation;digits=3))"
+#         end
+#         #Normalization of polynomial coefficients
+#         P_norm = 0
+#         for i ∈ 1:NumberOfDataPoints
+#             Poly = 0
+#             @simd for k ∈ 0:degree
+#                 Poly += @views PolyCoeff_NonNorm[degree+1, k+1] * Data[i]^k
+#             end
+#             P_norm += Poly^2 / NumberOfDataPoints
+#         end
+#         for k ∈ 0:degree
+#             OrthonormalBasis[degree+1, k+1] = @views PolyCoeff_NonNorm[degree+1, k+1] / sqrt(P_norm)
+#         end
+#     end
+#     if normalize_data
+#         @inbounds for k ∈ 1:lastindex(OrthonormalBasis, 2)
+#             OrthonormalBasis[:, k] = @views OrthonormalBasis[:, k] ./ (MeanOfData^(k - 1))
+#         end
+#     end
+#     return OrthonormalBasis
+#     # end
+# end
+
+
+
+
 # @stable function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S; normalize_data = false) where {T <: Real, S <: Integer}
 # 	ChainRulesCore.ignore_derivatives() do
 # 		# T = eltype(Data)
@@ -459,7 +604,7 @@ end
         polynomial_roots[d, :] = @view reinterpret(T, PolynomialRoots.roots(@views polynomial_basis[ExpansionDegree+2, :]))[1:2:end-1]
     end
     PointsVector = 1:ExpansionDegree+1 |> collect
-    UniqueCombinations = stack(reduce(vcat, (Iterators.product([PointsVector for _ in 1:input_dimensions]...))))'
+    UniqueCombinations = stack(reduce(vcat, (UnrolledUtilities.unrolled_product([PointsVector for _ in 1:input_dimensions]...))))'
 
     sort_indices = sortperm(sum(UniqueCombinations; dims=2); dims=1)
     SortUniqueCombinations = UniqueCombinations[sort_indices[:], :]
@@ -478,7 +623,7 @@ end
                 collocation_points[i, j] = @views polynomial_roots[j, Int(SortUniqueCombinations[i, j])]
             end
         end
-        collocation_points = @strided sortslices(collocation_points, dims=1, by=x -> x[1])
+        collocation_points = sortslices(collocation_points, dims=1, by=x -> x[1])
         return Array(view(collocation_points, :, (1:size(collocation_points, 2))))
     end
 end
@@ -531,11 +676,11 @@ end
     return x
 end
 
-@stable function create_basis(x, degree; normalize_data=true)
+function create_basis(x, degree; normalize_data=true)
     # @ignore_derivatives begin
     input_dimensions = size(x, 2)
     OrthonormalBasis = zeros(eltype(x), degree + 1, degree + 1, input_dimensions)
-    @inbounds for i in 1:input_dimensions
+    for i in 1:input_dimensions
         tmp = aPCE_OrthonormalBasis(x[:, i], degree; normalize_data=normalize_data)
         OrthonormalBasis[:, :, i] = tmp
     end
@@ -551,11 +696,10 @@ end
         OrthonormalBasis = eltype(x).(OrthonormalBasis)
     end
     # OrthonormalBasis = zeros(eltype(x), degree + 1, degree + 1, input_dimensions)
-    @inbounds for i in 1:input_dimensions
-        tmp = aPCE_OrthonormalBasis(x[:, i], degree; normalize_data=normalize_data)
-        OrthonormalBasis[:, :, i] = tmp
+    Threads.@threads for i in 1:input_dimensions
+        OrthonormalBasis[:,:,i] .= aPCE_OrthonormalBasis(x[:, i], degree; normalize_data=normalize_data)
     end
-    return OrthonormalBasis
+    # return OrthonormalBasis
     # end
 end
 
@@ -589,7 +733,7 @@ end
     T = eltype(coeffs)
     Ψ = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree) .|> T
     @tullio PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
-    return T.(PredictionOutput)
+    return PredictionOutput
 end
 
 @stable function evaluate_Ψ!(PredictionOutput, x, coeffs, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name)
