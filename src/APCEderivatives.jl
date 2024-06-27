@@ -7,7 +7,7 @@ using ChainRulesCore
 using ForwardDiff
 using Zygote: @adjoint
 using ChainRules
-using DifferentiationInterface
+# using DifferentiationInterface
 using DispatchDoctor: @stable
 using ComponentArrays
 

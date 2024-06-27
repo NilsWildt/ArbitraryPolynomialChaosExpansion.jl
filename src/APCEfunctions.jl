@@ -194,6 +194,7 @@ end
 		idxkeep = vcat(keeper_marginals,keeper_interactions)
 		indices = @views indices[idxkeep,:]
 		indices = vcat(indices,zeros(T,num_dimensions)')
+		
 		indices = sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
 		return indices
 	end
@@ -223,6 +224,7 @@ end
 end
 
 @stable function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{T}) where {T <: Real}
+	# @info "" size(MultivariatePolynomialDegrees)
 	NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
 	NCpoints = size(TrainingInput, 1)
 	Psi = ones(T, NumberOfTerms, NCpoints)
@@ -292,9 +294,9 @@ end
 end
 
 
-@stable function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S; normalize_data = false) where {T , S <: Integer}
-	# ChainRulesCore.ignore_derivatives() do
-		# T = eltype(Data)
+@stable function aPCE_OrthonormalBasis(Data, Degree; normalize_data = false)
+	# ChainRulesCore.ignore_derivatives() do 
+		T = eltype(Data)
 		d = Degree #Degree of polinomial expansion
 		dd = d #Degree of polinomial for roots defenition
 		NumberOfDataPoints = length(Data)
@@ -319,7 +321,7 @@ end
 			Vc = zeros(T, degree + 1)
 			PolyCoeff_NonNorm = copy(Hankel)
 			for i ∈ 0:degree
-				@batch for j ∈ 0:degree # @batch
+				@batch for j ∈ 0:degree
 					if i < degree
 						Hankel[i+1, j+1] = @views m[i+j+1] # put in the moment
 					elseif (i == degree) && (j < degree)
@@ -338,43 +340,37 @@ end
 					Vc[i+1] = 1
 				end
 			end
-			# fr1 = copy(Hankel); # Control Hankel only considering the raw moments without division by max(abs) in each row
-			Hankel[i+1, :] = @views Hankel[i+1, :] / maximum(abs.(@views Hankel[i+1, :]))
-		end
-		for i ∈ 0:degree
-			if (i < degree)
-				Vc[i+1] = 0
-			elseif (i == degree)
-				Vc[i+1] = 1
+			Vp = zeros(T, size(Vc))
+			try
+				Vp .= Hankel \ Vc
+			catch
+				@warn "Hankel matrix singular, trying pseudo inverse." #  Vp Hankel Vc
+				Vp .= pinv(Hankel) * Vc
 			end
-		end
-		Vp = zeros(T, size(Vc))
-		try
-			Vp .= Hankel \ Vc
-		catch
-			@warn "Hankel matrix singular, trying pseudo inverse." #  Vp Hankel Vc
-			Vp .= pinv(Hankel) * Vc
-		end
-		# Vp = Hankel \ Vc
-		PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Vp
-		# @ignore_derivatives begin
-		deviation = 100 * abs(sum(abs.(Hankel * PolyCoeff_NonNorm[degree+1, 1:degree+1])) - sum(abs.(Vc)))
-		ChainRulesCore.ignore_derivatives() do
+			# Vp = Hankel \ Vc
+			PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Vp
+			# @ignore_derivatives begin
+			deviation = 100 * abs(sum(abs.(Hankel * PolyCoeff_NonNorm[degree+1, 1:degree+1])) - sum(abs.(Vc)))
 			if (deviation > 0.5)
 				@warn "Computational error of the linear solver is too high: $(round(deviation;digits=3))"
 			end
-		end
-		#Normalization of polynomial coefficients
-		P_norm = 0
-		@inbounds for i ∈ 1:NumberOfDataPoints
-			Poly = 0
-			for k ∈ 0:degree
-				Poly += @views PolyCoeff_NonNorm[degree+1, k+1] * Data[i]^k
+			#Normalization of polynomial coefficients
+			P_norm = 0
+			@inbounds for i ∈ 1:NumberOfDataPoints
+				Poly = 0
+				for k ∈ 0:degree
+					Poly += @views PolyCoeff_NonNorm[degree+1, k+1] * Data[i]^k
+				end
+				P_norm += Poly^2 / NumberOfDataPoints
 			end
-			P_norm += Poly^2 / NumberOfDataPoints
+			for k ∈ 0:degree
+				OrthonormalBasis[degree+1, k+1] = @views PolyCoeff_NonNorm[degree+1, k+1] / sqrt(P_norm)
+			end
 		end
-		for k ∈ 0:degree
-			OrthonormalBasis[degree+1, k+1] = @views PolyCoeff_NonNorm[degree+1, k+1] / sqrt(P_norm)
+		if normalize_data
+			@inbounds for k ∈ 1:lastindex(OrthonormalBasis, 2)
+				OrthonormalBasis[:, k] = @views OrthonormalBasis[:, k] ./ (MeanOfData^(k - 1))
+			end
 		end
 		return OrthonormalBasis
 	# end
