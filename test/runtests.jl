@@ -76,9 +76,9 @@ end
     end
     #############################################################################################
     @testset "PerfChecker.jl" begin
-        @testset "Perf: aPCE_OrthonormalBasis" begin
+        @testset "Perf: aPCE_OrthonormalBasis allocs" begin
             # Title of the alloc check (for logging purpose)
-            title = "Perf: aPCE_OrthonormalBasis"
+            title = "Perf: aPCE_OrthonormalBasis allocs"
 
             # Dependencies needed to execute pre_alloc and alloc
             dependencies = [APCE]
@@ -89,7 +89,7 @@ end
             X = rand(500, 2)
 
             # Code to trigger precompilation before the alloc check
-            pre_alloc() = foreach(_ -> APCE.aPCE_OrthonormalBasis(X, 3), 1:10)
+            pre_alloc() = foreach(_ -> APCE.aPCE_OrthonormalBasis(X, 3), 1:2)
 
             # Code being allocations check
             alloc() = APCE.aPCE_OrthonormalBasis(X, 3)
@@ -97,6 +97,29 @@ end
             # Actual call to PerfChecker
             alloc_check(title, dependencies, targets, pre_alloc, alloc; path=@__DIR__, threads=10)
         end
+
+        @testset "Perf: aPCE_OrthonormalBasis speed" begin
+            # Title of the alloc check (for logging purpose)
+            title = "Perf: aPCE_OrthonormalBasis speed"
+
+            # Dependencies needed to execute pre_alloc and alloc
+            dependencies = [APCE]
+
+            # Target of the alloc check
+            targets = [APCE]
+
+            X = rand(500, 2)
+
+            # Code to trigger precompilation before the alloc check
+            pre_alloc() = foreach(_ -> APCE.aPCE_OrthonormalBasis(X, 3), 1:2)
+
+            # Code being allocations check
+            bench = @benchmark explore_learn_compose(domains, allunique) evals = 10 samples = 10 seconds = 120
+
+            store_benchmark(bench, target; path=@__DIR__)
+        end
+
+
         @testset "Perf: ForwardDiff aPCE_OrthonormalBasis" begin
             # Title of the alloc check (for logging purpose)
             title = "Perf: ForwardDiff aPCE_OrthonormalBasis"
@@ -112,4 +135,6 @@ end
             alloc_check(title, dependencies, targets, pre_alloc, alloc; path=@__DIR__, threads=10)
         end
     end
+    alloc_plot([APCE])
+    bench_plot([APCE])
 end
