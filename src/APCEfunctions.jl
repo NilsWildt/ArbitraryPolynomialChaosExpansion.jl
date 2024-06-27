@@ -46,6 +46,7 @@ import RegularizationTools: Lₖx₀, solve, RegularizationProblem, setupRegular
 using ChainRulesCore
 using Combinatorics
 using CPUSummary
+using FastBroadcast: @.. # Unroll to speedup...
 using DispatchDoctor: @stable
 using Einsum
 using Estrin
@@ -66,7 +67,6 @@ using Polynomials
 using PrettyTables
 using RegularizationTools
 using ReverseDiff
-using SparseArrays
 using StaticArrays
 using StatsBase
 using StatsBase
@@ -233,7 +233,7 @@ end
             # p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
             p = Poly(coeffs)
             x = @views TrainingInput[:, ii]
-            Psi[i, :] .*= p.(x)  # Evaluate the polynomial at x and multiply
+            @.. Psi[i, :] *= p(x)  # Evaluate the polynomial at x and multiply 
             # Psi[i,:] .*= map(xp->evalpoly(xp, p),x)
         end
     end
@@ -251,7 +251,7 @@ end
             # p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
             p = Poly(coeffs)
             x = @views TrainingInput[:, ii]
-            Psi[i, :] .*= p.(x)  # Evaluate the polynomial at x and multiply
+            @.. Psi[i, :] *= p(x)  # Evaluate the polynomial at x and multiply
             # Psi[i,:] .*= map(xp->evalpoly(xp, p),x)
         end
     end
@@ -273,7 +273,7 @@ end
             p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
             # p = Poly(coeffs)
             x = @views TrainingInput[:, ii]
-            Psi[i, :] .*= p.(x)  # Evaluate the polynomial at x and multiply
+            @.. Psi[i, :] *= p(x)  # Evaluate the polynomial at x and multiply
             # Psi[i,j] *= evalpoly(x, p)
         end
     end

@@ -12,42 +12,44 @@ using DispatchDoctor: @stable
 using ComponentArrays
 
 function ChainRulesCore.frule((_, Δx), ::typeof(reverse_columns!), x)
-	Δx_reversed = similar(Δx)
-	for row in axes(Δx, 1)
-		Δx_reversed[row, :] = reverse(Δx[row, :])
-	end
-	y = reverse_columns!(x)
-	return y, Δx_reversed
+    Δx_reversed = similar(Δx)
+    for row in axes(Δx, 1)
+        Δx_reversed[row, :] = reverse(Δx[row, :])
+    end
+    y = reverse_columns!(x)
+    return y, Δx_reversed
 end
 
 @stable function ChainRulesCore.rrule(::typeof(reverse_columns!), x)
-	function reverse_columns_pullback(Δy)
-		Δx = similar(Δy)
-		for row in axes(Δy, 1)
-			Δx[row, :] = reverse(Δy[row, :])
-		end
-		return (NO_FIELDS, Δx)
-	end
-	y = reverse_columns!(x)
-	return y, reverse_columns_pullback
+    function reverse_columns_pullback(Δy)
+        Δx = similar(Δy)
+        for row in axes(Δy, 1)
+            Δx[row, :] = reverse(Δy[row, :])
+        end
+        return (NO_FIELDS, Δx)
+    end
+    y = reverse_columns!(x)
+    return y, reverse_columns_pullback
 end
 
-@stable function ∂Ψ(x, degree)
-	input_dimensions = size(x, 2)
-	MultivariatePolynomialDegrees = create_Polynomial_Degrees(input_dimensions, degree; qnorm = 1.0)
-	OrthonormalBasis = create_basis(x, degree; qnorm = 1.0)
-	return Zygote.jacobian(x -> aPCE_PsiPolynomialMatrix(MultivariatePolynomialDegrees, OrthonormalBasis, x), x) |> first
-end
-@stable function ∂create_basis(x, degree; qnorm = 1.0)
-	return Zygote.jacobian(x -> create_basis(x, degree; qnorm = qnorm), x) |> first
-end
+# @stable function ∂Ψ(x, degree)
+# 	input_dimensions = size(x, 2)
+# 	MultivariatePolynomialDegrees = create_Polynomial_Degrees(input_dimensions, degree; qnorm = 1.0)
+# 	OrthonormalBasis = create_basis(x, degree; qnorm = 1.0)
+# 	return Zygote.jacobian(x -> aPCE_PsiPolynomialMatrix(MultivariatePolynomialDegrees, OrthonormalBasis, x), x) |> first
+# end
+
+
+# @stable function ∂create_basis(x, degree; qnorm = 1.0)
+# 	return Zygote.jacobian(x -> create_basis(x, degree; qnorm = qnorm), x) |> first
+# end
 
 @stable function ensure_matrix(arr)
-	if ndims(arr) == 1
-		return reshape(arr, (length(arr), 1))
-	else
-		return arr
-	end
+    if ndims(arr) == 1
+        return reshape(arr, (length(arr), 1))
+    else
+        return arr
+    end
 end
 
 # @stable function ChainRulesCore.rrule(::typeof(compose_Ψ), x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
