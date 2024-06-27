@@ -23,15 +23,23 @@ end
 
 #############################################################################################
 ############################################################################################
-@testset verbose = false showtiming = true "All tests" begin
+@testset verbose = true showtiming = true "All tests" begin
     #############################################################################################
-    @testset "aPC_OrthonormalBasis" begin
-        @test aPC_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1) ≈ [1, -0.5, -2.0, 0.0, 1.5, -1.5, 0.0, 0.0, 4.5]
+    @testset "aPCE_OrthonormalBasis" begin
+        @info "" APCE.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1)
+        @test APCE.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1) ≈ [1.0, 0.0 - 0.5, 1.5]
     end
+
     @testset "aPCE_MultivariatePolynomialDegrees" begin
-        @test APCE.aPCE_MultivariatePolynomialDegrees(2, 1) == [0, 0, 1, 0, 1, 0]
-        @test APCE.aPCE_MultivariatePolynomialDegrees(2, 2) == [0, 0, 1, 0, 1, 2, 0, 1, 0, 2, 1, 0]
+        @info "" APCE.aPCE_MultivariatePolynomialDegrees(2, 1, 1.0, 1.0)
+        @info "" APCE.aPCE_MultivariatePolynomialDegrees(2, 2, 1.0, 1.0)
+        @test APCE.aPCE_MultivariatePolynomialDegrees(2, 1, 1.0, 1.0) == [0.0 0.0;
+            1.0 0.0;
+            1.0 0.0]
+        @test APCE.aPCE_MultivariatePolynomialDegrees(2, 2, 1.0, 1.0) == [0 0; 1 0;
+            1 2; 0 1; 0 2; 1 0]
     end
+
     @testset "sort_two_arrays!" begin
         x = [3.0, 2.0, 1.0]
         y = [3.0, 2.0, 1.0]
@@ -46,7 +54,7 @@ end
             ambiguities=false,      # TODO: fix ambiguities
             unbound_args=true,     # TODO: fix unbound type parameters
             piracies=false,         # TODO: check the reported methods to be moved upstream
-			deps_compat=false
+            deps_compat=false
         )
         @test length(Aqua.detect_unbound_args_recursively(APCE)) <= 16
     end

@@ -59,7 +59,6 @@ using LinearAlgebra: checksquare
 using LinearAlgebra: svd, norm, pinv, Diagonal, tr
 using LinearAlgebra.BLAS: gemv, gemv!, gemm!, trsm!, axpy!, ger!
 using LineSearches
-using MKL
 using OnlineStats
 using Polyester
 using PolynomialRoots
@@ -76,6 +75,9 @@ using Tracker
 using Tullio
 using UnicodePlots # To use spy from SparseArrays
 using UnrolledUtilities
+using Octavian
+
+# CPUSummary.use_hwloc(true)
 
 BLAS.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
 
@@ -195,6 +197,7 @@ end
     indices = @views indices[idxkeep, :]
     indices = vcat(indices, zeros(T, num_dimensions)')
     indices = sortslices(hcat(vec(sum(indices; dims=2)), indices); dims=1, rev=false)[:, 2:end]
+    # reverse_columns!(indices)
     return indices
 end
 
@@ -306,7 +309,7 @@ end
     # @polly function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis) where {T <: Number}
     NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
     NCpoints = size(TrainingInput, 1)
-    Psi = ones(eltype(TrainingInput), NumberOfTerms, NCpoints)
+    Psi = ones(T, NumberOfTerms, NCpoints)
 
     # Function to evaluate polynomials for a given term and input sample
     for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
@@ -317,7 +320,7 @@ end
             p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
             # p = Poly(coeffs)
             x = @views TrainingInput[:, ii]
-            Psi[i, :] .*= p.(x)  # Evaluate the polynomial at x and multiply
+            @.. Psi[i, :] *= p(x)  # Evaluate the polynomial at x and multiply
             # Psi[i,j] *= evalpoly(x, p)
         end
     end
@@ -348,7 +351,7 @@ end
 
 @inline function compute_moments!(m, Data::AbstractArray{T}, NumberOfDataPoints, dd) where {T<:Real}
     current_power = ones(T, length(Data))  # Start with Data .^ 0 which is 1
-   @inbounds for l ∈ 0:(2*dd+1)
+    @inbounds for l ∈ 0:(2*dd+1)
         m[l+1] = sum(current_power) / NumberOfDataPoints
         current_power .*= Data  # Increment the power of Data
     end
@@ -363,7 +366,7 @@ end
         Data = Data ./ MeanOfData
     end
     m = zeros(T, 2 * dd + 2)
-	for col in axes(Data,2)
+    for col in axes(Data, 2)
         compute_moments!(m, view(Data, :, col), NumberOfDataPoints, dd)
     end
     OrthonormalBasis = zeros(T, dd + 1, dd + 1)
@@ -393,10 +396,10 @@ end
         end
         # Vp = zeros(T, size(Vc))
         try
-             PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Hankel\Vc
+            PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Hankel \ Vc
         catch
             @warn "Hankel matrix singular, trying pseudo inverse." #  Vp Hankel Vc
-             PolyCoeff_NonNorm[degree+1, 1:degree+1] .= pinv(Hankel) * Vc
+            PolyCoeff_NonNorm[degree+1, 1:degree+1] .= pinv(Hankel) * Vc
         end
         # Vp = Hankel \ Vc
         # PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Vp
@@ -406,11 +409,11 @@ end
             @warn "Computational error of the linear solver is too high: $(round(deviation;digits=3))"
         end
         #Normalization of polynomial coefficients
-        P_norm = 0
+        P_norm = 0.0
         for i ∈ 1:NumberOfDataPoints
             Poly = 0
-             for k ∈ 0:degree
-                 Poly += @views PolyCoeff_NonNorm[degree+1, k+1] * Data[i]^k
+            for k ∈ 0:degree
+                Poly += @views PolyCoeff_NonNorm[degree+1, k+1] * Data[i]^k
             end
             P_norm += Poly^2 / NumberOfDataPoints
         end
@@ -698,7 +701,7 @@ end
     end
     # OrthonormalBasis = zeros(eltype(x), degree + 1, degree + 1, input_dimensions)
     Threads.@threads for i in 1:input_dimensions
-        OrthonormalBasis[:,:,i] .= aPCE_OrthonormalBasis(x[:, i], degree; normalize_data=normalize_data)
+        OrthonormalBasis[:, :, i] .= aPCE_OrthonormalBasis(x[:, i], degree; normalize_data=normalize_data)
     end
     # return OrthonormalBasis
     # end
