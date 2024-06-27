@@ -11,72 +11,73 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+
+# const AD = AbstractDifferentiation
+# using AbstractDifferentiation: AbstractDifferentiation
+# using BackwardsLinalg
+# using CUDA
+# using DifferentiableFactorizations
+# using DifferentiationInterface
+# using Enzyme
+# using Enzyme
+# using FastBroadcast
+# using FastLevenbergMarquardt
 # using Hyperopt
 # using IterativeSolvers
 # using KernelFunctions
+# using LazyArrays
+# using LazyArrays
+# using Memoize
+# using MKL
 # using NonlinearSolve
+# using OMEinsum
 # using Preconditioners
 # using SparseArrays
+# using SparseArrays
 # using StaticArrays
+# using StaticArrays
+# using Strided
+# using Tapir
+# using TotalLeastSquares
 
-using StaticArrays
 import Optim: NewtonTrustRegion, Options, optimize, minimizer, minimum, LBFGS, IPNewton
-using RegularizationTools
 import RegularizationTools: Lₖx₀, solve, RegularizationProblem, setupRegularizationProblem, to_general_form, to_standard_form, gcv_tr, gcv_svd, invert, Lₖ, NelderMead, LₖB, Lₖx₀B, LₖDₓ, Lₖx₀Dₓ, LₖDₓB, Lₖx₀DₓB
-using TotalLeastSquares
+using ChainRulesCore
 using Combinatorics
-using LazyArrays
-# using OMEinsum
-# using CUDA
-# using Enzyme
+using CPUSummary
+using DispatchDoctor: @stable
+using Einsum
+using Estrin
+using ForwardDiff
 using InducingPoints
-using LazyArrays
+using Infiltrator
 using LazyGrids
 using LinearAlgebra
+using LinearAlgebra: checksquare
+using LinearAlgebra: svd, norm, pinv, Diagonal, tr
+using LinearAlgebra.BLAS: gemv, gemv!, gemm!, trsm!, axpy!, ger!
 using LineSearches
-using Estrin
-# using MKL
 using MKL
+using OnlineStats
 using Polyester
 using PolynomialRoots
-using OnlineStats
 using Polynomials
 using PrettyTables
-using Memoize
-using SparseArrays
-using StatsBase
-# using Strided
-using TensorOperations
-using UnicodePlots # To use spy from SparseArrays
-using ChainRulesCore
-using UnrolledUtilities
-using DispatchDoctor: @stable
-# using FastLevenbergMarquardt
-# using DifferentiableFactorizations
-# using BackwardsLinalg
+using RegularizationTools
 using ReverseDiff
-using ForwardDiff
+using SparseArrays
+using StaticArrays
+using StatsBase
+using StatsBase
+using TensorOperations
 using TimerOutputs
 using Tracker
-using StatsBase
-# using StaticArrays
-using SparseArrays
-
-using LinearAlgebra: svd, norm, pinv, Diagonal, tr
-using LinearAlgebra: checksquare
-using LinearAlgebra.BLAS: gemv, gemv!, gemm!, trsm!, axpy!, ger!
-# using FastBroadcast
-# using AbstractDifferentiation: AbstractDifferentiation
-# const AD = AbstractDifferentiation
-using CPUSummary
-# using Tapir
-# using Enzyme
-using Einsum
-# using DifferentiationInterface
-BLAS.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
 using Tullio
-using Infiltrator
+using UnicodePlots # To use spy from SparseArrays
+using UnrolledUtilities
 
+BLAS.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
 
 export create_basis!, evaluate_Ψ_zygote, GaussianCollocation, evaluate_Ψ!, aPCE_MultivariatePolynomialDegrees
 @info "Benchmarking Matrix mutplication speed" LinearAlgebra.peakflops(; parallel=true)
@@ -308,7 +309,7 @@ end
     Psi = ones(eltype(TrainingInput), NumberOfTerms, NCpoints)
 
     # Function to evaluate polynomials for a given term and input sample
-    Threads.@threads for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
+    for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
         # product = 1.0  # Initialize the product for this term and sample
         for ii ∈ 1:InputDimensions  # For each dimension of the input
             degree = MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
