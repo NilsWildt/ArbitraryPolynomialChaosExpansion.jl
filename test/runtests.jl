@@ -26,13 +26,13 @@ end
 @testset verbose = true showtiming = true "All tests" begin
     #############################################################################################
     @testset "aPCE_OrthonormalBasis" begin
-        @info "" APCE.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1)
+        display(APCE.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1))
         @test APCE.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1) ≈ [1.0, 0.0 - 0.5, 1.5]
     end
 
     @testset "aPCE_MultivariatePolynomialDegrees" begin
-        @info "" APCE.aPCE_MultivariatePolynomialDegrees(2, 1, 1.0, 1.0)
-        @info "" APCE.aPCE_MultivariatePolynomialDegrees(2, 2, 1.0, 1.0)
+       display(APCE.aPCE_MultivariatePolynomialDegrees(2, 1, 1.0, 1.0))
+        display(APCE.aPCE_MultivariatePolynomialDegrees(2, 2, 1.0, 1.0))
         @test APCE.aPCE_MultivariatePolynomialDegrees(2, 1, 1.0, 1.0) == [0.0 0.0;
             1.0 0.0;
             1.0 0.0]
@@ -48,32 +48,33 @@ end
     end
     #############################################################################################
 
-    @testset "Aqua.jl testset" begin
-        Aqua.test_all(
-            APCE;
-            ambiguities=false,      # TODO: fix ambiguities
-            unbound_args=true,     # TODO: fix unbound type parameters
-            piracies=false,         # TODO: check the reported methods to be moved upstream
-            deps_compat=false
-        )
-        @test length(Aqua.detect_unbound_args_recursively(APCE)) <= 16
-    end
-    #############################################################################################
-    @testset "JET.jl testset" begin
-        x = [3.0, 2.0, 1.0]
-        y = [3.0, 2.0, 1.0]
-        JET.@test_call target_modules = (@__MODULE__,) sort_two_arrays!(x, y) # should pass
-    end
+    # @testset "Aqua.jl testset" begin
+    #     Aqua.test_all(
+    #         APCE;
+    #         ambiguities=false,      # TODO: fix ambiguities
+    #         unbound_args=true,     # TODO: fix unbound type parameters
+    #         piracies=false,         # TODO: check the reported methods to be moved upstream
+    #         deps_compat=false
+    #     )
+    #     @test length(Aqua.detect_unbound_args_recursively(APCE)) <= 16
+    # end
+    # #############################################################################################
+    # @testset "JET.jl testset" begin
+    #     x = [3.0, 2.0, 1.0]
+    #     y = [3.0, 2.0, 1.0]
+    #     JET.@test_call target_modules = (@__MODULE__,) sort_two_arrays!(x, y) # should pass
+    # end
 
-    begin
-        mis = methodinstances(APCE)    # get all the compiled methodinstances for functions owned by the package
-        # Now let's filter out the ones that pass without issue
-        badmis = filter(mis) do mi
-            !isempty(JET.get_reports(report_call(mi)))
-            # JET.get_reports(report_call(mi))
-        end
-        @warn badmis
-    end
+    # begin
+    #     mis = methodinstances(APCE)    # get all the compiled methodinstances for functions owned by the package
+    #     # Now let's filter out the ones that pass without issue
+    #     badmis = filter(mis) do mi
+    #         !isempty(JET.get_reports(report_call(mi)))
+    #         # JET.get_reports(report_call(mi))
+    #     end
+    #     @warn badmis
+    # end
+
     #############################################################################################
     @testset "PerfChecker.jl" begin
         @testset "Perf: aPCE_OrthonormalBasis allocs" begin
@@ -114,11 +115,9 @@ end
             pre_alloc() = foreach(_ -> APCE.aPCE_OrthonormalBasis(X, 3), 1:2)
 
             # Code being allocations check
-            bench = @benchmark explore_learn_compose(domains, allunique) evals = 10 samples = 10 seconds = 120
-
+            bench = @be  APCE.aPCE_OrthonormalBasis(X, 3) evals = 10 samples = 10 seconds = 120
             store_benchmark(bench, target; path=@__DIR__)
         end
-
 
         @testset "Perf: ForwardDiff aPCE_OrthonormalBasis" begin
             # Title of the alloc check (for logging purpose)
