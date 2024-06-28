@@ -832,7 +832,7 @@ end
     input_dimensions = size(x, 2)
     OrthonormalBasis = Array{eltype(x),3}(undef, degree + 1, degree + 1, input_dimensions)
     for i in 1:input_dimensions
-        OrthonormalBasis[:, :, i] = aPCE_OrthonormalBasis(view(x, :, i), degree, normalize_data)
+        OrthonormalBasis[:, :, i] = aPCE_OrthonormalBasis(view(x, :, i), degree, Val(normalize_data))
     end
     return OrthonormalBasis
 end
@@ -846,7 +846,7 @@ end
     end
     # OrthonormalBasis = zeros(eltype(x), degree + 1, degree + 1, input_dimensions)
     for i in 1:input_dimensions
-        OrthonormalBasis[:, :, i] .= aPCE_OrthonormalBasis(x[:, i], degree, normalize_data)
+        OrthonormalBasis[:, :, i] .= aPCE_OrthonormalBasis(x[:, i], degree, Val(normalize_data))
     end
     # return OrthonormalBasis
     # end
