@@ -418,7 +418,7 @@ end
 end
 
 
-@stable @inbounds function aPCE_OrthonormalBasis(Data, Degree::S, normalize_data::Val(true)) where {S<:Integer}
+@stable @inbounds function aPCE_OrthonormalBasis(Data, Degree::S, normalize_data::Val{true}) where {S<:Integer}
     T = eltype(Data)
     d = Degree #Degree of polinomial expansion
     dd = d #Degree of polinomial for roots defenition
@@ -510,7 +510,7 @@ end
 end
 
 
-@stable @inbounds function aPCE_OrthonormalBasis(Data, Degree::S, normalize_data::Val(false)) where {S<:Integer}
+@stable @inbounds function aPCE_OrthonormalBasis(Data, Degree::S, normalize_data::Val{false}) where {S<:Integer}
     T = eltype(Data)
     d = Degree #Degree of polinomial expansion
     dd = d #Degree of polinomial for roots defenition
