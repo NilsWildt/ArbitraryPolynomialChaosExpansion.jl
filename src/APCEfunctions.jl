@@ -212,7 +212,7 @@ end
         # product = 1.0  # Initialize the product for this term and sample
         for ii ∈ 1:InputDimensions  # For each dimension of the input
             degree = MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
-            coeffs = OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
+            coeffs = @views OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
             # p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
             # p = Poly(coeffs)
             @batch for j ∈ 1:NCpoints  # For each input sample
@@ -290,7 +290,7 @@ end
 MPoly(coeffs::AbstractVector{T}) where {T} = MPoly{length(coeffs),T}(ntuple(i -> coeffs[i], length(coeffs)))
 
 function update_coeffs!(poly::MPoly{N,T}, coeffs::AbstractVector{T}) where {T,N}
-    @.. poly.coeffs = coeffs
+    poly.coeffs = coeffs
 end
 
 Base.getindex(poly::MPoly{N,T}, i::Int) where {N,T} = i > N ? zero(T) : poly.coeffs[i]
@@ -298,7 +298,7 @@ Base.getindex(poly::MPoly{N,T}, i::Int) where {N,T} = i > N ? zero(T) : poly.coe
 MPoly(poly::MPoly{N1,T}, s::Int, ::Type{MPoly{N2,T}}) where {N1,N2,T} = MPoly{N2,T}(ntuple(i -> poly[s+i-1], Val(N2)))
 
 # only work for low degree polynomials
-function estrin_rule(x::T, poly::MPoly{N,T}) where {N,T}
+@stable function estrin_rule(x::T, poly::MPoly{N,T}) where {N,T}
     if N > 2
         poly_new = MPoly{div(N + 1, 2),T}(ntuple(i -> muladd(x, poly[2*i], poly[2*i-1]), Val(div(N + 1, 2))))
         return estrin_rule(x^2, poly_new)
@@ -307,7 +307,7 @@ function estrin_rule(x::T, poly::MPoly{N,T}) where {N,T}
     end
 end
 
-@inbounds function estrin_rule_tile(x::T, poly::MPoly{N,T}) where {N,T}
+@stable @inbounds function estrin_rule_tile(x::T, poly::MPoly{N,T}) where {N,T}
     n = 16 # n is the tiling size
     if N > n
         poly_new = MPoly{div(N - 1, n) + 1,T}(ntuple(i -> estrin_rule(x, MPoly(poly, n * (i - 1) + 1, Poly{n,T})), Val(div(N - 1, n) + 1)))
@@ -409,7 +409,7 @@ end
 #     # return Psi
 # end
 
-@inline function compute_moments!(m::AbstractArray{T}, Data::AbstractArray{T}, NumberOfDataPoints, dd) where {T<:Real}
+@stable @inline function compute_moments!(m::AbstractArray{T}, Data::AbstractArray{T}, NumberOfDataPoints, dd) where {T<:Real}
     current_power = ones(T, length(Data))  # Start with Data .^ 0 which is 1
     @inbounds for l ∈ 0:(2*dd+1)
         m[l+1] = sum(current_power) / NumberOfDataPoints
@@ -429,48 +429,70 @@ end
         Data = Data ./ MeanOfData
     end
     m = zeros(T, 2 * dd + 2)
-    for col in axes(Data, 2)
+    @batch for col in axes(Data, 2)
         compute_moments!(m, view(Data, :, col), NumberOfDataPoints, dd)
     end
     OrthonormalBasis = zeros(T, dd + 1, dd + 1)
     OrthogonalBasis = zeros(T, dd + 1, dd + 1) # Allocate once for all :)
+    PolyCoeff_NonNorm_prealloc = zeros(T, dd + 1, dd + 1) # Allocate once for all :)
+
     for degree ∈ 0:dd
         Hankel = @views OrthogonalBasis[1:degree+1, 1:degree+1]
         Vc = zeros(T, degree + 1)
-        PolyCoeff_NonNorm = copy(Hankel)
-        for i ∈ 0:degree
-            for j ∈ 0:degree # @batch
-                if i < degree
-                    Hankel[i+1, j+1] = @views m[i+j+1] # put in the moment
-                elseif (i == degree) && (j < degree)
-                    Hankel[i+1, j+1] = zero(T)
-                elseif (i == degree) && (j == degree)
-                    Hankel[i+1, j+1] = one(T)
-                end
+        PolyCoeff_NonNorm = @views PolyCoeff_NonNorm_prealloc[1:degree+1, 1:degree+1]
+        # for i ∈ 0:degree
+        #     for j ∈ 0:degree # @batch
+        #         if i < degree
+        #             Hankel[i+1, j+1] = @views m[i+j+1] # put in the moment
+        #         elseif (i == degree) && (j < degree)
+        #             Hankel[i+1, j+1] = zero(T)
+        #         elseif (i == degree) && (j == degree)
+        #             Hankel[i+1, j+1] = one(T)
+        #         end
+        #     end
+        #     Hankel[i+1, :] = @views Hankel[i+1, :] / maximum(abs.(@views Hankel[i+1, :]))
+        # end
+        for i in 0:degree-1
+            for j in 0:degree
+                Hankel[i+1, j+1] = @views m[i+j+1]  # put in the moment
             end
             Hankel[i+1, :] = @views Hankel[i+1, :] / maximum(abs.(@views Hankel[i+1, :]))
         end
-        for i ∈ 0:degree
-            if (i < degree)
-                Vc[i+1] = zero(T)
-            elseif (i == degree)
-                Vc[i+1] = one(T)
-            end
+        for j in 0:degree-1
+            Hankel[degree+1, j+1] = zero(T)
         end
+        Hankel[degree+1, degree+1] = one(T)
+        Hankel[degree+1, :] = @views Hankel[degree+1, :] / maximum(abs.(@views Hankel[degree+1, :]))
+
+        # Loop for Vc
+        for i in 0:degree-1
+            Vc[i+1] = zero(T)
+        end
+        Vc[degree+1] = one(T)
+
+        # for i ∈ 0:degree
+        #     if (i < degree)
+        #         Vc[i+1] = zero(T)
+        #     elseif (i == degree)
+        #         Vc[i+1] = one(T)
+        #     end
+        # end
         # Vp = zeros(T, size(Vc))
-        try
-            PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Hankel \ Vc
-        catch
-            @warn "Hankel matrix singular, trying pseudo inverse." #  Vp Hankel Vc
-            PolyCoeff_NonNorm[degree+1, 1:degree+1] .= pinv(Hankel) * Vc
-        end
+        # try
+        PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Hankel \ Vc
+        # catch
+        #     @warn "Hankel matrix singular, trying pseudo inverse." #  Vp Hankel Vc
+        #     PolyCoeff_NonNorm[degree+1, 1:degree+1] .= pinv(Hankel) * Vc
+        # end
         # Vp = Hankel \ Vc
         # PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Vp
         # @ignore_derivatives begin
-        deviation = 100 * abs(sum(abs.(Hankel * PolyCoeff_NonNorm[degree+1, 1:degree+1])) - sum(abs.(Vc)))
-        if (deviation > 0.5)
-            @warn "Computational error of the linear solver is too high: $(round(deviation;digits=3))"
-        end
+
+        # deviation = 100 * abs(sum(abs.(Hankel * PolyCoeff_NonNorm[degree+1, 1:degree+1])) - sum(abs.(Vc)))
+        # if (deviation > 0.5)
+        #     @warn "Computational error of the linear solver is too high: $(round(deviation;digits=3))"
+        # end
+
         #Normalization of polynomial coefficients
         P_norm = 0.0
         for i ∈ 1:NumberOfDataPoints
@@ -755,10 +777,10 @@ end
 #     # end
 # end
 
-function create_basis(x, degree; normalize_data=true)
+@stable function create_basis(x, degree; normalize_data=true)
     input_dimensions = size(x, 2)
     OrthonormalBasis = Array{eltype(x),3}(undef, degree + 1, degree + 1, input_dimensions)
-    Base.Threads.@threads for i in 1:input_dimensions
+    for i in 1:input_dimensions
         OrthonormalBasis[:, :, i] = aPCE_OrthonormalBasis(view(x, :, i), degree; normalize_data=normalize_data)
     end
     return OrthonormalBasis
@@ -772,7 +794,7 @@ end
         OrthonormalBasis = eltype(x).(OrthonormalBasis)
     end
     # OrthonormalBasis = zeros(eltype(x), degree + 1, degree + 1, input_dimensions)
-    Threads.@threads for i in 1:input_dimensions
+    for i in 1:input_dimensions
         OrthonormalBasis[:, :, i] .= aPCE_OrthonormalBasis(x[:, i], degree; normalize_data=normalize_data)
     end
     # return OrthonormalBasis
