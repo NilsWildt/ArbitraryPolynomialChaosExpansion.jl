@@ -357,6 +357,8 @@ end
     end
 end
 
+
+
 @stable @inbounds function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S; normalize_data=false) where {T<:Real,S<:Integer}
     d = Degree #Degree of polinomial expansion
     dd = d #Degree of polinomial for roots defenition
@@ -736,7 +738,7 @@ end
 @stable function evaluate_Ψ(x, coeffs, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name)
     T = eltype(coeffs)
     Ψ = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree) #.|> T
-    @tensoropt PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
+    @einsum PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
     return PredictionOutput
 end
 

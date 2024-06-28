@@ -150,7 +150,7 @@ end
     # Psi = SMatrix{NumberOfTerms,NCpoints}(aPCE_PsiPolynomialMatrix(aPCE, TrainingInput)')
     Psi = aPCE_PsiPolynomialMatrix(aPCE, TrainingInput)' |> Matrix{T}
     # @warn "SPYING"
-    display(UnicodePlots.spy(sparse(Psi)))
+    # display(UnicodePlots.spy(sparse(Psi)))
     # @debug "" size(TrainingInput) size(TrainingOutput) size(Psi) typeof(Psi) typeof(TrainingOutput) typeof(TrainingInput) size(aPCE.ExpansionCoefficients) typeof(aPCE.ExpansionCoefficients)
     # Psi_inv = pinv(Psi;rtol= sqrt(eps(real(float(oneunit(eltype(Psi)))))) )
 
