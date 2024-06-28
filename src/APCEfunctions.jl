@@ -418,16 +418,13 @@ end
 end
 
 
-
-@stable @inbounds function aPCE_OrthonormalBasis(Data, Degree::S; normalize_data=false) where {S<:Integer}
+@stable @inbounds function aPCE_OrthonormalBasis(Data, Degree::S, normalize_data::Val(true)) where {S<:Integer}
     T = eltype(Data)
     d = Degree #Degree of polinomial expansion
     dd = d #Degree of polinomial for roots defenition
     NumberOfDataPoints = length(Data)
-    if normalize_data
-        MeanOfData = mean(Data)
-        Data = Data ./ MeanOfData
-    end
+    MeanOfData = mean(Data)
+    Data = Data ./ MeanOfData
     m = zeros(T, 2 * dd + 2)
     @batch for col in axes(Data, 2)
         compute_moments!(m, view(Data, :, col), NumberOfDataPoints, dd)
@@ -506,11 +503,65 @@ end
             OrthonormalBasis[degree+1, k+1] = @views PolyCoeff_NonNorm[degree+1, k+1] / sqrt(P_norm)
         end
     end
-    if normalize_data
-        for k ∈ 1:lastindex(OrthonormalBasis, 2)
-            OrthonormalBasis[:, k] = @views OrthonormalBasis[:, k] ./ (MeanOfData^(k - 1))
+    for k ∈ 1:lastindex(OrthonormalBasis, 2)
+        OrthonormalBasis[:, k] = @views OrthonormalBasis[:, k] ./ (MeanOfData^(k - 1))
+    end
+    return OrthonormalBasis
+end
+
+
+@stable @inbounds function aPCE_OrthonormalBasis(Data, Degree::S, normalize_data::Val(false)) where {S<:Integer}
+    T = eltype(Data)
+    d = Degree #Degree of polinomial expansion
+    dd = d #Degree of polinomial for roots defenition
+    NumberOfDataPoints = length(Data)
+
+    m = zeros(T, 2 * dd + 2)
+    @batch for col in axes(Data, 2)
+        compute_moments!(m, view(Data, :, col), NumberOfDataPoints, dd)
+    end
+    OrthonormalBasis = zeros(T, dd + 1, dd + 1)
+    OrthogonalBasis = zeros(T, dd + 1, dd + 1) # Allocate once for all :)
+    PolyCoeff_NonNorm_prealloc = zeros(T, dd + 1, dd + 1) # Allocate once for all :)
+
+    for degree ∈ 0:dd
+        Hankel = @views OrthogonalBasis[1:degree+1, 1:degree+1]
+        Vc = zeros(T, degree + 1)
+        PolyCoeff_NonNorm = @views PolyCoeff_NonNorm_prealloc[1:degree+1, 1:degree+1]
+
+        for i in 0:degree-1
+            for j in 0:degree
+                Hankel[i+1, j+1] = @views m[i+j+1]  # put in the moment
+            end
+            Hankel[i+1, :] = @views Hankel[i+1, :] / maximum(abs.(@views Hankel[i+1, :]))
+        end
+        for j in 0:degree-1
+            Hankel[degree+1, j+1] = zero(T)
+        end
+        Hankel[degree+1, degree+1] = one(T)
+        Hankel[degree+1, :] = @views Hankel[degree+1, :] / maximum(abs.(@views Hankel[degree+1, :]))
+
+        # Loop for Vc
+        for i in 0:degree-1
+            Vc[i+1] = zero(T)
+        end
+        Vc[degree+1] = one(T)
+
+        PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Hankel \ Vc
+
+        P_norm = 0.0
+        for i ∈ 1:NumberOfDataPoints
+            Poly = 0
+            for k ∈ 0:degree
+                Poly += @views PolyCoeff_NonNorm[degree+1, k+1] * Data[i]^k
+            end
+            P_norm += Poly^2 / NumberOfDataPoints
+        end
+        for k ∈ 0:degree
+            OrthonormalBasis[degree+1, k+1] = @views PolyCoeff_NonNorm[degree+1, k+1] / sqrt(P_norm)
         end
     end
+
     return OrthonormalBasis
 end
 
@@ -770,7 +821,7 @@ end
 #     input_dimensions = size(x, 2)
 #     OrthonormalBasis = zeros(eltype(x), degree + 1, degree + 1, input_dimensions)
 #     for i in 1:input_dimensions
-#         tmp = aPCE_OrthonormalBasis(x[:, i], degree; normalize_data=normalize_data)
+#         tmp = aPCE_OrthonormalBasis(x[:, i], degree, normalize_data)
 #         OrthonormalBasis[:, :, i] = tmp
 #     end
 #     return OrthonormalBasis
@@ -781,7 +832,7 @@ end
     input_dimensions = size(x, 2)
     OrthonormalBasis = Array{eltype(x),3}(undef, degree + 1, degree + 1, input_dimensions)
     for i in 1:input_dimensions
-        OrthonormalBasis[:, :, i] = aPCE_OrthonormalBasis(view(x, :, i), degree; normalize_data=normalize_data)
+        OrthonormalBasis[:, :, i] = aPCE_OrthonormalBasis(view(x, :, i), degree, normalize_data)
     end
     return OrthonormalBasis
 end
@@ -795,7 +846,7 @@ end
     end
     # OrthonormalBasis = zeros(eltype(x), degree + 1, degree + 1, input_dimensions)
     for i in 1:input_dimensions
-        OrthonormalBasis[:, :, i] .= aPCE_OrthonormalBasis(x[:, i], degree; normalize_data=normalize_data)
+        OrthonormalBasis[:, :, i] .= aPCE_OrthonormalBasis(x[:, i], degree, normalize_data)
     end
     # return OrthonormalBasis
     # end
