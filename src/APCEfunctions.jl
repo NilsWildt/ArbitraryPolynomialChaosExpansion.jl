@@ -81,7 +81,7 @@ using Octavian
 
 BLAS.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
 
-export create_basis!, evaluate_Ψ_zygote, GaussianCollocation, evaluate_Ψ!, aPCE_MultivariatePolynomialDegrees
+export create_basis!, evaluate_Ψ_zygote, GaussianCollocation, evaluate_Ψ!, aPCE_MultivariatePolynomialDegrees, compose_Ψ, aPCE_PsiPolynomialMatrix!, aPCE_PsiPolynomialMatrix
 @info "Benchmarking Matrix mutplication speed" LinearAlgebra.peakflops(; parallel=true)
 
 # Strided.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
@@ -283,6 +283,66 @@ end
     return Psi
 end
 
+mutable struct MPoly{N,T}
+    coeffs::NTuple{N,T} # (C_0, C_1, ..., C_{N-1})
+end
+
+MPoly(coeffs::AbstractVector{T}) where {T} = MPoly{length(coeffs),T}(ntuple(i -> coeffs[i], length(coeffs)))
+
+function update_coeffs!(poly::MPoly{N,T}, coeffs::AbstractVector{T}) where {T,N}
+    @.. poly.coeffs = coeffs
+end
+
+Base.getindex(poly::MPoly{N,T}, i::Int) where {N,T} = i > N ? zero(T) : poly.coeffs[i]
+
+MPoly(poly::MPoly{N1,T}, s::Int, ::Type{MPoly{N2,T}}) where {N1,N2,T} = MPoly{N2,T}(ntuple(i -> poly[s+i-1], Val(N2)))
+
+# only work for low degree polynomials
+function estrin_rule(x::T, poly::MPoly{N,T}) where {N,T}
+    if N > 2
+        poly_new = MPoly{div(N + 1, 2),T}(ntuple(i -> muladd(x, poly[2*i], poly[2*i-1]), Val(div(N + 1, 2))))
+        return estrin_rule(x^2, poly_new)
+    else
+        return muladd(x, poly[2], poly[1])
+    end
+end
+
+@inbounds function estrin_rule_tile(x::T, poly::MPoly{N,T}) where {N,T}
+    n = 16 # n is the tiling size
+    if N > n
+        poly_new = MPoly{div(N - 1, n) + 1,T}(ntuple(i -> estrin_rule(x, MPoly(poly, n * (i - 1) + 1, Poly{n,T})), Val(div(N - 1, n) + 1)))
+        return estrin_rule_tile(x^n, poly_new)
+    else
+        return estrin_rule(x, poly)
+    end
+end
+
+function (poly::MPoly{N,T})(x::T) where {N,T}
+    return estrin_rule_tile(x, poly)
+end
+
+@stable function aPCE_PsiPolynomialMatrix!(Psi, TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{S}) where {S,T<:Real}
+    NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
+    # Psi = ones(T, NumberOfTerms, NCpoints)
+    # OrthonormalBasis = T.(OrthonormalBasis)
+    # Function to evaluate polynomials for a given term and input sample
+    p = Mpoly(coeffs)
+    @inbounds for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
+        # product = 1.0  # Initialize the product for this term and sample
+        for ii ∈ 1:InputDimensions  # For each dimension of the input
+            degree = MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
+            coeffs = @views OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
+            # p = Polynomials.Polynomial(coeffs)  # Create the polynomial
+            update_coeffs!(p, coeffs)
+            x = @views TrainingInput[:, ii]
+            @.. Psi[i, :] *= p(x)  # Evaluate the polynomial at x and multiply
+            # Psi[i, :] *= evaluate_polynomial_horner_array(x,coeffs)  # Evaluate the polynomial at x and multiply
+            # Psi[i,j] *= evalpoly(x, p)
+        end
+    end
+    # return Psi
+end
+
 # @stable function aPCE_PsiPolynomialMatrix!(Psi, TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{S}) where {S,T<:Real}
 #     NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
 #     NCpoints = size(TrainingInput, 1)
@@ -359,7 +419,8 @@ end
 
 
 
-@stable @inbounds function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S; normalize_data=false) where {T<:Real,S<:Integer}
+@stable @inbounds function aPCE_OrthonormalBasis(Data, Degree::S; normalize_data=false) where {S<:Integer}
+    T = eltype(Data)
     d = Degree #Degree of polinomial expansion
     dd = d #Degree of polinomial for roots defenition
     NumberOfDataPoints = length(Data)
@@ -682,16 +743,25 @@ end
     return x
 end
 
+# function create_basis(x, degree; normalize_data=true)
+#     # @ignore_derivatives begin
+#     input_dimensions = size(x, 2)
+#     OrthonormalBasis = zeros(eltype(x), degree + 1, degree + 1, input_dimensions)
+#     for i in 1:input_dimensions
+#         tmp = aPCE_OrthonormalBasis(x[:, i], degree; normalize_data=normalize_data)
+#         OrthonormalBasis[:, :, i] = tmp
+#     end
+#     return OrthonormalBasis
+#     # end
+# end
+
 function create_basis(x, degree; normalize_data=true)
-    # @ignore_derivatives begin
     input_dimensions = size(x, 2)
-    OrthonormalBasis = zeros(eltype(x), degree + 1, degree + 1, input_dimensions)
-    for i in 1:input_dimensions
-        tmp = aPCE_OrthonormalBasis(x[:, i], degree; normalize_data=normalize_data)
-        OrthonormalBasis[:, :, i] = tmp
+    OrthonormalBasis = Array{eltype(x),3}(undef, degree + 1, degree + 1, input_dimensions)
+    Base.Threads.@threads for i in 1:input_dimensions
+        OrthonormalBasis[:, :, i] = aPCE_OrthonormalBasis(view(x, :, i), degree; normalize_data=normalize_data)
     end
     return OrthonormalBasis
-    # end
 end
 
 @stable function create_basis!(OrthonormalBasis, x, degree; normalize_data=false)
@@ -714,6 +784,10 @@ end
     Ψ = aPCE_PsiPolynomialMatrix(x, MultivariatePolynomialDegrees, OrthonormalBasis)' |> Matrix{T}
     return Ψ
 end
+
+# @stable function compose_Ψ!(Ψ, x, MultivariatePolynomialDegrees, OrthonormalBasis, degree) 
+#     aPCE_PsiPolynomialMatrix!(Ψ, x, MultivariatePolynomialDegrees, OrthonormalBasis)'
+# end
 
 # @stable function compose_Ψ_zygote(x::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis, degree) where {T}
 #     Ψ = aPCE_PsiPolynomialMatrix_zygote(x, MultivariatePolynomialDegrees, OrthonormalBasis)' |> Matrix{T}
@@ -818,7 +892,7 @@ end
     return derivative_value
 end
 
-@stable function evaluate_polynomial_horner_array(x, coeffs)
+@stable @inline function evaluate_polynomial_horner_array(x, coeffs)
     results = Vector(undef, length(x))
     for (i, xi) in enumerate(x)
         result = 0.0
