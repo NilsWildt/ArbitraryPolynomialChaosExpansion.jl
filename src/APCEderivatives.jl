@@ -12,6 +12,8 @@ using DispatchDoctor: @stable
 using ComponentArrays
 using ReverseDiff
 using Polynomials
+using Tracker 
+
 
 function ChainRulesCore.frule((_, Δx), ::typeof(reverse_columns!), x)
     Δx_reversed = similar(Δx)
@@ -53,6 +55,70 @@ end
         return arr
     end
 end
+
+# Base.merge(ca::ComponentVector) = ca
+# function Base.merge(ca1::ComponentVector{T1}, ca2::ComponentVector{T2}) where {T1,T2}
+#     ax = getaxes(ca1)
+#     ax2 = getaxes(ca2)
+#     vks = valkeys(ax[1])
+#     vks2 = valkeys(ax2[1])
+#     idxmap = indexmap(ax[1])
+#     _p = Vector{promote_type(T1,T2)}()
+#     sizehint!(_p, length(ca1)+length(ca2))
+#     for vk in vks
+#         if vk in vks2
+#             _p = vcat(_p, ca2[vk])
+#         else
+#             _p = vcat(_p, ca1[vk])
+#         end
+#     end
+#     new_idxmap = Vector{Pair{Symbol, Int64}}([])
+#     sizehint!(new_idxmap, length(ca2))
+#     max_val = maximum(idxmap)
+#     for vk in vks2
+#         if !(vk in vks)
+#             _p = vcat(_p, ca2[vk])
+#             new_idxmap = vcat(new_idxmap, [getval(vk)=>max_val+1])
+#             max_val += 1
+#         end
+#     end
+#     merged_ax = Axis(merge(idxmap, new_idxmap))
+#     ComponentArray(_p, merged_ax)
+# end
+
+# Base.merge(ca1::ComponentVector, ca2::ComponentVector, cs::ComponentVector) = merge(merge(ca1,ca2), cs...)
+
+# function Tracker.param(ca::ComponentArray)
+#     x = getdata(ca)
+#     length(x) == 0 && return ComponentArray(Tracker.param(Float32[]), getaxes(ca))
+#     return ComponentArray(Tracker.param(x), getaxes(ca))
+# end
+
+# Tracker.extract_grad!(ca::ComponentArray) = Tracker.extract_grad!(getdata(ca))
+
+# function Base.materialize(bc::Base.Broadcast.Broadcasted{Tracker.TrackedStyle, Nothing,
+#     typeof(zero), <:Tuple{<:ComponentVector}})
+#     ca = first(bc.args)
+#     return ComponentArray(zero.(getdata(ca)), getaxes(ca))
+# end
+
+# function Base.getindex(g::Tracker.Grads, x::ComponentArray)
+#     Tracker.istracked(getdata(x)) || error("Object not tracked: $x")
+#     return g[Tracker.tracker(getdata(x))]
+# end
+
+# # For TrackedArrays ignore Base.maybeview
+# ## Tracker with views doesn't work quite well
+# @inline function Base.getproperty(x::ComponentVector{T, <:TrackedArray},
+#     s::Symbol) where {T}
+#     return getproperty(x, Val(s))
+# end
+
+# @inline function Base.getproperty(x::ComponentVector{T, <:TrackedArray}, v::Val) where {T}
+#     return ComponentArrays._getindex(Base.getindex, x, v)
+# end
+
+
 
 
 # function ChainRulesCore.rrule(::typeof(aPCE_OrthonormalBasis), Data::AbstractArray{T}, Degree::S; normalize_data=false) where {T<:Real,S<:Integer}
