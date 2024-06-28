@@ -202,28 +202,28 @@ end
 end
 
 
-# @stable function aPCE_PsiPolynomialMatrix_zygote(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis) where {T<:Real}
-#     NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
-#     NCpoints = size(TrainingInput, 1)
-#     Psi = Zygote.bufferfrom(ones(eltype(TrainingInput), NumberOfTerms, NCpoints))
-#     # OrthonormalBasis = T.(OrthonormalBasis)
-#     # Function to evaluate polynomials for a given term and input sample
-#     @inbounds for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
-#         # product = 1.0  # Initialize the product for this term and sample
-#         for ii ∈ 1:InputDimensions  # For each dimension of the input
-#             degree = MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
-#             coeffs = OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
-#             # p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
-#             # p = Poly(coeffs)
-#             @batch for j ∈ 1:NCpoints  # For each input sample
-#                 x = TrainingInput[j, ii]
-#                 Psi[i, j] *= evalpoly_two(x, coeffs)
-#                 # Psi[i,j] *= evalpoly(x, p)
-#             end
-#         end
-#     end
-#     return copy(Psi)
-# end
+@stable function aPCE_PsiPolynomialMatrix_zygote(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis) where {T<:Real}
+    NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
+    NCpoints = size(TrainingInput, 1)
+    Psi = Zygote.bufferfrom(ones(eltype(TrainingInput), NumberOfTerms, NCpoints))
+    # OrthonormalBasis = T.(OrthonormalBasis)
+    # Function to evaluate polynomials for a given term and input sample
+    @inbounds for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
+        # product = 1.0  # Initialize the product for this term and sample
+        for ii ∈ 1:InputDimensions  # For each dimension of the input
+            degree = MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
+            coeffs = OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
+            # p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
+            # p = Poly(coeffs)
+            @batch for j ∈ 1:NCpoints  # For each input sample
+                x = TrainingInput[j, ii]
+                Psi[i, j] *= evalpoly_two(x, coeffs)
+                # Psi[i,j] *= evalpoly(x, p)
+            end
+        end
+    end
+    return copy(Psi)
+end
 
 # @stable @inbounds function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{T}) where {T<:Real}
 #     NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
@@ -273,7 +273,7 @@ end
         for ii ∈ 1:InputDimensions  # For each dimension of the input
             degree = MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
             coeffs = @views OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
-            p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
+            p = Polynomials.Polynomial(coeffs)  # Create the polynomial
             # p = Poly(coeffs)
             x = @views TrainingInput[:, ii]
             @.. Psi[i, :] *= p(x)  # Evaluate the polynomial at x and multiply
@@ -349,7 +349,7 @@ end
 #     # return Psi
 # end
 
-@inline function compute_moments!(m, Data::AbstractArray{T}, NumberOfDataPoints, dd) where {T<:Real}
+@inline function compute_moments!(m::AbstractArray{T}, Data::AbstractArray{T}, NumberOfDataPoints, dd) where {T<:Real}
     current_power = ones(T, length(Data))  # Start with Data .^ 0 which is 1
     @inbounds for l ∈ 0:(2*dd+1)
         m[l+1] = sum(current_power) / NumberOfDataPoints
@@ -736,7 +736,7 @@ end
 @stable function evaluate_Ψ(x, coeffs, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name)
     T = eltype(coeffs)
     Ψ = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree) #.|> T
-    @einsum PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
+    @tensoropt PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
     return PredictionOutput
 end
 

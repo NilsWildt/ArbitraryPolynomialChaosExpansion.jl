@@ -10,6 +10,8 @@ using ChainRules
 using DifferentiationInterface
 using DispatchDoctor: @stable
 using ComponentArrays
+using ReverseDiff
+using Polynomials
 
 function ChainRulesCore.frule((_, Δx), ::typeof(reverse_columns!), x)
     Δx_reversed = similar(Δx)
@@ -51,6 +53,82 @@ end
         return arr
     end
 end
+
+
+# function ChainRulesCore.rrule(::typeof(aPCE_OrthonormalBasis), Data::AbstractArray{T}, Degree::S; normalize_data=false) where {T<:Real,S<:Integer}
+#     function aPCE_pullback(Δ)
+#             ReverseDiff.gradient(x -> sum(aPCE_OrthonormalBasis(x, Degree; normalize_data)), Data) * Δ
+#         return NO_FIELDS, ∂Data
+#     end
+#     return aPCE_OrthonormalBasis(Data, Degree; normalize_data), aPCE_pullback
+# end
+
+
+
+# function ChainRulesCore.rrule(::Type{ComponentArray}, nt::NamedTuple)
+#     res = ComponentArray(nt)
+#     function CA_NT_pullback(Δ::AbstractArray)
+#         if length(Δ) == length(res)
+#             return (CRC.NoTangent(), NamedTuple(ComponentArray(vec(Δ), getaxes(res))))
+#         end
+#         error("Got pullback input of shape $(size(Δ)) & type $(typeof(Δ)) for output " *
+#               "of shape $(size(res)) & type $(typeof(res))")
+#         return nothing
+#     end
+#     CA_NT_pullback(Δ::ComponentArray) = (@show Δ; (ChainRulesCore.NoTangent(), NamedTuple(Δ)))
+#     return res, CA_NT_pullback
+# end
+
+# ChainRulesCore.rrule(::Type{ComponentArray}, data, axes) = ComponentArray(data, axes), Δ -> (ChainRulesCore.NoTangent(), getdata(Δ), ChainRulesCore.NoTangent())
+
+# function ChainRulesCore.rrule(::typeof(aPCE_PsiPolynomialMatrix), TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{S}) where {S, T<:Real}
+#     # Forward pass
+#     Psi = aPCE_PsiPolynomialMatrix(TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis)
+# 	x = ensure_matrix(TrainingInput)
+# 	Nterms = size(MultivariatePolynomialDegrees, 1)
+# 	NCpoints, inpDim = size(x)
+# 	function aPCE_PsiPolynomialMatrix_pullback(dy_raw)
+# 		dy = unthunk(dy_raw)
+# 		∂x = ones(Nterms, inpDim)
+# 		@inbounds for i in 1:Nterms
+# 			for j in 1:NCpoints
+# 				for ii in 1:inpDim
+# 					# oldval = ∂x[i, ii]
+# 					∂x[i, ii] = 1.0
+# 					@batch for kk in 1:inpDim # @batch
+# 						degree_k = MultivariatePolynomialDegrees[i, kk] + 1
+# 						coeffs = @views OrthonormalBasis[degree_k, 1:degree_k, kk]
+# 						# pp = Polynomials.Polynomial(coeffs)
+# 						if ii == kk
+# 							# n = length(coeffs) - 1
+# 							# p = Poly([i * coeffs[i+1] for i in 1:n])
+# 							∂x[i, ii] *= evaluate_derivative_horner(x[j, ii], coeffs)
+# 							# ∂x[i, ii] *= p(x[j, ii])
+# 						else
+# 							# p = Poly(coeffs)
+# 							# ∂x[i, ii] *= p(x[j, ii])
+# 							∂x[i, ii] *= evalpoly_two(x[j, ii], coeffs)
+# 						end
+# 					end
+# 				end
+# 			end
+# 		end
+#         ∂OrthonormalBasis = zeros(S, size(OrthonormalBasis))
+#          for degree ∈ 1:size(OrthonormalBasis, 1)
+#             for ii ∈ 1:size(OrthonormalBasis, 3)
+#                 ∂OrthonormalBasis[degree, :, ii] =  ReverseDiff.gradient(x -> sum(aPCE_OrthonormalBasis(x, degree)), x)
+#             end
+#         end
+        
+#         ∂∂OrthonormalBasis = @thunk reduce(hcat, [dy * ∂OrthonormalBasis[:, i] for i in 1:inpDim])
+
+
+# 		∂∂ = @thunk reduce(hcat, [dy * ∂x[:, i] for i in 1:inpDim])
+# 		return (NoTangent(), ∂∂, NoTangent(), ∂∂OrthonormalBasis, NoTangent())
+# 	end
+#     return Psi, aPCE_PsiPolynomialMatrix_pullback
+# end
+
 
 # @stable function ChainRulesCore.rrule(::typeof(compose_Ψ), x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
 # 	# @info "" typeof(x) typeof(MultivariatePolynomialDegrees) typeof(OrthonormalBasis) typeof(degree)
