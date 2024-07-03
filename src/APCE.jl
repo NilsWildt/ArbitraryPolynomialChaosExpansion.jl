@@ -1,7 +1,50 @@
 module APCE
+import Optim: NewtonTrustRegion, Options, optimize, minimizer, minimum, LBFGS, IPNewton
+import RegularizationTools: Lₖx₀, solve, RegularizationProblem, setupRegularizationProblem, to_general_form, to_standard_form, gcv_tr, gcv_svd, invert, Lₖ, NelderMead, LₖB, Lₖx₀B, LₖDₓ, Lₖx₀Dₓ, LₖDₓB, Lₖx₀DₓB
+using CPUSummary: CPUSummary
+using ChainRules: ChainRules
+using ChainRulesCore: ChainRulesCore
+using Combinatorics: Combinatorics, factorial
+using ComponentArrays: ComponentArrays
+using DifferentiationInterface: DifferentiationInterface
+using DispatchDoctor: @stable
+using DrWatson: DrWatson, projectdir
+using Einsum: Einsum, @einsum
+using Estrin: Estrin
+using FastBroadcast: @.. # Unroll to speedup...
+using ForwardDiff: ForwardDiff, Dual
+using InducingPoints: InducingPoints, CoverTree, RandomSubset, UniGrid, inducingpoints, kDPP
+using Infiltrator: Infiltrator, @infiltrate
+using Krylov: Krylov
+using LazyGrids: LazyGrids
+using LineSearches: LineSearches
+using LinearAlgebra.BLAS: gemv, gemv!, gemm!, trsm!, axpy!, ger!
+using LinearAlgebra: LinearAlgebra, BLAS, transpose
+using LinearAlgebra: checksquare
+using LinearAlgebra: svd, norm, pinv, Diagonal, tr
+using Octavian: Octavian
+using OnlineStats: OnlineStats, Extrema, Mean, Series, Variance, eachrow, value
+using Polyester: Polyester, @batch
+using PolynomialRoots: PolynomialRoots
+using Polynomials: Polynomials, degree
 using PrecompileTools: @setup_workload, @compile_workload    # this is a small dependency
+using PrettyTables: PrettyTables
+using Random: Random, Xoshiro, shuffle
+using RegularizationTools: RegularizationTools
+using ReverseDiff: ReverseDiff
+using StaticArrays: StaticArrays
+using StatsBase: StatsBase, fit!, mean, sum
+using TensorOperations: TensorOperations, @tensoropt
+using TimerOutputs: TimerOutputs
+using Tracker: Tracker
+using Tullio: Tullio, @tullio
+using UnicodePlots: UnicodePlots
+using UnrolledUtilities: UnrolledUtilities
+using Zygote: Zygote, bufferfrom
+# CPUSummary.use_hwloc(true)
 
-using DrWatson
+BLAS.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
+
 configdir(args...) = projectdir("configs", args...)
 outputdir(args...) = projectdir("output", args...)
 

@@ -12,77 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-# const AD = AbstractDifferentiation
-# using AbstractDifferentiation: AbstractDifferentiation
-# using BackwardsLinalg
-# using CUDA
-# using DifferentiableFactorizations
-# using DifferentiationInterface
-# using Enzyme
-# using Enzyme
-# using FastBroadcast
-# using FastLevenbergMarquardt
-# using Hyperopt
-# using IterativeSolvers
-# using KernelFunctions
-# using LazyArrays
-# using LazyArrays
-# using Memoize
-# using MKL
-# using NonlinearSolve
-# using OMEinsum
-# using Preconditioners
-# using SparseArrays
-# using SparseArrays
-# using StaticArrays
-# using StaticArrays
-# using Strided
-# using Tapir
-# using TotalLeastSquares
-
-import Optim: NewtonTrustRegion, Options, optimize, minimizer, minimum, LBFGS, IPNewton
-import RegularizationTools: Lₖx₀, solve, RegularizationProblem, setupRegularizationProblem, to_general_form, to_standard_form, gcv_tr, gcv_svd, invert, Lₖ, NelderMead, LₖB, Lₖx₀B, LₖDₓ, Lₖx₀Dₓ, LₖDₓB, Lₖx₀DₓB
-using ChainRulesCore
-using Combinatorics
-using CPUSummary
-using FastBroadcast: @.. # Unroll to speedup...
-using DispatchDoctor: @stable
-using Einsum
-using Estrin
-using ForwardDiff
-using InducingPoints
-using Infiltrator
-using LazyGrids
-using LinearAlgebra
-using LinearAlgebra: checksquare
-using LinearAlgebra: svd, norm, pinv, Diagonal, tr
-using LinearAlgebra.BLAS: gemv, gemv!, gemm!, trsm!, axpy!, ger!
-using LineSearches
-using OnlineStats
-using Polyester
-using PolynomialRoots
-using Polynomials
-using PrettyTables
-using RegularizationTools
-using ReverseDiff
-using StaticArrays
-using StatsBase
-using StatsBase
-using TensorOperations
-using TimerOutputs
-using Krylov
-
-using Tracker
-using Tullio
-using UnicodePlots # To use spy from SparseArrays
-using UnrolledUtilities
-using Octavian
-
-# CPUSummary.use_hwloc(true)
-
-BLAS.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
-
 export create_basis!, evaluate_Ψ_zygote, GaussianCollocation, evaluate_Ψ!, aPCE_MultivariatePolynomialDegrees, compose_Ψ, aPCE_PsiPolynomialMatrix!, aPCE_PsiPolynomialMatrix
 @info "Benchmarking Matrix mutplication speed" LinearAlgebra.peakflops(; parallel=true)
 
@@ -131,7 +60,7 @@ Base.Sort.defalg(v::C) where {T<:Union{Number,Missing},C<:CoSorter{T}} =
     y = T.coarray
 end
 
-@stable function aPCE_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T, s_marginals::F, s_interactions::F)::Matrix{T} where {T<:Integer,F<:Real}
+@stable function aPCE_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T, s_marginals::F, s_interactions::F) where {T<:Integer,F<:Real}
     # Initialize the indices for the first parameter
     @stable function get_stats(r)::Array{F} # Returns sum, nzeros, mean, var, min,max
         o = Series(Mean(), Variance(), Extrema())
@@ -200,7 +129,7 @@ end
     indices = vcat(indices, zeros(T, num_dimensions)')
     indices = sortslices(hcat(vec(sum(indices; dims=2)), indices); dims=1, rev=false)[:, 2:end]
     # reverse_columns!(indices)
-    return indices
+    return indices::Matrix{T}
 end
 
 
