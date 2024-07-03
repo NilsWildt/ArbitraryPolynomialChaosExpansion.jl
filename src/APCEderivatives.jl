@@ -12,7 +12,7 @@ using DispatchDoctor: @stable
 using ComponentArrays
 using ReverseDiff
 using Polynomials
-using Tracker 
+using Tracker
 
 
 function ChainRulesCore.frule((_, Δx), ::typeof(reverse_columns!), x)
@@ -121,12 +121,14 @@ end
 
 
 
-# function ChainRulesCore.rrule(::typeof(aPCE_OrthonormalBasis), Data::AbstractArray{T}, Degree::S; normalize_data=false) where {T<:Real,S<:Integer}
-#     function aPCE_pullback(Δ)
-#             ReverseDiff.gradient(x -> sum(aPCE_OrthonormalBasis(x, Degree; normalize_data)), Data) * Δ
-#         return NO_FIELDS, ∂Data
+# function ChainRulesCore.rrule(::typeof(aPCE_OrthonormalBasis), Data::AbstractArray{T}, Degree::S, normalize_data::Val{false}) where {T<:Real,S<:Integer}
+#     NCpoints, inpDim = size(Data)
+#     function aPCE_pullback(dy)
+#         ∂Data =  ForwardDiff.gradient(x -> sum(aPCE_OrthonormalBasis(x, Degree, Val(false))), Data) 
+#         ∂∂ = @thunk reduce(hcat, [dy * ∂Data[:, i] for i in 1:inpDim])
+#         return ChainRulesCore.NoTangent(), ∂∂
 #     end
-#     return aPCE_OrthonormalBasis(Data, Degree; normalize_data), aPCE_pullback
+#     return aPCE_OrthonormalBasis(Data, Degree, Val(false)), aPCE_pullback
 # end
 
 
@@ -185,7 +187,7 @@ end
 #                 ∂OrthonormalBasis[degree, :, ii] =  ReverseDiff.gradient(x -> sum(aPCE_OrthonormalBasis(x, degree)), x)
 #             end
 #         end
-        
+
 #         ∂∂OrthonormalBasis = @thunk reduce(hcat, [dy * ∂OrthonormalBasis[:, i] for i in 1:inpDim])
 
 
