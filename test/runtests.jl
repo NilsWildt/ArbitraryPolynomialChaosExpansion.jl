@@ -4,7 +4,6 @@ using DrWatson
 using ForwardDiff
 using JET
 using MethodAnalysis
-using PerfChecker
 using Preferences
 using Random
 using Test
@@ -51,21 +50,21 @@ end
     #     #    end
     # end
 
+    ###########################################################################################
+    ############################Aqua################################################
     ############################################################################################
-    #############################Aqua################################################
-    #############################################################################################
-    # @testset "Aqua.jl testset" begin
-    #     Aqua.test_all(
-    #         APCE;
-    #         ambiguities=true,      # TODO: fix ambiguities
-    #         stale_deps=false,
-    #         unbound_args=true,     # TODO: fix unbound type parameters
-    #         piracies=false,         # TODO: check the reported methods to be moved upstream
-    #         deps_compat=false
-    #     )
-    #     @test length(Aqua.detect_unbound_args_recursively(APCE)) <= 16
-    # end
-    #############################################################################################
+    @testset "Aqua.jl testset" begin
+        Aqua.test_all(
+            APCE;
+            ambiguities=true,      # TODO: fix ambiguities
+            stale_deps=false,
+            unbound_args=true,     # TODO: fix unbound type parameters
+            piracies=false,         # TODO: check the reported methods to be moved upstream
+            deps_compat=false
+        )
+        @test length(Aqua.detect_unbound_args_recursively(APCE)) <= 16
+    end
+    ############################################################################################
 
     @testset "JET.jl testset" begin
         let
@@ -82,56 +81,5 @@ end
     end
 
 
-    
-    
-    #################################Performance####################################################
-    # @testset "PerfChecker.jl" begin
-    #     @testset "Perf: aPCE_OrthonormalBasis allocs" begin
-    #         # Title of the alloc check (for logging purpose)
-    #         title = "Perf: aPCE_OrthonormalBasis allocs"
-    #         # Dependencies needed to execute pre_alloc and alloc
-    #         dependencies = [APCE]
-    #         # Target of the alloc check
-    #         targets = [APCE]
-    #         X = rand(500, 2)
-    #         # Code to trigger precompilation before the alloc check
-    #         pre_alloc() = foreach(_ -> APCE.aPCE_OrthonormalBasis(X, 3), 1:2)
-    #         # Code being allocations check
-    #         alloc() = APCE.aPCE_OrthonormalBasis(X, 3)
-    #         # Actual call to PerfChecker
-    #         alloc_check(title, dependencies, targets, pre_alloc, alloc; path=@__DIR__, threads=10)
-    #     end
 
-    #     # @testset "Perf: aPCE_OrthonormalBasis speed" begin
-    #     #     # Title of the alloc check (for logging purpose)
-    #     #     title = "Perf: aPCE_OrthonormalBasis speed"
-    #     #     # Dependencies needed to execute pre_alloc and alloc
-    #     #     dependencies = [APCE]
-    #     #     # Target of the alloc check
-    #     #     targets = [APCE]
-    #     #     X = rand(500, 2)
-    #     #     # Code to trigger precompilation before the alloc check
-    #     #     pre_alloc() = foreach(_ -> APCE.aPCE_OrthonormalBasis(X, 3), 1:2)
-    #     #     # Code being allocations check
-    #     #     bench = @be  APCE.aPCE_OrthonormalBasis(X, 3) evals = 10 samples = 10 seconds = 120
-    #     #     store_benchmark(bench, target; path=@__DIR__)
-    #     # end
-
-    #     # @testset "Perf: ForwardDiff aPCE_OrthonormalBasis" begin
-    #     #     # Title of the alloc check (for logging purpose)
-    #     #     title = "Perf: ForwardDiff aPCE_OrthonormalBasis"
-    #     #     # Dependencies needed to execute pre_alloc and alloc
-    #     #     dependencies = [APCE]
-    #     #     # Target of the alloc check
-    #     #     targets = [APCE]
-    #     #     X = rand(500, 2)
-    #     #     pre_alloc() = foreach(_ -> ForwardDiff.jacobian(X -> aPCE_OrthonormalBasis(X, 3), X), 1:10)
-    #     #     # Code being allocations check
-    #     #     alloc() = ForwardDiff.jacobian(X -> aPCE_OrthonormalBasis(X, 3), X)
-    #     #     # Actual call to PerfChecker
-    #     #     alloc_check(title, dependencies, targets, pre_alloc, alloc; path=@__DIR__, threads=10)
-    #     # end
-    # end
-    # alloc_plot([APCE])
-    # bench_plot([APCE])
 end
