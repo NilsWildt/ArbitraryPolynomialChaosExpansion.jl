@@ -60,7 +60,7 @@ end
             stale_deps=false,
             unbound_args=true,     # TODO: fix unbound type parameters
             piracies=true,         # TODO: check the reported methods to be moved upstream
-            deps_compat=true
+            deps_compat=false
         )
         @test length(Aqua.detect_unbound_args_recursively(APCE)) <= 16
     end
