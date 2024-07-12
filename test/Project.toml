@@ -1,6 +1,7 @@
 [deps]
 APCE = "e0c64dd9-0151-4106-bdf9-1cf426dd9187"
 Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 Chairmarks = "0ca39b1e-fe0b-4e98-acfc-b1656634c4de"
 DrWatson = "634d3b9d-ee7a-5ddf-bec9-22491ea816e1"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
@@ -11,6 +12,9 @@ PerfChecker = "6309bf6b-a531-4b08-891e-8ee981e5c424"
 Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
 Preferences = "21216c6a-2e73-6563-6e65-726566657250"
+Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
+Supposition = "5a0628fe-1738-4658-9b6d-0b7605a9755b"
+Suppressor = "fd094767-a336-5f1f-9728-57cf17d0bbfb"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]

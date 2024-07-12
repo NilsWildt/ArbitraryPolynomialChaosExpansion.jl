@@ -56,8 +56,6 @@ include("APCEderivatives.jl")
 include("APCEhighlevel.jl")
 include("utils.jl")
 
-
-
 @setup_workload begin
     FT = Float64
     TrainingInput = rand(10, 2) |> Array{FT}

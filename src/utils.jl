@@ -51,16 +51,6 @@ macro check_args(K, param, cond, desc=string(cond))
 end
 
 
-function vec_of_vecs(X::AbstractMatrix; obsdim::Union{Int,Nothing}=nothing)
-    _obsdim = deprecated_obsdim(obsdim)
-    if _obsdim == 1
-        return RowVecs(X)
-    elseif _obsdim == 2
-        return ColVecs(X)
-    else
-        throw(ArgumentError("`obsdim` keyword argument should be 1 or 2"))
-    end
-end
 
 """
     ColVecs(X::AbstractMatrix)

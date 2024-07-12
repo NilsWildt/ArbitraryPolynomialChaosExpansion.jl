@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-export create_basis!, evaluate_Ψ_zygote, GaussianCollocation, evaluate_Ψ!, aPCE_MultivariatePolynomialDegrees, compose_Ψ, aPCE_PsiPolynomialMatrix!, aPCE_PsiPolynomialMatrix
+export create_basis!, GaussianCollocation, aPCE_MultivariatePolynomialDegrees, compose_Ψ, aPCE_PsiPolynomialMatrix, special_sort_two_arrays!
 @info "Benchmarking Matrix mutplication speed" LinearAlgebra.peakflops(; parallel=true)
 
 # Strided.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
@@ -30,13 +30,13 @@ LinearAlgebra.BLAS.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
 end
 
 # Sort mean and variance at same time
-struct CoSorterElement{T1,T2,T3}
+struct SpecialCoSorterElement{T1,T2,T3}
     x::T1
     z::T2
     y::T3
 end
 
-struct CoSorter{T1,T2,T3,A<:AbstractVecOrMat{T1},B<:AbstractVecOrMat{T2},C<:AbstractVecOrMat{T3}} <: AbstractVector{CoSorterElement{T1,T2,T3}}
+struct CoSorter{T1,T2,T3,A<:AbstractVecOrMat{T1},B<:AbstractVecOrMat{T2},C<:AbstractVecOrMat{T3}} <: AbstractVector{SpecialCoSorterElement{T1,T2,T3}}
     sortarray::A
     otherarray::B
     coarray::C
@@ -44,16 +44,16 @@ end
 
 Base.size(c::CoSorter) = size(c.sortarray)
 Base.getindex(c::CoSorter, i...) =
-    CoSorterElement(getindex(c.sortarray, i...), getindex(c.otherarray, i...), getindex(c.coarray, i...))
-Base.setindex!(c::CoSorter, t::CoSorterElement, i...) =
+    SpecialCoSorterElement(getindex(c.sortarray, i...), getindex(c.otherarray, i...), getindex(c.coarray, i...))
+Base.setindex!(c::CoSorter, t::SpecialCoSorterElement, i...) =
     (setindex!(c.sortarray, t.x, i...); setindex!(c.coarray, t.y, i...); c)
 
-Base.isless(a::CoSorterElement, b::CoSorterElement) = isless(a.x, b.x) || (a.x == b.x && isless(a.z, b.z))
+Base.isless(a::SpecialCoSorterElement, b::SpecialCoSorterElement) = isless(a.x, b.x) || (a.x == b.x && isless(a.z, b.z))
 
 
 Base.Sort.defalg(v::C) where {T<:Union{Number,Missing},C<:CoSorter{T}} =
     Base.DEFAULT_UNSTABLE
-@stable function sort_two_arrays!(x::AbstractArray, y::AbstractArray)
+@stable function special_sort_two_arrays!(x::AbstractArray, y::AbstractArray)
     T = CoSorter(x[:, 1], x[:, 2], y)
     sort!(T)
     x = T.sortarray
@@ -68,7 +68,7 @@ end
         summe = 0
         n_zeros = 0
         @inbounds for e in 1:n
-            if iszero(r[e])
+            if Base.iszero(r[e])
                 n_zeros += 1
             else
                 summe += r[e]
@@ -117,10 +117,10 @@ end
     all_marginals = 1:length(d_marginal_indices) |> collect
     all_interactions = 1:length(d_interactions_indices) |> collect
     if length(all_marginals) > 1
-        sort_two_arrays!(sorting_d_marginal, all_marginals)
+        special_sort_two_arrays!(sorting_d_marginal, all_marginals)
     end
     if length(all_interactions) > 1
-        sort_two_arrays!(sorting_d_interactions, all_interactions)
+        special_sort_two_arrays!(sorting_d_interactions, all_interactions)
     end
     keeper_marginals = d_marginal_indices[filter_by_percentage(all_marginals, s_marginals)]
     keeper_interactions = d_interactions_indices[filter_by_percentage(all_interactions, s_interactions)]
@@ -552,6 +552,7 @@ end
 
     return OrthonormalBasis
 end
+
 # @stable function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S; normalize_data=false) where {T<:Real,S<:Integer}
 #     # ChainRulesCore.ignore_derivatives() do
 #     # T = eltype(Data)
@@ -996,7 +997,7 @@ end
 
 @stable function lsqnonneg(C::Matrix, d::Vector, tol::Real=-1, itmax_factor::Real=3)
     # Set the tolerance
-    (m, n) = size(C)
+    (_, n) = size(C)
     tol = (tol == -1) ? 10 * eps() * norm(C, 1) * (maximum(size(C)) + 1) : tol
     itmax = itmax_factor * n
     # Initialize vector of n zeros and Infs (to be used later)

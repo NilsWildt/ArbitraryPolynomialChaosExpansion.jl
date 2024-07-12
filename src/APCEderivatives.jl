@@ -24,18 +24,6 @@ function ChainRulesCore.frule((_, Δx), ::typeof(reverse_columns!), x)
     return y, Δx_reversed
 end
 
-@stable function ChainRulesCore.rrule(::typeof(reverse_columns!), x)
-    function reverse_columns_pullback(Δy)
-        Δx = similar(Δy)
-        for row in axes(Δy, 1)
-            Δx[row, :] = reverse(Δy[row, :])
-        end
-        return (NO_FIELDS, Δx)
-    end
-    y = reverse_columns!(x)
-    return y, reverse_columns_pullback
-end
-
 # @stable function ∂Ψ(x, degree)
 # 	input_dimensions = size(x, 2)
 # 	MultivariatePolynomialDegrees = create_Polynomial_Degrees(input_dimensions, degree; qnorm = 1.0)
