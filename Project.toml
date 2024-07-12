@@ -69,7 +69,4 @@ UnrolledUtilities = "0fe1646c-419e-43be-ac14-22321958931b"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [compat]
-ExplicitImports = "1.8.0"
-Krylov = "0.9.6"
-Random = "1.11.0"
-julia = "1.10"
+julia = "1.11"
