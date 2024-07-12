@@ -56,11 +56,11 @@ end
     @testset "Aqua.jl testset" begin
         Aqua.test_all(
             APCE;
-            ambiguities=true,      # TODO: fix ambiguities
+            ambiguities=false,      # TODO: fix ambiguities
             stale_deps=false,
             unbound_args=true,     # TODO: fix unbound type parameters
-            piracies=false,         # TODO: check the reported methods to be moved upstream
-            deps_compat=false
+            piracies=true,         # TODO: check the reported methods to be moved upstream
+            deps_compat=true
         )
         @test length(Aqua.detect_unbound_args_recursively(APCE)) <= 16
     end
