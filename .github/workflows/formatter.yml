@@ -1,0 +1,44 @@
+spec:
+  inputs:
+    stage:
+      default: test
+---
+variables:
+  CACHE_DIR: "$CI_PROJECT_DIR/julia_pkg"
+
+cache: &juliacache
+  key: 'julia-cache'
+  paths:
+    - "$CACHE_DIR"
+
+before_script:
+  - export JULIA_DEPOT_PATH="$CACHE_DIR"
+  - export JULIA_PROJECT="."
+
+test-formatter:
+  stage: $[[ inputs.stage ]]
+  image: $CI_REGISTRY/roessl/vcjuliaregistry:latest # includes gcov, lcov
+
+  # https://gitlab.com/gitlab-org/gitlab/-/issues/422341
+  # image: julia:latest
+  cache: *juliacache
+
+  script:
+    - |
+      julia -e 'using Pkg;
+                Pkg.activate();
+                Pkg.add("JuliaFormatter");
+                using JuliaFormatter;
+                exit(format("."; ignore = [ENV["JULIA_DEPOT_PATH"]]) ? 0 : 1)'
+  after_script:
+    - >
+      if [ $CI_JOB_STATUS == 'failed' ]; then
+        echo 'The formatter changed some things, have a look:'
+        git diff
+      fi
+
+  tags:
+    - docker
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
