@@ -1,7 +1,7 @@
 name = "APCE"
 uuid = "e0c64dd9-0151-4106-bdf9-1cf426dd9187"
 authors = ["NilsWildt"]
-version = "0.2.0"
+version = "0.2.1"
 
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
@@ -69,5 +69,4 @@ UnrolledUtilities = "0fe1646c-419e-43be-ac14-22321958931b"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [compat]
-Random = "1.11.0"
 julia = "1.11"
