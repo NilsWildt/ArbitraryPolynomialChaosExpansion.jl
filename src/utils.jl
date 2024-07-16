@@ -1,4 +1,35 @@
 using Random
+
+
+@kernel function outer_product_kernel!(output, Ψ, expansion_coefficients)
+    i, j = @index(Global, NTuple)
+        for k in 1:size(output, 1)
+            @inbounds output[k, j] += Ψ[i, k] * expansion_coefficients[i, j]
+        end
+end
+
+# Creating a wrapper kernel for launching with error checks
+function outer_product!(output, Ψ, expansion_coefficients)
+    # if size(Ψ)[1] != size(expansion_coefficients)[1]
+    #     println("Matrix size mismatch!")
+    #     return nothing
+    # end
+    backend = KernelAbstractions.get_backend(Ψ)
+    kernel! = outer_product_kernel!(backend)
+    kernel!(output, Ψ, expansion_coefficients, ndrange=size(expansion_coefficients))
+end
+
+@inline function outer_product_kernel(Ψ::AbstractArray{T},α) where {T<:Real}
+	 (i_dim, k_dim) = size(Ψ)
+    (i_dim_exp, j_dim) = size(α)
+	backend =get_backend(Ψ) # or KernelAbstractions.CUDA() for GPU
+	KernelAbstractions.synchronize(backend)
+	out = KernelAbstractions.zeros(backend, T,k_dim,j_dim)
+	outer_product!(out, Ψ, α)
+	return Array{T}(out)
+end
+
+
 """
 # Returns
 

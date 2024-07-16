@@ -126,7 +126,7 @@ end
     keeper_interactions = d_interactions_indices[filter_by_percentage(all_interactions, s_interactions)]
     idxkeep = vcat(keeper_marginals, keeper_interactions)
     indices = @views indices[idxkeep, :]
-    indices = vcat(indices, zeros(T, num_dimensions)')
+    indices = vcat(indices, Base.zeros(T, num_dimensions)')
     indices = sortslices(hcat(vec(sum(indices; dims=2)), indices); dims=1, rev=false)[:, 2:end]
     # reverse_columns!(indices)
     return indices::Matrix{T}
@@ -872,7 +872,8 @@ end
 @stable function evaluate_Ψ(x, coeffs, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name)
     T = eltype(coeffs)
     Ψ = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree) #.|> T
-    @einsum PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
+    @tensor PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
+    # PredictionOutput = outer_product_kernel(cu(Ψ), cu(coeffs))
     return PredictionOutput
 end
 

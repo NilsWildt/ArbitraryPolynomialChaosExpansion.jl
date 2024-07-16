@@ -1,7 +1,12 @@
 using Revise
 using DrWatson
+
 @quickactivate "APCE"
 module Runner
+using CairoMakie
+using Makie
+
+using Statistics
 using DrWatson
 using PrettyTables
 # using PropDicts
@@ -10,9 +15,9 @@ using TerminalLoggers: TerminalLogger
 using ProgressLogging
 using Logging
 # using BenchmarkTools
-# using Makie
-# using CairoMakie
-# using MKL
+
+# using StaticArrays
+
 using MAT
 using Random
 loggingdir(args...) = projectdir("output", "logs", args...)
@@ -52,54 +57,68 @@ function run()
     # degress = 1:1:5
 
     FT = Float64
+
     @timeit to "lod_data" begin
         #  Loading Input distributions, Training Data and Validation Data 
-        file = matread(datadir("Data.mat"))
-        # print(keys(file))
         # Extracting the variables
         # @info size(file["Xtr"])
-        indall = 1:1000
+        # n = 1000
+        # m = 23
+        m_out = 1
         rng = Xoshiro(42)
-        # @info "" file["TrainingOutput"]
-        Input_distributions = file["Input_distributions"][:, :]
-        itrain, itest = partitionTrainTest(indall; at=0.75, rng)
-        TrainingInput = file["TrainingInput"][indall, :] |> Array{FT}
-        TrainingOutput = file["TrainingOutput"][indall, :] |> Array{FT}
-        # @info "" size(TrainingInput)
+        file = matread(datadir("Ishigami/ishigami_sobol.mat"))
+        indall = 1:50
+        # indims = 1:8
+        TrainingInput = file["TrainingInput"][indall, :] .|> FT
+        Input_distribution = file["Input_distribution"][:, :] .|> FT
+        TrainingOutput = file["TrainingOutput"][indall, :] .|> FT
+        ValidationInput = file["ValidationInput"][indall, :] .|> FT
+        ValidationOutput = file["ValidationOutput"][indall, :] .|> FT
 
-        ValidationInput = file["ValidationInput"][indall, :] |> Array{FT}
-        ValidationOutput = file["ValidationOutput"][indall, :] |> Array{FT}
     end
-
     degree = 10
     s_marginals = FT(1.0)
     s_interactions = FT(1.0)
-    # @info "" size(TrainingOutput, 2)
-    apc_instance = @timeit to "aPC_instance" APCE.aPCE(Input_distributions, degree; outdim=size(TrainingOutput, 2), OrthonormalRepresentation=true, s_marginals=s_marginals, s_interactions=s_interactions, normalize_data=true)
-    @assert apc_instance.NumberOfTerms < 2000 "Too many coefficients."
-
+    @info "" size(TrainingOutput, 2)
+    apc_instance = @timeit to "aPC_instance" APCE.aPCE(Input_distribution, degree; outdim=size(TrainingOutput, 2), OrthonormalRepresentation=true, s_marginals=s_marginals, s_interactions=s_interactions, normalize_data=true, do_gauss=false)
+    @warn "" apc_instance.NumberOfTerms
+    @assert apc_instance.NumberOfTerms < 5000 "Too many coefficients: $(apc_instance.NumberOfTerms)"
     # TrainingInput = KMeansCollocation(apc_instance)
     # @debug "" TrainingInput
     # display(	@report_call GaussianCollocation(apc_instance; strategy = :PCM) )
     # @descend GaussianCollocation(apc_instance; strategy = :PCM)
-    # TrainingInput = @timeit to "GaussianCollocation" GaussianCollocation(apc_instance; strategy = :PCM)
+
+    # TrainingInput_selection = @timeit to "GaussianCollocation" GaussianCollocation(apc_instance; strategy=:PCM)
+    # @info "" TrainingInput_selection
+    # # Find indices of TrainingInput elements that are in TrainingInput_selection
+    # selected_indices = findall(in(TrainingInput_selection), TrainingInput)
+    # # # Select rows from TrainingInput based on the found indices
+    # TrainingOutput_selection = TrainingInput[selected_indices, :]
+    # @info "" TrainingInput_selection TrainingOutput_selection 
+
+    # Perform GaussianCollocation with timing
+    # TrainingInput_selection = GaussianCollocation(apc_instance; strategy = :PCM)
+
+    # Ensure TrainingInput_selection is a matrix of appropriate dimensions
+    # Find indices of rows in TrainingInput that are present in TrainingInput_selection
+    # Select rows from TrainingInput based on the found indices
+    # @info "" TrainingInput_selection TrainingInput
+
+    # Print results for verification
+    # println("TrainingInput_selection size: ", size(TrainingInput_selection))
+    # println("TrainingOutput_selection size: ", size(TrainingOutput_selection))
+
     # TrainingInput = @timeit to "KMeansCollocation" KMeansCollocation(apc_instance)
-    # @info "" size(TrainingInput)
-    @timeit to "training" train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion=false, reg_order=3)
-
-
+    @timeit to "training" train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion=true, reg_order=3)
     PredictionOutput = @timeit to "prediction" predict(apc_instance, TrainingInput)
     ValidationPredictionOutput = @timeit to "prediction" predict(apc_instance, ValidationInput)
-
-
+    # Back to regular matrices:
+    # TrainingOutput = Matrix(TrainingOutput)
+    # ValidationOutput = Matrix(ValidationOutput)
+    # PredictionOutput = Matrix(PredictionOutput)
     uq = UQ(apc_instance)
-    data = ["Mean" uq.OutputMean[1] mean(ValidationOutput);
-        "Var" uq.OutputVar[1] var(ValidationOutput);
-        "Relative mean" (abs(uq.OutputMean[1] - mean(ValidationOutput))/mean(ValidationOutput)) NaN;
-        "Relative var" (abs(uq.OutputVar[1] - var(ValidationOutput))/var(ValidationOutput)) NaN]
-
+    data = ["Mean" uq.OutputMean[1] mean(ValidationOutput); "Var" uq.OutputVar[1] var(ValidationOutput)]
     headers = ["Type", "aPCE", "Data"]
-
     # Display the table
     pretty_table(data; header=headers)
 
@@ -119,30 +138,28 @@ function run()
     # Calculate total figure dimensions
     fig_width = subplot_width * num_columns
     fig_height = subplot_height * num_rows
-    fig = Figure(size=(fig_width, fig_height))
+    fig = Makie.Figure(size=(fig_width, fig_height))
 
     # Visualization of Training and Validation Performance
     plot_index = 1 # Track the plot index across both rows and columns
     for i in 1:size(TrainingOutput, 2)
         row, col = divrem(plot_index - 1, Int(num_columns)) .+ (1, 1)
         # Plot training performance
-        ax1 = Axis(fig[row, col], title="Training Performance $i", xlabel="Training Response", ylabel="Prediction Response")
-        scatter!(ax1, TrainingOutput[:, i], PredictionOutput[:, i], color=:red, marker=:circle)
+        ax1 = CairoMakie.Axis(fig[row, col], title="Training Performance $i", xlabel="Training Response", ylabel="Prediction Response")
+        CairoMakie.scatter!(ax1, TrainingOutput[:, i], PredictionOutput[:, i], color=:red, marker=:circle)
         plot_index += 1
 
         row, col = divrem(plot_index - 1, Int(num_columns)) .+ (1, 1)
         # Plot validation performance
-        ax2 = Axis(fig[row, col], title="Validation Performance $i", xlabel="Validation Reference", ylabel="Validation Response")
-        scatter!(ax2, ValidationOutput[:, i], ValidationPredictionOutput[:, i], color=:blue, marker=:circle)
+        ax2 = CairoMakie.Axis(fig[row, col], title="Validation Performance $i", xlabel="Validation Reference", ylabel="Validation Response")
+        CairoMakie.scatter!(ax2, ValidationOutput[:, i], ValidationPredictionOutput[:, i], color=:blue, marker=:circle)
         plot_index += 1
     end
-    fig_path = normpath(plotsdir("maria_test2"))
+    fig_path = normpath(plotsdir("ishigami_test1"))
     @info fig_path
     mkpath(fig_path)
-    # save(joinpath(fig_path,"training_validation_performance.png"), fig)
-
+    save(joinpath(fig_path, "training_validation_performance_$(degree)_$(s_marginals)_$(s_interactions).png"), fig)
     display(fig)
-
     display(to)
     return fig
 end

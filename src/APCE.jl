@@ -34,13 +34,16 @@ using RegularizationTools: RegularizationTools
 using ReverseDiff: ReverseDiff
 using StaticArrays: StaticArrays
 using StatsBase: StatsBase, fit!, mean, sum
-using TensorOperations: TensorOperations, @tensoropt
+using TensorOperations: TensorOperations, @tensoropt, @tensor
 using TimerOutputs: TimerOutputs
 using Tracker: Tracker
 using Tullio: Tullio, @tullio
 using UnicodePlots: UnicodePlots
 using UnrolledUtilities: UnrolledUtilities
 using Zygote: Zygote, bufferfrom
+using CUDA
+using KernelAbstractions
+using cuTENSOR
 # CPUSummary.use_hwloc(true)
 
 BLAS.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)

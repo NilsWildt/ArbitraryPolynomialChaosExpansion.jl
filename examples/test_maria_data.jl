@@ -1,18 +1,23 @@
 using Revise
 using DrWatson
+
 @quickactivate "APCE"
 module Runner
+using CairoMakie
+using Makie
+
+using Statistics
 using DrWatson
 using PrettyTables
-using PropDicts
+# using PropDicts
 using Logging
 using TerminalLoggers: TerminalLogger
 using ProgressLogging
 using Logging
-using BenchmarkTools
-using Makie
-using StaticArrays
-using CairoMakie
+# using BenchmarkTools
+
+# using StaticArrays
+
 using MAT
 using Random
 loggingdir(args...) = projectdir("output", "logs", args...)
@@ -73,9 +78,9 @@ function run()
 		ValidationInput = file["ValidationInput"][1:n, 1:m] .|> FT #|> SMatrix{n, m}
 		ValidationOutput = file["ValidationOutput"][:, 1:m_out] .|> FT#|> SMatrix{n, m_out}
 	end
-	degree = 4
-	s_marginals = FT(0.2)
-	s_interactions = FT(0.5)
+	degree = 3
+	s_marginals = FT(1.0)
+	s_interactions = FT(1.0)
 	@info "" size(TrainingOutput, 2)
 	apc_instance = @timeit to "aPC_instance" APCE.aPCE(Input_distribution, degree; outdim = size(TrainingOutput, 2), OrthonormalRepresentation = true, s_marginals = s_marginals, s_interactions = s_interactions, normalize_data = true)
 	@warn "" apc_instance.NumberOfTerms apc_instance.NumberOfTerms / m_out
@@ -115,30 +120,28 @@ function run()
 	# Calculate total figure dimensions
 	fig_width = subplot_width * num_columns
 	fig_height = subplot_height * num_rows
-	fig = Figure(size = (fig_width, fig_height))
+	fig = Makie.Figure(size = (fig_width, fig_height))
 
 	# Visualization of Training and Validation Performance
 	plot_index = 1 # Track the plot index across both rows and columns
 	for i in 1:size(TrainingOutput, 2)
 		row, col = divrem(plot_index - 1, Int(num_columns)) .+ (1, 1)
 		# Plot training performance
-		ax1 = Axis(fig[row, col], title = "Training Performance $i", xlabel = "Training Response", ylabel = "Prediction Response")
-		scatter!(ax1, TrainingOutput[:, i], PredictionOutput[:, i], color = :red, marker = :circle)
+		ax1 = CairoMakie.Axis(fig[row, col], title = "Training Performance $i", xlabel = "Training Response", ylabel = "Prediction Response")
+		CairoMakie.scatter!(ax1, TrainingOutput[:, i], PredictionOutput[:, i], color = :red, marker = :circle)
 		plot_index += 1
 
 		row, col = divrem(plot_index - 1, Int(num_columns)) .+ (1, 1)
 		# Plot validation performance
-		ax2 = Axis(fig[row, col], title = "Validation Performance $i", xlabel = "Validation Reference", ylabel = "Validation Response")
-		scatter!(ax2, ValidationOutput[:, i], ValidationPredictionOutput[:, i], color = :blue, marker = :circle)
+		ax2 = CairoMakie.Axis(fig[row, col], title = "Validation Performance $i", xlabel = "Validation Reference", ylabel = "Validation Response")
+		CairoMakie.scatter!(ax2, ValidationOutput[:, i], ValidationPredictionOutput[:, i], color = :blue, marker = :circle)
 		plot_index += 1
 	end
 	fig_path = normpath(plotsdir("maria_test2"))
 	@info fig_path
 	mkpath(fig_path)
 	save(joinpath(fig_path, "training_validation_performance_$(degree)_$(s_marginals)_$(s_interactions).png"), fig)
-
 	display(fig)
-
 	display(to)
 	return fig
 end

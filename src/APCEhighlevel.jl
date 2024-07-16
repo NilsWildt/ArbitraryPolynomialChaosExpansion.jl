@@ -34,7 +34,7 @@ mutable struct aPCE{T<:Real}
             gauss_one_order_more = 1
         end
         MultivariatePolynomialDegrees = aPCE_MultivariatePolynomialDegrees(input_dimensions, ExpansionDegree + gauss_one_order_more, s_marginals, s_interactions)
-        NumberOfTerms = min(size(MultivariatePolynomialDegrees, 1), numberPolynomials(ExpansionDegree, input_dimensions))
+        NumberOfTerms = min(size(MultivariatePolynomialDegrees, 1), numberPolynomials(ExpansionDegree + gauss_one_order_more, input_dimensions))
         OrthonormalBasis = create_basis(InputDistribution, ExpansionDegree + gauss_one_order_more; normalize_data=normalize_data)
         ExpansionCoefficients = zeros(T, NumberOfTerms, outdim)
         return new{T}(
@@ -100,8 +100,6 @@ function GaussianCollocation(aPCE::aPCE{T}; strategy=:PCM) where {T<:Real}
     # @info aPCE
     PointsVector = 1:aPCE.ExpansionDegree+1 |> collect
     UniqueCombinations = stack(reduce(vcat, (Iterators.product([PointsVector for _ in 1:aPCE.input_dimensions]...))))'
-
-
     sort_indices = sortperm(sum(UniqueCombinations; dims=2); dims=1)
     SortUniqueCombinations = UniqueCombinations[sort_indices[:], :]
     if strategy == :FT
@@ -156,7 +154,9 @@ end
 
 
     Psi_inv = pinv(Psi; rtol=sqrt(eps(real(float(oneunit(eltype(Psi)))))))
-    @tullio aPCE.ExpansionCoefficients[i, k] = Psi_inv[i, j] * y_rhs[j, k]
+    @tensor aPCE.ExpansionCoefficients[i, k] = Psi_inv[i, j] * y_rhs[j, k]
+    # aPCE.ExpansionCoefficients = outer_product_kernel(cu(Psi_inv), cu(y_rhs))
+    
 
     #! Other options!
     # for k in axes(y_rhs, 2)
@@ -186,7 +186,8 @@ end
 @stable function predict(aPCE::aPCE{T}, PredictionInput)::Matrix{T} where {T<:Real}
     # @info "=> aPCE Toolbox: Prediction using Arbitrary Polynomial Chaos ..."
     Psi = aPCE_PsiPolynomialMatrix(aPCE, PredictionInput)
-    @tensoropt PredictionOutput[k, j] := Psi[i, k] * aPCE.ExpansionCoefficients[i, j]
+    @tensor PredictionOutput[k, j] := Psi[i, k] * aPCE.ExpansionCoefficients[i, j]
+    # PredictionOutput = outer_product_kernel(cu(Psi), cu(aPCE.ExpansionCoefficients))
     return PredictionOutput
 end
 
@@ -198,5 +199,6 @@ end
 @stable function predict_from_coeffs(aPCE::aPCE{T}, PredictionInput, θ) where {T<:ForwardDiff.Dual}
     Psi = aPCE_PsiPolynomialMatrix(aPCE, PredictionInput)
     @einsum PredictionOutput[k, j] := Psi[i, k] * θ[i, j]
+    # PredictionOutput = outer_product_kernel(cu(Psi), cu(aPCE.ExpansionCoefficients))
     return PredictionOutput
 end
