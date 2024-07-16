@@ -34,7 +34,8 @@ using RegularizationTools: RegularizationTools
 using ReverseDiff: ReverseDiff
 using StaticArrays: StaticArrays
 using StatsBase: StatsBase, fit!, mean, sum
-using TensorOperations: TensorOperations, @tensoropt, @tensor
+import Bumper
+using TensorOperations: TensorOperations, @tensoropt, @tensor, @butensor
 using TimerOutputs: TimerOutputs
 using Tracker: Tracker
 using Tullio: Tullio, @tullio

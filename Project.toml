@@ -6,6 +6,7 @@ version = "0.2.1"
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
 AbstractDifferentiation = "c29ec348-61ec-40c8-8164-b8c60e9d9f3d"
+Bumper = "8ce10254-0962-460f-a3d8-1f77fea1446e"
 CPUSummary = "2a0fbf3d-bb9c-48f3-b0a9-814d99fd7ab9"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 ChainRules = "082447d4-558c-5d27-93f4-14fc19e9eca2"
@@ -73,6 +74,7 @@ Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 cuTENSOR = "011b41b2-24ef-40a8-b3eb-fa098493e9e1"
 
 [compat]
+Bumper = "0.6.0"
 CUDA = "5.4.3"
 ExplicitImports = "1.9.0"
 KernelAbstractions = "0.9.22"
