@@ -29,6 +29,94 @@ begin
 	using .EnzymeRules
 end
 
+# ╔═╡ 277bf495-88e0-4970-ae3f-0e9dd488beff
+begin
+	
+@kernel function outer_product_kernel!(output, Ψ, expansion_coefficients)
+    i, j = @index(Global, NTuple)
+        for k in 1:size(output, 1)
+            @inbounds output[k, j] += Ψ[i, k] * expansion_coefficients[i, j]
+        end
+end
+
+# Creating a wrapper kernel for launching with error checks
+function outer_product!(output, Ψ, expansion_coefficients)
+    backend = KernelAbstractions.get_backend(Ψ)
+    kernel! = outer_product_kernel!(backend)
+    kernel!(output, Ψ, expansion_coefficients, ndrange=size(expansion_coefficients))
+end
+
+@inline function outer_product_kernel(Ψ::AbstractArray{T},α::AbstractArray{S}) where {T<:Real, S<:Real}
+	(i_dim, k_dim) = size(Ψ)
+    (i_dim_exp, j_dim) = size(α)
+	backend =get_backend(Ψ) # or KernelAbstractions.CUDA() for GPU
+	KernelAbstractions.synchronize(backend)
+	out = KernelAbstractions.zeros(backend, S,k_dim,j_dim)
+	outer_product!(out, Ψ, α)
+	return out
+end
+
+	
+function ChainRulesCore.rrule(::typeof(outer_product_kernel), Ψ, α::AbstractArray{T}) where {T<:Real}
+	Ψ = Array(Ψ)
+	α = Array( α)
+    result = my_outer_product(Ψ, α)
+    function pullback(Δresult)
+        (i_dim, k_dim) = size(Ψ)
+        (_, j_dim) = size(α)
+		ΔΨ = zeros(T,i_dim,k_dim)
+		Δα = zeros(T,i_dim,j_dim)
+        @inbounds for i in 1:i_dim
+            for k in 1:k_dim
+         		@simd for j in 1:j_dim
+                    ΔΨ[i, k] += Δresult[k, j] * α[i, j]
+                    Δα[i, j] += Δresult[k, j] * Ψ[i, k]
+                end
+            end
+        end
+        return (NoTangent(), ΔΨ, Δα)
+	end
+	return result, pullback
+    end
+	
+# @inline function outer_product_derivatives!(ΔΨ,Δα, Ψ, α,Δresult )
+#     backend = KernelAbstractions.get_backend(Ψ)
+# 	KernelAbstractions.synchronize(backend)
+	
+#     kernel! = outer_product_kernel_derivatives!(backend)
+# 	KernelAbstractions.synchronize(backend)
+	
+#     kernel!(ΔΨ, Δα, Ψ, α,cu(Δresult),ndrange=size(α))
+# end
+
+
+# 	@kernel function outer_product_kernel_derivatives!(ΔΨ,Δα, Ψ, α,Δresult)
+#     i, j = @index(Global, NTuple)
+#         for k in 1:size(ΔΨ, 1)
+# 			   ΔΨ[i, k] += Δresult[k, j] * α[i, j]
+#                Δα[i, j] += Δresult[k, j] * Ψ[i, k]
+#        end
+# 	end
+	
+# function ChainRulesCore.rrule(::typeof(outer_product_kernel), Ψ, α)
+# 	backend = get_backend(Ψ)
+#     result = outer_product_kernel(Ψ, α)
+#     function pullback(Δresult)
+# 		Δresult = cu(Δresult)
+#         (i_dim, k_dim) = size(Ψ)
+#         (_, j_dim) = size(α)
+# 		ΔΨ = CUDA.zeros(i_dim,k_dim)
+# 		Δα = CUDA.zeros(i_dim,j_dim)
+#         outer_product_derivatives!(ΔΨ,Δα, Ψ, α,Δresult )
+#     	# KernelAbstractions.synchronize(backend)
+#         return (NoTangent(), ΔΨ, Δα)
+# 	end
+# 	return result, pullback
+#     end
+ 
+
+end
+
 # ╔═╡ c95eb473-bced-4fa4-a686-c07a28992e48
 ChainRulesCore.debug_mode() = true
 
@@ -129,94 +217,6 @@ begin
     end
     return result
 end
-
-end
-
-# ╔═╡ 277bf495-88e0-4970-ae3f-0e9dd488beff
-begin
-	
-@kernel function outer_product_kernel!(output, Ψ, expansion_coefficients)
-    i, j = @index(Global, NTuple)
-        for k in 1:size(output, 1)
-            @inbounds output[k, j] += Ψ[i, k] * expansion_coefficients[i, j]
-        end
-end
-
-# Creating a wrapper kernel for launching with error checks
-function outer_product!(output, Ψ, expansion_coefficients)
-    backend = KernelAbstractions.get_backend(Ψ)
-    kernel! = outer_product_kernel!(backend)
-    kernel!(output, Ψ, expansion_coefficients, ndrange=size(expansion_coefficients))
-end
-
-@inline function outer_product_kernel(Ψ::AbstractArray{T},α::AbstractArray{S}) where {T<:Real, S<:Real}
-	(i_dim, k_dim) = size(Ψ)
-    (i_dim_exp, j_dim) = size(α)
-	backend =get_backend(Ψ) # or KernelAbstractions.CUDA() for GPU
-	KernelAbstractions.synchronize(backend)
-	out = KernelAbstractions.zeros(backend, S,k_dim,j_dim)
-	outer_product!(out, Ψ, α)
-	return out
-end
-
-	
-function ChainRulesCore.rrule(::typeof(outer_product_kernel), Ψ, α::AbstractArray{T}) where {T<:Real}
-	Ψ = Array(Ψ)
-	α = Array( α)
-    result = my_outer_product(Ψ, α)
-    function pullback(Δresult)
-        (i_dim, k_dim) = size(Ψ)
-        (_, j_dim) = size(α)
-		ΔΨ = zeros(T,i_dim,k_dim)
-		Δα = zeros(T,i_dim,j_dim)
-        @inbounds for i in 1:i_dim
-            for k in 1:k_dim
-         		@simd for j in 1:j_dim
-                    ΔΨ[i, k] += Δresult[k, j] * α[i, j]
-                    Δα[i, j] += Δresult[k, j] * Ψ[i, k]
-                end
-            end
-        end
-        return (NoTangent(), ΔΨ, Δα)
-	end
-	return result, pullback
-    end
-	
-# @inline function outer_product_derivatives!(ΔΨ,Δα, Ψ, α,Δresult )
-#     backend = KernelAbstractions.get_backend(Ψ)
-# 	KernelAbstractions.synchronize(backend)
-	
-#     kernel! = outer_product_kernel_derivatives!(backend)
-# 	KernelAbstractions.synchronize(backend)
-	
-#     kernel!(ΔΨ, Δα, Ψ, α,cu(Δresult),ndrange=size(α))
-# end
-
-
-# 	@kernel function outer_product_kernel_derivatives!(ΔΨ,Δα, Ψ, α,Δresult)
-#     i, j = @index(Global, NTuple)
-#         for k in 1:size(ΔΨ, 1)
-# 			   ΔΨ[i, k] += Δresult[k, j] * α[i, j]
-#                Δα[i, j] += Δresult[k, j] * Ψ[i, k]
-#        end
-# 	end
-	
-# function ChainRulesCore.rrule(::typeof(outer_product_kernel), Ψ, α)
-# 	backend = get_backend(Ψ)
-#     result = outer_product_kernel(Ψ, α)
-#     function pullback(Δresult)
-# 		Δresult = cu(Δresult)
-#         (i_dim, k_dim) = size(Ψ)
-#         (_, j_dim) = size(α)
-# 		ΔΨ = CUDA.zeros(i_dim,k_dim)
-# 		Δα = CUDA.zeros(i_dim,j_dim)
-#         outer_product_derivatives!(ΔΨ,Δα, Ψ, α,Δresult )
-#     	# KernelAbstractions.synchronize(backend)
-#         return (NoTangent(), ΔΨ, Δα)
-# 	end
-# 	return result, pullback
-#     end
- 
 
 end
 

@@ -60,6 +60,45 @@ Base.Sort.defalg(v::C) where {T<:Union{Number,Missing},C<:CoSorter{T}} =
     y = T.coarray
 end
 
+"""
+    aPCE_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T, s_marginals::F, s_interactions::F) where {T<:Integer,F<:Real}
+
+Calculate the multivariate polynomial degrees for a given number of dimensions and maximum degree, considering the specified marginal and interaction scaling factors.
+
+# Arguments
+- `num_dimensions::T`: The number of dimensions (or variables) to consider. Must be of an integer type.
+- `max_degree::T`: The maximum degree of the polynomial. Must be of an integer type.
+- `s_marginals::F`: Scaling factor for the marginal distributions. Must be of a real number type.
+- `s_interactions::F`: Scaling factor for the interaction terms. Must be of a real number type.
+
+# Returns
+An appropriate structure or value representing the multivariate polynomial degrees considering the input parameters.
+
+# Internal Functions
+## get_stats(r)::Array{F}
+    Calculates and returns statistical properties of the input array `r`.
+
+    ### Arguments
+    - `r::Array{F}`: Input array for which the statistics are computed. Elements must be of a real number type.
+
+    ### Returns
+    An array of six elements:
+    - `summe`: Sum of non-zero elements in `r`.
+    - `n_zeros`: Number of zero elements in `r`.
+    - `meanval`: Mean value of elements in `r`.
+    - `varval`: Variance of elements in `r`.
+    - `mm.min`: Minimum value of elements in `r`.
+    - `mm.max`: Maximum value of elements in `r`.
+
+# Example
+```julia
+num_dimensions = 3
+max_degree = 5
+s_marginals = 1.0
+s_interactions = 0.5
+
+result = aPCE_MultivariatePolynomialDegrees(num_dimensions, max_degree, s_marginals, s_interactions)
+"""
 @stable function aPCE_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T, s_marginals::F, s_interactions::F) where {T<:Integer,F<:Real}
     # Initialize the indices for the first parameter
     @stable function get_stats(r)::Array{F} # Returns sum, nzeros, mean, var, min,max
@@ -204,7 +243,7 @@ end
         for ii ∈ 1:InputDimensions  # For each dimension of the input
             degree = MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
             coeffs = @views OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
-            p = Polynomials.Polynomial(coeffs)  # Create the polynomial
+            p = Polynomials.Polynomial(Tuple(coeffs))  # Create the polynomial Tuple is faster...
             # p = Poly(coeffs)
             x = @views TrainingInput[:, ii]
             @.. Psi[i, :] *= p(x)  # Evaluate the polynomial at x and multiply
@@ -1063,3 +1102,91 @@ end
     end
     return x
 end
+
+
+
+## GPU Kernel for outer_product!!	
+    # @kernel function outer_product_kernel!(output, Ψ, expansion_coefficients)
+    #     i, j = @index(Global, NTuple)
+    #         for k in 1:size(output, 1)
+    #             @inbounds output[k, j] += Ψ[i, k] * expansion_coefficients[i, j]
+    #         end
+    # end
+    
+    # # Creating a wrapper kernel for launching with error checks
+    # function outer_product!(output, Ψ, expansion_coefficients)
+    #     backend = KernelAbstractions.get_backend(Ψ)
+    #     kernel! = outer_product_kernel!(backend)
+    #     kernel!(output, Ψ, expansion_coefficients, ndrange=size(expansion_coefficients))
+    # end
+    
+    # @inline function outer_product_kernel(Ψ::AbstractArray{T},α::AbstractArray{S}) where {T<:Real, S<:Real}
+    #     (i_dim, k_dim) = size(Ψ)
+    #     (i_dim_exp, j_dim) = size(α)
+    #     backend =get_backend(Ψ) # or KernelAbstractions.CUDA() for GPU
+    #     KernelAbstractions.synchronize(backend)
+    #     out = KernelAbstractions.zeros(backend, S,k_dim,j_dim)
+    #     outer_product!(out, Ψ, α)
+    #     return out
+    # end
+    
+        
+    # function ChainRulesCore.rrule(::typeof(outer_product_kernel), Ψ, α::AbstractArray{T}) where {T<:Real}
+    #     Ψ = Array(Ψ)
+    #     α = Array( α)
+    #     result = my_outer_product(Ψ, α)
+    #     function pullback(Δresult)
+    #         (i_dim, k_dim) = size(Ψ)
+    #         (_, j_dim) = size(α)
+    #         ΔΨ = zeros(T,i_dim,k_dim)
+    #         Δα = zeros(T,i_dim,j_dim)
+    #         @inbounds for i in 1:i_dim
+    #             for k in 1:k_dim
+    #                  @simd for j in 1:j_dim
+    #                     ΔΨ[i, k] += Δresult[k, j] * α[i, j]
+    #                     Δα[i, j] += Δresult[k, j] * Ψ[i, k]
+    #                 end
+    #             end
+    #         end
+    #         return (NoTangent(), ΔΨ, Δα)
+    #     end
+    #     return result, pullback
+    #     end
+        
+    # @inline function outer_product_derivatives!(ΔΨ,Δα, Ψ, α,Δresult )
+    #     backend = KernelAbstractions.get_backend(Ψ)
+    # 	KernelAbstractions.synchronize(backend)
+        
+    #     kernel! = outer_product_kernel_derivatives!(backend)
+    # 	KernelAbstractions.synchronize(backend)
+        
+    #     kernel!(ΔΨ, Δα, Ψ, α,cu(Δresult),ndrange=size(α))
+    # end
+    
+    
+    # 	@kernel function outer_product_kernel_derivatives!(ΔΨ,Δα, Ψ, α,Δresult)
+    #     i, j = @index(Global, NTuple)
+    #         for k in 1:size(ΔΨ, 1)
+    # 			   ΔΨ[i, k] += Δresult[k, j] * α[i, j]
+    #                Δα[i, j] += Δresult[k, j] * Ψ[i, k]
+    #        end
+    # 	end
+        
+    # function ChainRulesCore.rrule(::typeof(outer_product_kernel), Ψ, α)
+    # 	backend = get_backend(Ψ)
+    #     result = outer_product_kernel(Ψ, α)
+    #     function pullback(Δresult)
+    # 		Δresult = cu(Δresult)
+    #         (i_dim, k_dim) = size(Ψ)
+    #         (_, j_dim) = size(α)
+    # 		ΔΨ = CUDA.zeros(i_dim,k_dim)
+    # 		Δα = CUDA.zeros(i_dim,j_dim)
+    #         outer_product_derivatives!(ΔΨ,Δα, Ψ, α,Δresult )
+    #     	# KernelAbstractions.synchronize(backend)
+    #         return (NoTangent(), ΔΨ, Δα)
+    # 	end
+    # 	return result, pullback
+    #     end
+     
+    
+    # end
