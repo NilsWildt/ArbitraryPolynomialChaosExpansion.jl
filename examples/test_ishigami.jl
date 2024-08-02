@@ -67,7 +67,7 @@ function run()
         m_out = 1
         rng = Xoshiro(42)
         file = matread(datadir("Ishigami/ishigami_sobol.mat"))
-        indall = 1:50
+        indall = 1:500
         # indims = 1:8
         TrainingInput = file["TrainingInput"][indall, :] .|> FT
         Input_distribution = file["Input_distribution"][:, :] .|> FT
