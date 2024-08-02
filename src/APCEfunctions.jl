@@ -755,41 +755,41 @@ end
     end
 end
 
-function KMeansCollocation(InputDistribution, M=10)
-    alg = InducingPoints.KmeansAlg(M)
-    Z = inducingpoints(alg, reduce(hcat, InputDistribution)')
-    Z = reduce(hcat, Z) |> Array |> transpose |> RowVecs
-    return Z
-end
+# function KMeansCollocation(InputDistribution, M=10)
+#     alg = InducingPoints.KmeansAlg(M)
+#     Z = inducingpoints(alg, reduce(hcat, InputDistribution)')
+#     Z = reduce(hcat, Z) |> Array |> transpose |> RowVecs
+#     return Z
+# end
 
-function kDPPCollocation(InputDistribution, M=10)
-    kernel = SqExponentialKernel()
-    alg = kDPP(M)
-    Z = inducingpoints(alg, reduce(hcat, InputDistribution)'; kernel)
-    Z = reduce(hcat, Z) |> Array |> transpose |> RowVecs
-    return Z
-end
+# function kDPPCollocation(InputDistribution, M=10)
+#     kernel = SqExponentialKernel()
+#     alg = kDPP(M)
+#     Z = inducingpoints(alg, reduce(hcat, InputDistribution)'; kernel)
+#     Z = reduce(hcat, Z) |> Array |> transpose |> RowVecs
+#     return Z
+# end
 
-function RandomSubsetCollocation(InputDistribution, M=10)
-    alg = RandomSubset(M)
-    Z = inducingpoints(alg, reduce(hcat, InputDistribution)')
-    Z = reduce(hcat, Z) |> Array |> transpose |> RowVecs
-    return Z
-end
+# function RandomSubsetCollocation(InputDistribution, M=10)
+#     alg = RandomSubset(M)
+#     Z = inducingpoints(alg, reduce(hcat, InputDistribution)')
+#     Z = reduce(hcat, Z) |> Array |> transpose |> RowVecs
+#     return Z
+# end
 
-function CoverTreeCollocation(InputDistribution, c=0.2)
-    alg = CoverTree(c)
-    Z = inducingpoints(alg, reduce(hcat, InputDistribution)')
-    Z = reduce(hcat, Z) |> Array |> transpose |> RowVecs
-    return Z
-end
+# function CoverTreeCollocation(InputDistribution, c=0.2)
+#     alg = CoverTree(c)
+#     Z = inducingpoints(alg, reduce(hcat, InputDistribution)')
+#     Z = reduce(hcat, Z) |> Array |> transpose |> RowVecs
+#     return Z
+# end
 
-function UniGridCollocation(InputDistribution, M=10)
-    alg = UniGrid(M)
-    Z = inducingpoints(alg, reduce(hcat, InputDistribution)')
-    Z = reduce(hcat, Z) |> Array |> transpose |> RowVecs
-    return Z
-end
+# function UniGridCollocation(InputDistribution, M=10)
+#     alg = UniGrid(M)
+#     Z = inducingpoints(alg, reduce(hcat, InputDistribution)')
+#     Z = reduce(hcat, Z) |> Array |> transpose |> RowVecs
+#     return Z
+# end
 
 @stable function numberPolynomials(n, d)
     x, y = max(d, n), min(d, n)

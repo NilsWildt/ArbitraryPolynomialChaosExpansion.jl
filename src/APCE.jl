@@ -13,7 +13,7 @@ using Einsum: Einsum, @einsum
 using Estrin: Estrin
 using FastBroadcast: @.. # Unroll to speedup...
 using ForwardDiff: ForwardDiff, Dual
-using InducingPoints: InducingPoints, CoverTree, RandomSubset, UniGrid, inducingpoints, kDPP
+# using InducingPoints: InducingPoints, CoverTree, RandomSubset, UniGrid, inducingpoints, kDPP
 using Infiltrator: Infiltrator, @infiltrate
 using Krylov: Krylov
 using LazyGrids: LazyGrids
