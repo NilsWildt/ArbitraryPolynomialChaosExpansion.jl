@@ -8,6 +8,7 @@ using Combinatorics: Combinatorics, factorial
 using ComponentArrays: ComponentArrays
 using DifferentiationInterface: DifferentiationInterface
 using DispatchDoctor: @stable
+using SparseArrays
 using DrWatson: DrWatson, projectdir
 using Einsum: Einsum, @einsum
 using Estrin: Estrin
@@ -21,6 +22,7 @@ using LineSearches: LineSearches
 using LinearAlgebra.BLAS: gemv, gemv!, gemm!, trsm!, axpy!, ger!
 using LinearAlgebra: LinearAlgebra, BLAS, transpose
 using LinearAlgebra: checksquare
+using LazyArrays
 using LinearAlgebra: svd, norm, pinv, Diagonal, tr
 using Octavian: Octavian
 using OnlineStats: OnlineStats, Extrema, Mean, Series, Variance, eachrow, value

@@ -60,6 +60,7 @@ Base.Sort.defalg(v::C) where {T<:Union{Number,Missing},C<:CoSorter{T}} =
     y = T.coarray
 end
 
+
 @stable function aPCE_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T, s_marginals::F, s_interactions::F) where {T<:Integer,F<:Real}
     # Initialize the indices for the first parameter
     @stable function get_stats(r)::Array{F} # Returns sum, nzeros, mean, var, min,max
@@ -91,13 +92,30 @@ end
     end
 
 
-    range_ = 0:max_degree |> collect
-    indices = reshape(range_, :, 1)  # Make it a column vector
-    @inbounds for di in 1:num_dimensions-1
+    # range_ = 0:max_degree |> collect
+    # indices = reshape(range_, :, 1)  # Make it a column vector
+    # @inbounds for di in 1:num_dimensions-1
+    #     indices = repeat(indices, inner=(max_degree + 1, 1))
+    #     front = repeat(range_, outer=div(lastindex(indices), (max_degree + 1)) ÷ di)
+    #     indices = hcat(front, indices)
+    #     indices = indices[vec(sum(indices; dims=2)).<=max_degree, :]
+    # end
+    # range_ = 0:max_degree |> sparse
+    # indices = reshape(range_, :, 1)  
+    # for di in 1:num_dimensions-1
+    #     indices = repeat(indices, inner=(max_degree + 1, 1))
+    #     front = repeat(range_, outer=div(lastindex(indices), (max_degree + 1)) ÷ di)
+    #     indices = hcat(front, indices)
+    #     indices = indices[vec(sum(indices; dims=2)).<=max_degree, :]
+    # end
+
+    range_ = 0:max_degree  # |> sparse
+    indices = reshape(range_, :, 1)
+    for di in 1:num_dimensions-1
         indices = repeat(indices, inner=(max_degree + 1, 1))
-        front = repeat(range_, outer=div(lastindex(indices), (max_degree + 1)) ÷ di)
-        indices = hcat(front, indices)
-        indices = indices[vec(sum(indices; dims=2)).<=max_degree, :]
+        front = repeat(range_, outer=div(lastindex(indices), (max_degree + 1)) ÷ di) |> sparse
+        indices = ApplyArray(hcat, front, indices)
+        indices = @~ indices[vec(sum(indices; dims=2)).<=max_degree, :]
     end
 
     stats = reduce(hcat, map(x -> get_stats(x), eachrow(indices)))'
@@ -129,7 +147,7 @@ end
     indices = vcat(indices, Base.zeros(T, num_dimensions)')
     indices = sortslices(hcat(vec(sum(indices; dims=2)), indices); dims=1, rev=false)[:, 2:end]
     # reverse_columns!(indices)
-    return indices::Matrix{T}
+    return indices::Matrix{T}# from sparse to matrix.
 end
 
 
@@ -353,7 +371,7 @@ end
     T = eltype(Data)
     d = Degree #Degree of polinomial expansion
     dd = d #Degree of polinomial for roots defenition
-    @warn "Weird, ist that properly normalized? Not /std and minus mean?"
+    # @warn "Weird, ist that properly normalized? Not /std and minus mean?"
     NumberOfDataPoints = length(Data)
     MeanOfData = mean(Data)
     Data = Data ./ MeanOfData
@@ -408,10 +426,11 @@ end
         # end
         # Vp = zeros(T, size(Vc))
         # try
-        PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Hankel \ Vc
+        PolyCoeff_NonNorm[degree+1, 1:degree+1] .= LinearAlgebra.factorize(Hankel) \ Vc
+        # PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Krylov.usymlq(Hankel,Vc) |> first
         # catch
         #     @warn "Hankel matrix singular, trying pseudo inverse." #  Vp Hankel Vc
-        #     PolyCoeff_NonNorm[degree+1, 1:degree+1] .= pinv(Hankel) * Vc
+        # PolyCoeff_NonNorm[degree+1, 1:degree+1] .= pinv(Hankel) * Vc
         # end
         # Vp = Hankel \ Vc
         # PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Vp
@@ -479,7 +498,7 @@ end
         end
         Vc[degree+1] = one(T)
 
-        PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Hankel \ Vc
+        PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Hankel \ Vc #  pinv(Hankel) * Vc # 
 
         P_norm = 0.0
         for i ∈ 1:NumberOfDataPoints
@@ -819,7 +838,7 @@ end
     input_dimensions = size(x, 2)
     OrthonormalBasis = Array{eltype(x),3}(undef, degree + 1, degree + 1, input_dimensions)
     for i in 1:input_dimensions
-        OrthonormalBasis[:, :, i] = aPCE_OrthonormalBasis(view(x, :, i), degree, Val(normalize_data))
+        OrthonormalBasis[:, :, i] .= aPCE_OrthonormalBasis(view(x, :, i), degree, Val(normalize_data)) # view(x, :, i)
     end
     return OrthonormalBasis
 end
@@ -833,7 +852,7 @@ end
     end
     # OrthonormalBasis = zeros(eltype(x), degree + 1, degree + 1, input_dimensions)
     for i in 1:input_dimensions
-        OrthonormalBasis[:, :, i] .= aPCE_OrthonormalBasis(x[:, i], degree, Val(normalize_data))
+        OrthonormalBasis[:, :, i] .= aPCE_OrthonormalBasis(view(x, :, i), degree, Val(normalize_data))
     end
     # return OrthonormalBasis
     # end
@@ -1062,4 +1081,10 @@ end
         w = Ctrans * resid
     end
     return x
+end
+
+
+
+function removeNaN(x)
+    return isnan(x) ? Float32(0.0) : x
 end
