@@ -46,7 +46,7 @@ using UnrolledUtilities: UnrolledUtilities
 using Zygote: Zygote, bufferfrom
 using CUDA
 using KernelAbstractions
-using cuTENSOR
+# using cuTENSOR
 # CPUSummary.use_hwloc(true)
 
 BLAS.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)

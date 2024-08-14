@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.43
+# v0.19.45
 
 using Markdown
 using InteractiveUtils
@@ -25,46 +25,172 @@ begin
 	using cuTENSOR
 	using OMEinsum
 	using Bumper
+	using Atomix
 	import .EnzymeRules
 	using .EnzymeRules
 end
+
+# ╔═╡ 2cab2751-98e1-45cd-ba1f-be6dedf2aafd
+begin
+	
+	KernelAbstractions.@kernel function outer_product_kernel!(output, Ψ, expansion_coefficients)
+	    i, j = KernelAbstractions.@index(Global, NTuple)
+	    @inbounds begin
+	        @simd for k in axes(output, 1)
+	            Atomix.@atomic output[k, j] += Ψ[i, k] * expansion_coefficients[i, j] # got race condition apparently.
+	        end
+	    end
+	end
+	
+	# Creating a wrapper kernel for launching with error checks
+	@inline function outer_product!(output, Ψ, expansion_coefficients)
+	    backend = KernelAbstractions.get_backend(Ψ)
+	    kernel! = outer_product_kernel!(backend)
+	    kernel!(output, Ψ, expansion_coefficients, ndrange=size(expansion_coefficients))
+	end
+	
+	@inline function outer_product_kernel(Ψ::AbstractArray{T}, α::AbstractArray{S}) where {T<:Real,S<:Real}
+	    (i_dim, k_dim) = size(Ψ)
+	    (i_dim_exp, j_dim) = size(α)
+	    backend = get_backend(Ψ) # or KernelAbstractions.CUDA() for GPU
+	    # KernelAbstractions.synchronize(backend)
+	    out = KernelAbstractions.zeros(backend, S, k_dim, j_dim)
+	    outer_product!(out, Ψ, α)
+	    KernelAbstractions.synchronize(backend)
+	    return out
+	end
+	
+	# function ChainRulesCore.rrule(::typeof(outer_product_kernel), Ψ, α::AbstractArray{T}) where {T<:Real}
+	#     Ψ = Array(Ψ)
+	#     α = Array(α)
+	#     result = my_outer_product(Ψ, α)
+	#     function pullback(Δresult)
+	#         (i_dim, k_dim) = size(Ψ)
+	#         (_, j_dim) = size(α)
+	#         ΔΨ = zeros(T, i_dim, k_dim)
+	#         Δα = zeros(T, i_dim, j_dim)
+	#         @inbounds for i in 1:i_dim
+	#             for k in 1:k_dim
+	#                 @simd for j in 1:j_dim
+	#                     ΔΨ[i, k] += Δresult[k, j] * α[i, j]
+	#                     Δα[i, j] += Δresult[k, j] * Ψ[i, k]
+	#                 end
+	#             end
+	#         end
+	#         return (NoTangent(), ΔΨ, Δα)
+	#     end
+	#     return result, pullback
+	# end
+	
+end
+
+# ╔═╡ 277bf495-88e0-4970-ae3f-0e9dd488beff
+# begin
+	
+# @kernel function outer_product_kernel!(output, Ψ, expansion_coefficients)
+#     i, j = @index(Global, NTuple)
+#         for k in 1:size(output, 1)
+#             @inbounds output[k, j] += Ψ[i, k] * expansion_coefficients[i, j]
+#         end
+# end
+
+# # Creating a wrapper kernel for launching with error checks
+# function outer_product!(output, Ψ, expansion_coefficients)
+#     backend = KernelAbstractions.get_backend(Ψ)
+#     kernel! = outer_product_kernel!(backend)
+#     kernel!(output, Ψ, expansion_coefficients, ndrange=size(expansion_coefficients))
+# end
+
+# @inline function outer_product_kernel(Ψ::AbstractArray{T},α::AbstractArray{S}) where {T<:Real, S<:Real}
+# 	(i_dim, k_dim) = size(Ψ)
+#     (i_dim_exp, j_dim) = size(α)
+# 	backend =get_backend(Ψ) # or KernelAbstractions.CUDA() for GPU
+# 	KernelAbstractions.synchronize(backend)
+# 	out = KernelAbstractions.zeros(backend, S,k_dim,j_dim)
+# 	outer_product!(out, Ψ, α)
+# 	return out
+# end
+
+	
+# function ChainRulesCore.rrule(::typeof(outer_product_kernel), Ψ, α::AbstractArray{T}) where {T<:Real}
+# 	Ψ = Array(Ψ)
+# 	α = Array( α)
+#     result = my_outer_product(Ψ, α)
+#     function pullback(Δresult)
+#         (i_dim, k_dim) = size(Ψ)
+#         (_, j_dim) = size(α)
+# 		ΔΨ = zeros(T,i_dim,k_dim)
+# 		Δα = zeros(T,i_dim,j_dim)
+#         @inbounds for i in 1:i_dim
+#             for k in 1:k_dim
+#          		@simd for j in 1:j_dim
+#                     ΔΨ[i, k] += Δresult[k, j] * α[i, j]
+#                     Δα[i, j] += Δresult[k, j] * Ψ[i, k]
+#                 end
+#             end
+#         end
+#         return (NoTangent(), ΔΨ, Δα)
+# 	end
+# 	return result, pullback
+#     end
+	
+# # @inline function outer_product_derivatives!(ΔΨ,Δα, Ψ, α,Δresult )
+# #     backend = KernelAbstractions.get_backend(Ψ)
+# # 	KernelAbstractions.synchronize(backend)
+	
+# #     kernel! = outer_product_kernel_derivatives!(backend)
+# # 	KernelAbstractions.synchronize(backend)
+	
+# #     kernel!(ΔΨ, Δα, Ψ, α,cu(Δresult),ndrange=size(α))
+# # end
+
+
+# # 	@kernel function outer_product_kernel_derivatives!(ΔΨ,Δα, Ψ, α,Δresult)
+# #     i, j = @index(Global, NTuple)
+# #         for k in 1:size(ΔΨ, 1)
+# # 			   ΔΨ[i, k] += Δresult[k, j] * α[i, j]
+# #                Δα[i, j] += Δresult[k, j] * Ψ[i, k]
+# #        end
+# # 	end
+	
+# # function ChainRulesCore.rrule(::typeof(outer_product_kernel), Ψ, α)
+# # 	backend = get_backend(Ψ)
+# #     result = outer_product_kernel(Ψ, α)
+# #     function pullback(Δresult)
+# # 		Δresult = cu(Δresult)
+# #         (i_dim, k_dim) = size(Ψ)
+# #         (_, j_dim) = size(α)
+# # 		ΔΨ = CUDA.zeros(i_dim,k_dim)
+# # 		Δα = CUDA.zeros(i_dim,j_dim)
+# #         outer_product_derivatives!(ΔΨ,Δα, Ψ, α,Δresult )
+# #     	# KernelAbstractions.synchronize(backend)
+# #         return (NoTangent(), ΔΨ, Δα)
+# # 	end
+# # 	return result, pullback
+# #     end
+ 
+
+# end
 
 # ╔═╡ c95eb473-bced-4fa4-a686-c07a28992e48
 ChainRulesCore.debug_mode() = true
 
 # ╔═╡ af1a1731-3e1b-4ebe-a527-3103a5bda87a
-@be let
-	to = TimerOutput()
-	i = 100
-	j = 8
-	k = 3
-	Ψ = cu(rand(rng,Float32,i,j))
-	α = cu(rand(rng,Float32,i,k))
-	function obj(x)
-		@tensor value[k, j] := Ψ[i, k] * α[i, j]
-		return mean(value)
-	end
-	backend = DifferentiationInterface.AutoZygote()
-	# @be DifferentiationInterface.gradient(x->obj(x),backend,α)
-	A = DifferentiationInterface.gradient(obj,backend,α)
-end
-
-# ╔═╡ 623cd8e8-bf2e-4a96-95ff-2ce5ee928737
-@be let
-	to = TimerOutput()
-	i = 100
-	j = 8
-	k = 3
-	Ψ = cu(rand(rng,Float32,i,j))
-	α = cu(rand(rng,Float32,i,k))
-	function obj(x)
-		value = outer_product_kernel(Ψ,x)
-		return mean(value)
-	end
-	backend = DifferentiationInterface.AutoZygote()
-	# @be DifferentiationInterface.gradient(x->obj(x),backend,α)
-	A = DifferentiationInterface.gradient(obj,backend,α)
-end
+# @be let
+# 	to = TimerOutput()
+# 	i = 100
+# 	j = 8
+# 	k = 3
+# 	Ψ = cu(rand(rng,Float32,i,j))
+# 	α = cu(rand(rng,Float32,i,k))
+# 	function obj(x)
+# 		@butensor value[k, j] := Ψ[i, k] * α[i, j]
+# 		return mean(value)
+# 	end
+# 	backend = DifferentiationInterface.AutoZygote()
+# 	# @be DifferentiationInterface.gradient(x->obj(x),backend,α)
+# 	A = DifferentiationInterface.gradient(obj,backend,α)
+# end
 
 # ╔═╡ cdfcc712-c291-4db4-acde-fe0d14f8cb25
 # let
@@ -132,106 +258,35 @@ end
 
 end
 
-# ╔═╡ 277bf495-88e0-4970-ae3f-0e9dd488beff
-begin
-	
-@kernel function outer_product_kernel!(output, Ψ, expansion_coefficients)
-    i, j = @index(Global, NTuple)
-        for k in 1:size(output, 1)
-            @inbounds output[k, j] += Ψ[i, k] * expansion_coefficients[i, j]
-        end
-end
-
-# Creating a wrapper kernel for launching with error checks
-function outer_product!(output, Ψ, expansion_coefficients)
-    backend = KernelAbstractions.get_backend(Ψ)
-    kernel! = outer_product_kernel!(backend)
-    kernel!(output, Ψ, expansion_coefficients, ndrange=size(expansion_coefficients))
-end
-
-@inline function outer_product_kernel(Ψ::AbstractArray{T},α::AbstractArray{S}) where {T<:Real, S<:Real}
-	(i_dim, k_dim) = size(Ψ)
-    (i_dim_exp, j_dim) = size(α)
-	backend =get_backend(Ψ) # or KernelAbstractions.CUDA() for GPU
-	KernelAbstractions.synchronize(backend)
-	out = KernelAbstractions.zeros(backend, S,k_dim,j_dim)
-	outer_product!(out, Ψ, α)
-	return out
-end
-
-	
-function ChainRulesCore.rrule(::typeof(outer_product_kernel), Ψ, α::AbstractArray{T}) where {T<:Real}
-	Ψ = Array(Ψ)
-	α = Array( α)
-    result = my_outer_product(Ψ, α)
-    function pullback(Δresult)
-        (i_dim, k_dim) = size(Ψ)
-        (_, j_dim) = size(α)
-		ΔΨ = zeros(T,i_dim,k_dim)
-		Δα = zeros(T,i_dim,j_dim)
-        @inbounds for i in 1:i_dim
-            for k in 1:k_dim
-         		@simd for j in 1:j_dim
-                    ΔΨ[i, k] += Δresult[k, j] * α[i, j]
-                    Δα[i, j] += Δresult[k, j] * Ψ[i, k]
-                end
-            end
-        end
-        return (NoTangent(), ΔΨ, Δα)
-	end
-	return result, pullback
-    end
-	
-# @inline function outer_product_derivatives!(ΔΨ,Δα, Ψ, α,Δresult )
-#     backend = KernelAbstractions.get_backend(Ψ)
-# 	KernelAbstractions.synchronize(backend)
-	
-#     kernel! = outer_product_kernel_derivatives!(backend)
-# 	KernelAbstractions.synchronize(backend)
-	
-#     kernel!(ΔΨ, Δα, Ψ, α,cu(Δresult),ndrange=size(α))
-# end
-
-
-# 	@kernel function outer_product_kernel_derivatives!(ΔΨ,Δα, Ψ, α,Δresult)
-#     i, j = @index(Global, NTuple)
-#         for k in 1:size(ΔΨ, 1)
-# 			   ΔΨ[i, k] += Δresult[k, j] * α[i, j]
-#                Δα[i, j] += Δresult[k, j] * Ψ[i, k]
-#        end
-# 	end
-	
-# function ChainRulesCore.rrule(::typeof(outer_product_kernel), Ψ, α)
-# 	backend = get_backend(Ψ)
-#     result = outer_product_kernel(Ψ, α)
-#     function pullback(Δresult)
-# 		Δresult = cu(Δresult)
-#         (i_dim, k_dim) = size(Ψ)
-#         (_, j_dim) = size(α)
-# 		ΔΨ = CUDA.zeros(i_dim,k_dim)
-# 		Δα = CUDA.zeros(i_dim,j_dim)
-#         outer_product_derivatives!(ΔΨ,Δα, Ψ, α,Δresult )
-#     	# KernelAbstractions.synchronize(backend)
-#         return (NoTangent(), ΔΨ, Δα)
-# 	end
-# 	return result, pullback
-#     end
- 
-
-end
-
 # ╔═╡ 210a3ec9-2c45-4520-9cd2-674a3d6f9fad
 rng = Xoshiro(123)
+
+# ╔═╡ 623cd8e8-bf2e-4a96-95ff-2ce5ee928737
+@be let
+	to = TimerOutput()
+	i = 100
+	j = 8
+	k = 3
+	Ψ = cu(rand(rng,Float32,i,j))
+	α = cu(rand(rng,Float32,i,k))
+	function obj(x)
+		value = outer_product_kernel(Ψ,x)
+		return mean(value)
+	end
+	backend = DifferentiationInterface.AutoZygote()
+	# @be DifferentiationInterface.gradient(x->obj(x),backend,α)
+	A = DifferentiationInterface.gradient(obj,backend,α)
+end
 
 # ╔═╡ b23aa282-2c59-43ae-96f9-61a268388747
 let
 	to = TimerOutput()
-	i = 5000
-	j = 8
-	k = 3
+	i = 1000
+	j = 5
+	k = 20
 	Ψ = rand(rng,i,j)
 	α = rand(rng,i,k)
-	for _ in 1:20
+	for _ in 1:50
 	
 	@timeit to "my_outer_cpu" my_outer_product(Ψ,α)
 	@timeit to "tensoropt_cpu"  let
@@ -257,6 +312,15 @@ let
 			@timeit to "einsum_cpu"  let
 	@einsum value[k, j] := Ψ[i, k] * α[i, j]
 	end
+		Ψ2 = cu(Ψ)
+	α2 = cu(α)
+	@timeit to "GPU own"  let
+	 		outer_product_kernel(Ψ2,α2)
+	end
+
+	@timeit to "tensor_gpu"  let
+			@ein  value[k, j] := Ψ2[i, k] * α2[i, j]
+		end
 	end
 	display(to)
 end
@@ -280,7 +344,7 @@ let
 			output = outer_product_kernel(Ψ2,α2)
 		end
 			@timeit to "tensor_gpu"  let
-			@cutensor  value[k, j] := Ψ2[i, k] * α2[i, j]
+			@ein  value[k, j] := Ψ2[i, k] * α2[i, j]
 		end
 		
 		@timeit to "ein_gpu"  let
@@ -551,6 +615,7 @@ end
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
+Atomix = "a9b6321e-bd34-4604-b9c9-b65b8de01458"
 Bumper = "8ce10254-0962-460f-a3d8-1f77fea1446e"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
@@ -572,17 +637,18 @@ Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 cuTENSOR = "011b41b2-24ef-40a8-b3eb-fa098493e9e1"
 
 [compat]
+Atomix = "~0.1.0"
 Bumper = "~0.6.0"
 CUDA = "~5.4.3"
 ChainRulesCore = "~1.24.0"
 Chairmarks = "~1.2.1"
-DifferentiationInterface = "~0.5.8"
-DispatchDoctor = "~0.4.10"
+DifferentiationInterface = "~0.5.12"
+DispatchDoctor = "~0.4.13"
 Einsum = "~0.4.1"
-Enzyme = "~0.12.21"
+Enzyme = "~0.12.31"
 ForwardDiff = "~0.10.36"
-KernelAbstractions = "~0.9.22"
-OMEinsum = "~0.8.2"
+KernelAbstractions = "~0.9.23"
+OMEinsum = "~0.8.3"
 ReverseDiff = "~1.15.3"
 Statistics = "~1.11.1"
 TensorOperations = "~5.0.0"
@@ -596,14 +662,14 @@ cuTENSOR = "~2.1.1"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.11.0-rc1"
+julia_version = "1.11.0-rc2"
 manifest_format = "2.0"
-project_hash = "3b54addef2884f4703bc0f8ec5ac2e41e090c9d8"
+project_hash = "d4eb8cb1e930aad473a6ee311ef7fa06e03543c7"
 
 [[deps.ADTypes]]
-git-tree-sha1 = "1f3835083f5b40fc01a3c87e64bc3275cf447481"
+git-tree-sha1 = "99a6f5d0ce1c7c6afdb759daa30226f71c54f6b0"
 uuid = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
-version = "1.5.4"
+version = "1.7.1"
 weakdeps = ["ChainRulesCore", "EnzymeCore"]
 
     [deps.ADTypes.extensions]
@@ -640,11 +706,17 @@ weakdeps = ["StaticArrays"]
 uuid = "0dad84c5-d112-42e6-8d28-ef12dabb789f"
 version = "1.1.2"
 
+[[deps.ArnoldiMethod]]
+deps = ["LinearAlgebra", "Random", "StaticArrays"]
+git-tree-sha1 = "d57bd3762d308bded22c3b82d033bff85f6195c6"
+uuid = "ec485272-7323-5ecc-a04f-4719b315124d"
+version = "0.4.0"
+
 [[deps.ArrayInterface]]
-deps = ["Adapt", "LinearAlgebra", "SparseArrays", "SuiteSparse"]
-git-tree-sha1 = "5c9b74c973181571deb6442d41e5c902e6b9f38e"
+deps = ["Adapt", "LinearAlgebra"]
+git-tree-sha1 = "f54c23a5d304fb87110de62bace7777d59088c34"
 uuid = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"
-version = "7.12.0"
+version = "7.15.0"
 
     [deps.ArrayInterface.extensions]
     ArrayInterfaceBandedMatricesExt = "BandedMatrices"
@@ -654,6 +726,7 @@ version = "7.12.0"
     ArrayInterfaceChainRulesExt = "ChainRules"
     ArrayInterfaceGPUArraysCoreExt = "GPUArraysCore"
     ArrayInterfaceReverseDiffExt = "ReverseDiff"
+    ArrayInterfaceSparseArraysExt = "SparseArrays"
     ArrayInterfaceStaticArraysCoreExt = "StaticArraysCore"
     ArrayInterfaceTrackerExt = "Tracker"
 
@@ -665,6 +738,7 @@ version = "7.12.0"
     ChainRules = "082447d4-558c-5d27-93f4-14fc19e9eca2"
     GPUArraysCore = "46192b85-c4d5-4398-a991-12ede77f4527"
     ReverseDiff = "37e2e3b7-166d-5795-8a7a-e32c996b4267"
+    SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
     StaticArraysCore = "1e83bf80-4336-4d27-bf5d-d5a4f845583c"
     Tracker = "9f7883ad-71c0-57eb-9f7f-b5c9e6d3789c"
 
@@ -694,10 +768,10 @@ git-tree-sha1 = "441db9f0399bcfb4eeb8b891a6b03f7acc5dc731"
 uuid = "a9ab73d0-e05c-5df1-8fde-d6a4645b8d8e"
 version = "0.2.2"
 
-[[deps.BetterExp]]
-git-tree-sha1 = "dd3448f3d5b2664db7eceeec5f744535ce6e759b"
-uuid = "7cffe744-45fd-4178-b173-cf893948b8b7"
-version = "0.1.0"
+[[deps.Bijections]]
+git-tree-sha1 = "95f5c7e2d177b7ba1a240b0518038b975d72a8c0"
+uuid = "e2ed5e7c-b2de-5872-ae92-c73ca462fb04"
+version = "0.1.7"
 
 [[deps.Bumper]]
 deps = ["StrideArraysCore"]
@@ -723,10 +797,10 @@ weakdeps = ["ChainRulesCore", "EnzymeCore", "SpecialFunctions"]
     SpecialFunctionsExt = "SpecialFunctions"
 
 [[deps.CUDA_Driver_jll]]
-deps = ["Artifacts", "JLLWrappers", "LazyArtifacts", "Libdl", "Pkg"]
-git-tree-sha1 = "97df9d4d6be8ac6270cb8fd3b8fc413690820cbd"
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "325058b426c2b421e3d2df3d5fa646d72d2e3e7e"
 uuid = "4ee394cb-3365-5eb0-8335-949819d2adfc"
-version = "0.9.1+1"
+version = "0.9.2+0"
 
 [[deps.CUDA_Runtime_Discovery]]
 deps = ["Libdl"]
@@ -801,11 +875,16 @@ git-tree-sha1 = "7b8a93dba8af7e3b42fecabf646260105ac373f7"
 uuid = "bbf7d656-a473-5ed7-a52c-81e309532950"
 version = "0.3.0"
 
+[[deps.CommonWorldInvalidations]]
+git-tree-sha1 = "ae52d1c52048455e85a387fbee9be553ec2b68d0"
+uuid = "f70d9fcc-98c5-4d4a-abd7-e4cdeebd8ca8"
+version = "1.0.0"
+
 [[deps.Compat]]
 deps = ["TOML", "UUIDs"]
-git-tree-sha1 = "b1c55339b7c6c350ee89f2c1604299660525b248"
+git-tree-sha1 = "8ae8d32e09f0dcf42a36b90d4e17f5dd2e4c4215"
 uuid = "34da2185-b29b-5c13-b0c7-acf172513d20"
-version = "4.15.0"
+version = "4.16.0"
 weakdeps = ["Dates", "LinearAlgebra"]
 
     [deps.Compat.extensions]
@@ -818,9 +897,9 @@ version = "1.1.1+0"
 
 [[deps.ConstructionBase]]
 deps = ["LinearAlgebra"]
-git-tree-sha1 = "260fd2400ed2dab602a7c15cf10c1933c59930a2"
+git-tree-sha1 = "d8a9c0b6ac2d9081bf76324b39c78ca3ce4f0c98"
 uuid = "187b0558-2788-49d3-abe0-74a17ed4e7c9"
-version = "1.5.5"
+version = "1.5.6"
 
     [deps.ConstructionBase.extensions]
     ConstructionBaseIntervalSetsExt = "IntervalSets"
@@ -876,9 +955,9 @@ version = "1.15.1"
 
 [[deps.DifferentiationInterface]]
 deps = ["ADTypes", "Compat", "DocStringExtensions", "FillArrays", "LinearAlgebra", "PackageExtensionCompat", "SparseArrays", "SparseMatrixColorings"]
-git-tree-sha1 = "b04acb57861ae60ce548e6041795cac9e4ad96fa"
+git-tree-sha1 = "5fd57942dde7449335f585b3a4236e1fa2de0fd5"
 uuid = "a0c0ee7d-e4b9-4e03-894e-1c5f64a51d63"
-version = "0.5.8"
+version = "0.5.12"
 
     [deps.DifferentiationInterface.extensions]
     DifferentiationInterfaceChainRulesCoreExt = "ChainRulesCore"
@@ -912,13 +991,14 @@ version = "0.5.8"
 
 [[deps.DispatchDoctor]]
 deps = ["MacroTools", "Preferences"]
-git-tree-sha1 = "32d236e685d028f5bc808aae0634b58aac5128f0"
+git-tree-sha1 = "114474c54e14f9ae53b8a5088507560278db15c3"
 uuid = "8d63f2c5-f18a-4cf2-ba9d-b3f60fc568c8"
-version = "0.4.10"
-weakdeps = ["ChainRulesCore"]
+version = "0.4.13"
+weakdeps = ["ChainRulesCore", "EnzymeCore"]
 
     [deps.DispatchDoctor.extensions]
     DispatchDoctorChainRulesCoreExt = "ChainRulesCore"
+    DispatchDoctorEnzymeCoreExt = "EnzymeCore"
 
 [[deps.Distributed]]
 deps = ["Random", "Serialization", "Sockets"]
@@ -944,20 +1024,22 @@ version = "0.4.1"
 
 [[deps.Enzyme]]
 deps = ["CEnum", "EnzymeCore", "Enzyme_jll", "GPUCompiler", "LLVM", "Libdl", "LinearAlgebra", "ObjectFile", "Preferences", "Printf", "Random"]
-git-tree-sha1 = "cd26bc551756abf6020535613d0b6056962d67b9"
+git-tree-sha1 = "e43660bc5ee8376555a4b4b151ed5f3e9ada0075"
 uuid = "7da242da-08ed-463a-9acd-ee780be4f1d9"
-version = "0.12.21"
-weakdeps = ["ChainRulesCore", "SpecialFunctions", "StaticArrays"]
+version = "0.12.31"
+weakdeps = ["BFloat16s", "ChainRulesCore", "LogExpFunctions", "SpecialFunctions", "StaticArrays"]
 
     [deps.Enzyme.extensions]
+    EnzymeBFloat16sExt = "BFloat16s"
     EnzymeChainRulesCoreExt = "ChainRulesCore"
+    EnzymeLogExpFunctionsExt = "LogExpFunctions"
     EnzymeSpecialFunctionsExt = "SpecialFunctions"
     EnzymeStaticArraysExt = "StaticArrays"
 
 [[deps.EnzymeCore]]
-git-tree-sha1 = "d445df66dd8761a4c27df950db89c6a3a0629fe7"
+git-tree-sha1 = "8f205a601760f4798a10f138c3940f0451d95188"
 uuid = "f151be2c-9106-41f4-ab19-57ee4f262869"
-version = "0.7.7"
+version = "0.7.8"
 weakdeps = ["Adapt"]
 
     [deps.EnzymeCore.extensions]
@@ -965,9 +1047,9 @@ weakdeps = ["Adapt"]
 
 [[deps.Enzyme_jll]]
 deps = ["Artifacts", "JLLWrappers", "LazyArtifacts", "Libdl", "TOML"]
-git-tree-sha1 = "3d38f0669f5ce1206f6bdcb6876ee01caf3cbd65"
+git-tree-sha1 = "97dcff677b657a7de2d9ae1d80d672ad55004c68"
 uuid = "7cc45869-7501-5eee-bdea-0790c847d4ef"
-version = "0.0.128+0"
+version = "0.0.144+0"
 
 [[deps.ExprTools]]
 git-tree-sha1 = "27415f162e6028e81c72b82ef756bf321213b6ec"
@@ -1022,9 +1104,9 @@ version = "1.11.0"
 
 [[deps.GPUArrays]]
 deps = ["Adapt", "GPUArraysCore", "LLVM", "LinearAlgebra", "Printf", "Random", "Reexport", "Serialization", "Statistics"]
-git-tree-sha1 = "04661708f5301394a1f1be86a07a89e835900db6"
+git-tree-sha1 = "a74c3f1cf56a3dfcdef0605f8cdb7015926aae30"
 uuid = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
-version = "10.2.3"
+version = "10.3.0"
 
 [[deps.GPUArraysCore]]
 deps = ["Adapt"]
@@ -1038,6 +1120,12 @@ git-tree-sha1 = "ab29216184312f99ff957b32cd63c2fe9c928b91"
 uuid = "61eb1bfa-7361-4325-ad38-22787b887f55"
 version = "0.26.7"
 
+[[deps.Graphs]]
+deps = ["ArnoldiMethod", "Compat", "DataStructures", "Distributed", "Inflate", "LinearAlgebra", "Random", "SharedArrays", "SimpleTraits", "SparseArrays", "Statistics"]
+git-tree-sha1 = "ebd18c326fa6cee1efb7da9a3b45cf69da2ed4d9"
+uuid = "86223c79-3864-5bf0-83f7-82e725a168b6"
+version = "1.11.2"
+
 [[deps.IRTools]]
 deps = ["InteractiveUtils", "MacroTools"]
 git-tree-sha1 = "950c3717af761bc3ff906c2e8e52bd83390b6ec2"
@@ -1048,6 +1136,11 @@ version = "0.4.14"
 git-tree-sha1 = "debdd00ffef04665ccbb3e150747a77560e8fad1"
 uuid = "615f187c-cbe4-4ef1-ba3b-2fcf58d6d173"
 version = "0.1.1"
+
+[[deps.Inflate]]
+git-tree-sha1 = "d1b1b796e47d94588b3757fe84fbf65a5ec4a80d"
+uuid = "d25df0c9-e2be-5dd7-82c8-3ad0b3e990b9"
+version = "0.1.5"
 
 [[deps.InlineStrings]]
 git-tree-sha1 = "45521d31238e87ee9f9732561bfee12d4eebd52d"
@@ -1102,9 +1195,9 @@ version = "0.2.1+0"
 
 [[deps.KernelAbstractions]]
 deps = ["Adapt", "Atomix", "InteractiveUtils", "LinearAlgebra", "MacroTools", "PrecompileTools", "Requires", "SparseArrays", "StaticArrays", "UUIDs", "UnsafeAtomics", "UnsafeAtomicsLLVM"]
-git-tree-sha1 = "d0448cebd5919e06ca5edc7a264631790de810ec"
+git-tree-sha1 = "0fac59881e91c7233a9b0d47f4b7d9432e534f0f"
 uuid = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
-version = "0.9.22"
+version = "0.9.23"
 weakdeps = ["EnzymeCore"]
 
     [deps.KernelAbstractions.extensions]
@@ -1112,9 +1205,9 @@ weakdeps = ["EnzymeCore"]
 
 [[deps.LLVM]]
 deps = ["CEnum", "LLVMExtra_jll", "Libdl", "Preferences", "Printf", "Requires", "Unicode"]
-git-tree-sha1 = "020abd49586480c1be84f57da0017b5d3db73f7c"
+git-tree-sha1 = "2470e69781ddd70b8878491233cd09bc1bd7fc96"
 uuid = "929cbde3-209d-540e-8aea-75f648917ca0"
-version = "8.0.0"
+version = "8.1.0"
 weakdeps = ["BFloat16s"]
 
     [deps.LLVM.extensions]
@@ -1122,9 +1215,9 @@ weakdeps = ["BFloat16s"]
 
 [[deps.LLVMExtra_jll]]
 deps = ["Artifacts", "JLLWrappers", "LazyArtifacts", "Libdl", "TOML"]
-git-tree-sha1 = "c2636c264861edc6d305e6b4d528f09566d24c5e"
+git-tree-sha1 = "597d1c758c9ae5d985ba4202386a607c675ee700"
 uuid = "dad2f222-ce93-54a1-a47d-0025e8a3acab"
-version = "0.0.30+0"
+version = "0.0.31+0"
 
 [[deps.LLVMLoopInfo]]
 git-tree-sha1 = "2e5c102cfc41f48ae4740c7eca7743cc7e7b75ea"
@@ -1269,9 +1362,9 @@ version = "1.2.0"
 
 [[deps.OMEinsum]]
 deps = ["AbstractTrees", "BatchedRoutines", "ChainRulesCore", "Combinatorics", "LinearAlgebra", "MacroTools", "OMEinsumContractionOrders", "Test", "TupleTools"]
-git-tree-sha1 = "fd0ce51747b27676ecb5cf21ea652f20e1a28c70"
+git-tree-sha1 = "adec63d61a812ad7522fe55a6aafe2ffd18c3f1e"
 uuid = "ebe7aa44-baf0-506c-a96f-8464559b3922"
-version = "0.8.2"
+version = "0.8.3"
 
     [deps.OMEinsum.extensions]
     AMDGPUExt = "AMDGPU"
@@ -1282,22 +1375,24 @@ version = "0.8.2"
     CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 
 [[deps.OMEinsumContractionOrders]]
-deps = ["AbstractTrees", "BetterExp", "JSON", "SparseArrays", "Suppressor"]
-git-tree-sha1 = "b0cba9f4a6f021a63b066f0bb29a6fd63c93be44"
+deps = ["AbstractTrees", "JSON", "SparseArrays", "StatsBase", "Suppressor", "TreeWidthSolver"]
+git-tree-sha1 = "65df366ab1745f0ddd975262963cffdca3f6fdc2"
 uuid = "6f22d1fd-8eed-4bb7-9776-e7d684900715"
-version = "0.8.3"
+version = "0.9.1"
 
     [deps.OMEinsumContractionOrders.extensions]
     KaHyParExt = ["KaHyPar"]
+    LuxorTensorPlot = ["LuxorGraphPlot"]
 
     [deps.OMEinsumContractionOrders.weakdeps]
     KaHyPar = "2a6221f6-aa48-11e9-3542-2d9e0ef01880"
+    LuxorGraphPlot = "1f49bdf2-22a7-4bc4-978b-948dc219fbbc"
 
 [[deps.ObjectFile]]
 deps = ["Reexport", "StructIO"]
-git-tree-sha1 = "195e0a19842f678dd3473ceafbe9d82dfacc583c"
+git-tree-sha1 = "7249afa1c4dfd86bfbcc9b28939ab6ef844f4e11"
 uuid = "d8793406-e978-5875-9003-1fc021f44a92"
-version = "0.4.1"
+version = "0.4.2"
 
 [[deps.OpenBLAS_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Libdl"]
@@ -1392,10 +1487,10 @@ uuid = "74087812-796a-5b5d-8853-05524746bad3"
 version = "1.7.0"
 
 [[deps.RandomNumbers]]
-deps = ["Random", "Requires"]
-git-tree-sha1 = "043da614cc7e95c703498a491e2c21f58a2b8111"
+deps = ["Random"]
+git-tree-sha1 = "c6ec94d2aaba1ab2ff983052cf6a606ca5985902"
 uuid = "e6cf234a-135c-5ec9-84dd-332b85af5143"
-version = "1.5.3"
+version = "1.6.0"
 
 [[deps.RealDot]]
 deps = ["LinearAlgebra"]
@@ -1445,6 +1540,17 @@ version = "1.4.5"
 uuid = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
 version = "1.11.0"
 
+[[deps.SharedArrays]]
+deps = ["Distributed", "Mmap", "Random", "Serialization"]
+uuid = "1a1011a3-84de-559e-8e89-a11a2f7dc383"
+version = "1.11.0"
+
+[[deps.SimpleTraits]]
+deps = ["InteractiveUtils", "MacroTools"]
+git-tree-sha1 = "5d7e3f4e11935503d3ecaf7186eac40602e7d231"
+uuid = "699a6c99-e7fa-54fc-8d76-47d257e15c1d"
+version = "0.9.4"
+
 [[deps.Sockets]]
 uuid = "6462fe0b-24de-5631-8697-dd941f90decc"
 version = "1.11.0"
@@ -1468,9 +1574,9 @@ version = "0.1.2"
 
 [[deps.SparseMatrixColorings]]
 deps = ["ADTypes", "Compat", "DocStringExtensions", "LinearAlgebra", "Random", "SparseArrays"]
-git-tree-sha1 = "eed2446b3c3dd58f6ded3168998b8b2cb3fc9229"
+git-tree-sha1 = "ad048e784b816e4de5553a13f1daf148412f3dbd"
 uuid = "0a514795-09f3-496d-8182-132a7b665d35"
-version = "0.3.3"
+version = "0.3.6"
 
 [[deps.SpecialFunctions]]
 deps = ["IrrationalConstants", "LogExpFunctions", "OpenLibm_jll", "OpenSpecFun_jll"]
@@ -1483,16 +1589,16 @@ weakdeps = ["ChainRulesCore"]
     SpecialFunctionsChainRulesCoreExt = "ChainRulesCore"
 
 [[deps.Static]]
-deps = ["IfElse"]
-git-tree-sha1 = "d2fdac9ff3906e27f7a618d47b676941baa6c80c"
+deps = ["CommonWorldInvalidations", "IfElse", "PrecompileTools"]
+git-tree-sha1 = "87d51a3ee9a4b0d2fe054bdd3fc2436258db2603"
 uuid = "aedffcd0-7271-4cad-89d0-dc628f76c6d3"
-version = "0.8.10"
+version = "1.1.1"
 
 [[deps.StaticArrayInterface]]
-deps = ["ArrayInterface", "Compat", "IfElse", "LinearAlgebra", "PrecompileTools", "Requires", "SparseArrays", "Static", "SuiteSparse"]
-git-tree-sha1 = "8963e5a083c837531298fc41599182a759a87a6d"
+deps = ["ArrayInterface", "Compat", "IfElse", "LinearAlgebra", "PrecompileTools", "Static"]
+git-tree-sha1 = "96381d50f1ce85f2663584c8e886a6ca97e60554"
 uuid = "0d7ed370-da01-4f52-bd93-41d350b8b718"
-version = "1.5.1"
+version = "1.8.0"
 
     [deps.StaticArrayInterface.extensions]
     StaticArrayInterfaceOffsetArraysExt = "OffsetArrays"
@@ -1528,6 +1634,18 @@ weakdeps = ["SparseArrays"]
     [deps.Statistics.extensions]
     SparseArraysExt = ["SparseArrays"]
 
+[[deps.StatsAPI]]
+deps = ["LinearAlgebra"]
+git-tree-sha1 = "1ff449ad350c9c4cbc756624d6f8a8c3ef56d3ed"
+uuid = "82ae8749-77ed-4fe6-ae5f-f523153014b0"
+version = "1.7.0"
+
+[[deps.StatsBase]]
+deps = ["DataAPI", "DataStructures", "LinearAlgebra", "LogExpFunctions", "Missings", "Printf", "Random", "SortingAlgorithms", "SparseArrays", "Statistics", "StatsAPI"]
+git-tree-sha1 = "5cf7606d6cef84b543b483848d4ae08ad9832b21"
+uuid = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
+version = "0.34.3"
+
 [[deps.StrideArraysCore]]
 deps = ["ArrayInterface", "CloseOpenIntervals", "IfElse", "LayoutPointers", "LinearAlgebra", "ManualMemory", "SIMDTypes", "Static", "StaticArrayInterface", "ThreadingUtilities"]
 git-tree-sha1 = "f35f6ab602df8413a50c4a25ca14de821e8605fb"
@@ -1536,9 +1654,9 @@ version = "0.5.7"
 
 [[deps.Strided]]
 deps = ["LinearAlgebra", "StridedViews", "TupleTools"]
-git-tree-sha1 = "bd9bd1c70cfc115cc3a30213fc725125a6b43652"
+git-tree-sha1 = "d85461cb47420b6dcecf51de8142fc60484dd0b3"
 uuid = "5e0ebb24-38b0-5f93-81fe-25c709ecae67"
-version = "2.1.0"
+version = "2.1.1"
 
 [[deps.StridedViews]]
 deps = ["LinearAlgebra", "PackageExtensionCompat"]
@@ -1570,10 +1688,9 @@ weakdeps = ["Adapt", "GPUArraysCore", "SparseArrays", "StaticArrays"]
     StructArraysStaticArraysExt = "StaticArrays"
 
 [[deps.StructIO]]
-deps = ["Test"]
-git-tree-sha1 = "010dc73c7146869c042b49adcdb6bf528c12e859"
+git-tree-sha1 = "c581be48ae1cbf83e899b14c07a807e1787512cc"
 uuid = "53d494c1-5632-5724-8f4c-31dff12d585f"
-version = "0.3.0"
+version = "0.3.1"
 
 [[deps.StyledStrings]]
 uuid = "f489334b-da3d-4c2e-b8f0-e476e12c162b"
@@ -1586,7 +1703,7 @@ uuid = "4607b0f0-06f3-5cda-b6b1-a6196a1729e9"
 [[deps.SuiteSparse_jll]]
 deps = ["Artifacts", "Libdl", "libblastrampoline_jll"]
 uuid = "bea87d4a-7f5b-5778-9afe-8cc45184846c"
-version = "7.6.0+0"
+version = "7.7.0+0"
 
 [[deps.Suppressor]]
 deps = ["Logging"]
@@ -1606,10 +1723,10 @@ uuid = "3783bdb8-4a98-5b6b-af9a-565f29a5fe9c"
 version = "1.0.1"
 
 [[deps.Tables]]
-deps = ["DataAPI", "DataValueInterfaces", "IteratorInterfaceExtensions", "LinearAlgebra", "OrderedCollections", "TableTraits"]
-git-tree-sha1 = "cb76cf677714c095e535e3501ac7954732aeea2d"
+deps = ["DataAPI", "DataValueInterfaces", "IteratorInterfaceExtensions", "OrderedCollections", "TableTraits"]
+git-tree-sha1 = "598cd7c1f68d1e205689b1c2fe65a9f85846f297"
 uuid = "bd369af6-aec1-5ad0-b16a-f7cc5008161c"
-version = "1.11.1"
+version = "1.12.0"
 
 [[deps.Tar]]
 deps = ["ArgTools", "SHA"]
@@ -1644,6 +1761,12 @@ deps = ["ExprTools", "Printf"]
 git-tree-sha1 = "5a13ae8a41237cff5ecf34f73eb1b8f42fff6531"
 uuid = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 version = "0.5.24"
+
+[[deps.TreeWidthSolver]]
+deps = ["AbstractTrees", "Bijections", "Combinatorics", "Graphs", "SparseArrays"]
+git-tree-sha1 = "5ca83b419d5a087a1447a35295b09ff8830e1e7e"
+uuid = "7d267fc5-9ace-409f-a54c-cd2374872a55"
+version = "0.2.0"
 
 [[deps.Tullio]]
 deps = ["DiffRules", "LinearAlgebra", "Requires"]
@@ -1684,9 +1807,9 @@ version = "0.2.1"
 
 [[deps.UnsafeAtomicsLLVM]]
 deps = ["LLVM", "UnsafeAtomics"]
-git-tree-sha1 = "bf2c553f25e954a9b38c9c0593a59bb13113f9e5"
+git-tree-sha1 = "4073c836c2befcb041e5fe306cb6abf621eb3140"
 uuid = "d80eeb9a-aca5-4d75-85e5-170c8b632249"
-version = "0.1.5"
+version = "0.2.0"
 
 [[deps.VectorInterface]]
 deps = ["LinearAlgebra"]
@@ -1730,7 +1853,7 @@ version = "2.1.1"
 [[deps.libblastrampoline_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "8e850b90-86db-534c-a0d3-1478176c7d93"
-version = "5.8.0+1"
+version = "5.10.1+0"
 
 [[deps.nghttp2_jll]]
 deps = ["Artifacts", "Libdl"]
@@ -1745,6 +1868,7 @@ version = "17.4.0+2"
 
 # ╔═╡ Cell order:
 # ╠═6ddcc330-436f-11ef-28f8-b76e24aed2b4
+# ╠═2cab2751-98e1-45cd-ba1f-be6dedf2aafd
 # ╠═277bf495-88e0-4970-ae3f-0e9dd488beff
 # ╠═c95eb473-bced-4fa4-a686-c07a28992e48
 # ╠═af1a1731-3e1b-4ebe-a527-3103a5bda87a

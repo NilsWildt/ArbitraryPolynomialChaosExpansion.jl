@@ -225,7 +225,7 @@ end
             p = Polynomials.Polynomial(coeffs)  # Create the polynomial
             # p = Poly(coeffs)
             x = @views TrainingInput[:, ii]
-            @.. Psi[i, :] *= p(x)  # Evaluate the polynomial at x and multiply
+            @..  thread=true Psi[i, :] *= p(x)  # Evaluate the polynomial at x and multiply
             # Psi[i,j] *= evalpoly(x, p)
         end
     end
