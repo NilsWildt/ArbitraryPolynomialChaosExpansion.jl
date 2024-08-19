@@ -677,11 +677,48 @@ function create_vandermonde(x::AbstractArray, max_degree::Int=1)
     return vandermonde_matrix
 end
 
+# ╔═╡ 84a908e5-4950-4401-92a8-d3b21f92b52e
+# run_comparison(10,4,false)
+
+# ╔═╡ e897a6a6-68da-4077-a41c-ab80b9e7f356
+# run_comparison(100,2,true)
+
+# ╔═╡ 962ba99e-2e94-443e-88e4-9164be1441b6
+function obj(α,Vm,Y) 
+	Yh = Vm*α
+	return sqrt(mean(abs.(Y.-Yh).^2))
+end
+
+# ╔═╡ 311735c7-5df8-4d99-bed9-85a8455b3341
+function get_V_vandermonde(x,degree)
+return create_vandermonde(x,degree)
+end
+
+# ╔═╡ 1015535b-6a87-4b7f-84fc-1b683a52ee04
+function add_dim_at_end(arr)
+    return reshape(arr, size(arr)..., 1)
+end
+
+# ╔═╡ 1371a89b-addf-48b2-aa75-3234c041f25e
+# begin
+	
+# 	# Slider for polynomial degree (1 to 10)
+# 	@bind polynomial_degree Slider(1:10, show_value=true, default=3, label="Polynomial Degree")
+	
+# 	# Slider for the number of samples (10 to 100)
+# 	@bind num_samples Slider(10:100, show_value=true, default=50, label="Number of Samples")
+# end
+
+# ╔═╡ 441c5bdc-2b6e-4a9a-a6cf-4452c49bb08d
+@stable function numberPolynomials(n, d)
+    x, y = max(d, n), min(d, n)
+    return UInt128(prod(UInt128(x + 1):UInt128(d + n)) ÷ factorial(UInt128(y))) |> Int
+end
+
 # ╔═╡ ce23dde8-3d40-49af-8728-c5784509ac7c
 function run_comparison(N,degree,onb)
 		FT = Float64
 		# N = 100
-		
 
         file = matread("/data/homes/wildt/Projects/LuxApceLayer.jl/data/ReferenceSolution_10P.mat")
         print(keys(file))
@@ -695,7 +732,6 @@ function run_comparison(N,degree,onb)
         ValidationInput = file["Input_distributions"][:, 1] |> Array{FT}
         ValidationOutput = file["ValidationOutput"][:, :] |> Array{FT}
 
-	
 	InputDimensions = 10
 	outdim = size(TrainingOutput,2)
 	
@@ -723,22 +759,9 @@ function run_comparison(N,degree,onb)
 	UnicodePlots.scatterplot(ValidationOutput|>vec,PredictionOutput|>vec) |> display
 	# @info "comparison" mean(ValidationOutput|>vec) mean(PredictionOutput|>vec)
 
-
 	# Ψ_train = create_vandermonde(TrainingInput)+0.01I
 	# Psi_inv = pinv(Ψ_train; rtol=sqrt(eps(real(float(oneunit(eltype(Ψ_train)))))))
 
-end
-
-# ╔═╡ 84a908e5-4950-4401-92a8-d3b21f92b52e
-# run_comparison(10,4,false)
-
-# ╔═╡ e897a6a6-68da-4077-a41c-ab80b9e7f356
-# run_comparison(100,2,true)
-
-# ╔═╡ 962ba99e-2e94-443e-88e4-9164be1441b6
-function obj(α,Vm,Y) 
-	Yh = Vm*α
-	return sqrt(mean(abs.(Y.-Yh).^2))
 end
 
 # ╔═╡ c2be9c6b-a375-4ed9-8e93-71fa75c9300c
@@ -765,29 +788,6 @@ MultivariatePolynomialDegrees = aPCE_MultivariatePolynomialDegrees(InputDimensio
 	return Ψ_train
 end
 
-# ╔═╡ 311735c7-5df8-4d99-bed9-85a8455b3341
-function get_V_vandermonde(x,degree)
-return create_vandermonde(x,degree)
-end
-
-# ╔═╡ 1015535b-6a87-4b7f-84fc-1b683a52ee04
-function add_dim_at_end(arr)
-    return reshape(arr, size(arr)..., 1)
-end
-
-# ╔═╡ 1371a89b-addf-48b2-aa75-3234c041f25e
-# begin
-	
-# 	# Slider for polynomial degree (1 to 10)
-# 	@bind polynomial_degree Slider(1:10, show_value=true, default=3, label="Polynomial Degree")
-	
-# 	# Slider for the number of samples (10 to 100)
-# 	@bind num_samples Slider(10:100, show_value=true, default=50, label="Number of Samples")
-# end
-
-# ╔═╡ 441c5bdc-2b6e-4a9a-a6cf-4452c49bb08d
-
-
 # ╔═╡ 4d48a009-5773-4778-b961-71867593cfd4
 function table_create()
 	reset_timer!(to)
@@ -807,7 +807,6 @@ function table_create()
  #        TrainingInput = file["TrainingInput"][indall, 1] |> Array{FT}
 	# # @info size(TrainingInput) TrainingInput
 		TrainingInput = 5.0.+randn(N,1)#LinRange(0,1,N) |> collect |> add_dim_at_end
-
 		f(x) = x^4+sin(x)+exp(x)
 		TrainingOutput = f.(TrainingInput)
         # InputDistributions = file["Input_distributions"][:, 1] |> Array{FT}
