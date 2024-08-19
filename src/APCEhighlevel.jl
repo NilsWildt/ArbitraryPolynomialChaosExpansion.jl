@@ -154,7 +154,7 @@ end
 
 
     Psi_inv = pinv(Psi; rtol=sqrt(eps(real(float(oneunit(eltype(Psi)))))))
-    @butensor aPCE.ExpansionCoefficients[i, k] = Psi_inv[i, j] * y_rhs[j, k]
+    @tensor aPCE.ExpansionCoefficients[i, k] = Psi_inv[i, j] * y_rhs[j, k]
     # aPCE.ExpansionCoefficients = outer_product_kernel(cu(Psi_inv), cu(y_rhs))
     
 
@@ -186,7 +186,7 @@ end
 @stable function predict(aPCE::aPCE{T}, PredictionInput)::Matrix{T} where {T<:Real}
     # @info "=> aPCE Toolbox: Prediction using Arbitrary Polynomial Chaos ..."
     Psi = aPCE_PsiPolynomialMatrix(aPCE, PredictionInput)
-    TensorOperations.@butensor PredictionOutput[k, j] := Psi[i, k] * aPCE.ExpansionCoefficients[i, j]
+    TensorOperations.@tensor PredictionOutput[k, j] := Psi[i, k] * aPCE.ExpansionCoefficients[i, j]
     # PredictionOutput = outer_product_kernel(cu(Psi), cu(aPCE.ExpansionCoefficients))
     return PredictionOutput
 end

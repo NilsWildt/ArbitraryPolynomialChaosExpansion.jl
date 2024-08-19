@@ -891,7 +891,7 @@ end
 @stable function evaluate_Ψ(x, coeffs, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name)
     T = eltype(coeffs)
     Ψ = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree) #.|> T
-    @butensor PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
+    TensorOperations.@tensor PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
     # PredictionOutput = outer_product_kernel(cu(Ψ), cu(coeffs))
     return PredictionOutput
 end
