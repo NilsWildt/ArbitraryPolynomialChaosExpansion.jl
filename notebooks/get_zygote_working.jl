@@ -4,17 +4,7 @@
 using Markdown
 using InteractiveUtils
 
-# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
-macro bind(def, element)
-    quote
-        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
-        local el = $(esc(element))
-        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
-        el
-    end
-end
-
-# ╔═╡ ef446ee6-3065-452c-8dc5-762b864a8d10
+# ╔═╡ 8b102ffc-a2fc-41a3-9455-697805c4b07f
 begin
 	    import Pkg
 	    # activate the shared project environment
@@ -25,7 +15,7 @@ begin
 	    # Pkg.instantiate()
 end
 
-# ╔═╡ 6d37e6ae-5a39-11ef-2591-e98200463156
+# ╔═╡ 2b333004-09bc-4413-81d3-5a4588b6b1db
 begin
 	using DispatchDoctor
 	using LinearAlgebra
@@ -39,7 +29,7 @@ begin
 	using CUDA
 	using KernelAbstractions
 	using DispatchDoctor
-	using Tullio
+	# using Tullio
 	using Zygote
 	using DataFrames
 	using PlutoUI
@@ -51,13 +41,13 @@ begin
 	using Einsum
 	using TimerOutputs
 	using Statistics
-	# using Enzyme
+	using Enzyme
 	using ForwardDiff
 	using TimerOutputs
 	using ReverseDiff
 	using ChainRulesCore
 	using StatsBase: StatsBase, fit!, mean, sum
-	using OMEinsum
+	# using OMEinsum
 	 using PrettyTables
 	using Bumper
 	using Polynomials
@@ -75,19 +65,22 @@ begin
 	using IterativeSolvers
 end
 
-# ╔═╡ 7ea8a787-bc90-4682-88cb-5bd3d2320dd4
+# ╔═╡ a14169e6-5e41-11ef-0598-d7c6a31747b2
+
+
+# ╔═╡ 9fa1e99a-5aab-473b-b71c-bb5e7701b1e3
 begin
 	# Pkg.rm("Plots")
-	Pkg.add("MakieThemes")
+	# Pkg.add("MakieThemes")
 	# Pkg.add("TensorOperations")
 	# Pkg.precompile()
-	# Pkg.add("Krylov")
+	# Pkg.add("Enzyme")
 end
 
-# ╔═╡ 661d360e-f23d-4452-85d3-f7d701717b50
+# ╔═╡ c48ac077-034c-4884-adf1-22fa59138b90
 const to = TimerOutput()
 
-# ╔═╡ 03044526-09db-434f-a4fd-6061b2d115a5
+# ╔═╡ 7ff9eae7-b2fc-42ff-8477-20612ff4c007
 begin
 	@stable function normalization_functions(matrix)
 	    # Calculate mean and std for each column
@@ -402,7 +395,7 @@ end
 end
 
 
-@stable function create_basis(x, degree,onb::Val{false}; normalize_data=true)
+@stable function create_basis(x, degree,onb=true; normalize_data=true)
     input_dimensions = size(x, 2)
     OrthonormalBasis = Array{eltype(x),3}(undef, degree + 1, degree + 1, input_dimensions)
     for i in 1:input_dimensions
@@ -412,7 +405,7 @@ end
 end
 
 	
-@stable function create_basis(x, degree, onb::Val{true}; normalize_data=true,)
+@stable function create_basis(x, degree,onb=false; normalize_data=true,)
     input_dimensions = size(x, 2)
     OrthonormalBasis = Array{eltype(x),3}(undef, degree + 1, degree + 1, input_dimensions)
     for i in 1:input_dimensions
@@ -451,11 +444,7 @@ end
 	end
 end
 
-# ╔═╡ 84fb4fa6-3e31-4f96-95bb-48f808176d45
-
-
-# ╔═╡ eed0d499-122c-4754-b35c-217d49a17cac
-
+# ╔═╡ 83cb1779-37a1-4df3-bd9d-5ff99c2e5b97
 @stable function GaussianCollocation(input_dimensions, ExpansionDegree, OrthonormalBasis::AbstractArray{T},
     InputDistribution::AbstractArray{T}, NumberOfTerms; strategy=:PCM) where {T<:Real}
     # @info input_dimensions
@@ -638,7 +627,7 @@ end
 
 end
 
-# ╔═╡ 52623f4d-16d4-49c7-bbcc-627aa2691215
+# ╔═╡ c6f4d465-85e5-4fbc-b836-a5a36ac0691f
 @stable function create_basis(x, degree,onb::Val{true}; normalize_data=true)
     input_dimensions = size(x, 2)
     OrthonormalBasis = Array{eltype(x),3}(undef, degree + 1, degree + 1, input_dimensions)
@@ -648,7 +637,7 @@ end
     return OrthonormalBasis
 end
 
-# ╔═╡ bdba7a82-ac0b-41d7-92bf-40ec723099fe
+# ╔═╡ 5625d16c-5fb5-4d08-b0f6-a59b80501754
 @stable function create_basis(x, degree,onb::Val{false}; normalize_data=true)
     input_dimensions = size(x, 2)
     OrthonormalBasis = Array{eltype(x),3}(undef, degree + 1, degree + 1, input_dimensions)
@@ -658,18 +647,18 @@ end
     return OrthonormalBasis
 end
 
-# ╔═╡ c886e031-9ca6-4b96-86fe-eeddbdf35499
+# ╔═╡ 998207f9-118d-43e2-b611-d16d927e0844
 function create_basis(x, degree,onb; normalize_data=true)
 	return create_basis(x,degree,Val(onb);normalize_data=normalize_data)
 end
 
-# ╔═╡ e254e16b-924c-4a5e-9b16-fbcf6f52ebc0
+# ╔═╡ 5396f7bb-2458-443d-95fd-00d3523e27e6
 create_basis(rand(3,3),3,true)
 
-# ╔═╡ f1eeedba-acd9-421e-9290-f30754197498
+# ╔═╡ 348ba3a6-c7bc-4b58-b260-64363b821c6c
 create_basis(rand(3,3),3,false)
 
-# ╔═╡ a5349a70-55d4-4610-8c54-7e29d4315467
+# ╔═╡ 41272ec7-7175-41fd-a6c6-f501fc1ed1f2
 function create_vandermonde(x::AbstractArray, max_degree::Int=1)
     n = length(x)
     # Create the Vandermonde matrix
@@ -677,7 +666,29 @@ function create_vandermonde(x::AbstractArray, max_degree::Int=1)
     return vandermonde_matrix
 end
 
-# ╔═╡ ce23dde8-3d40-49af-8728-c5784509ac7c
+# ╔═╡ 9b135908-e026-48d1-bf6d-43833699cff4
+function obj(α,Vm,Y) 
+	Yh = Vm*α
+	return sqrt(mean(abs.(Y.-Yh).^2))
+end
+
+# ╔═╡ 53ec0628-9a03-4e2a-9099-f43dc0c6b669
+function get_V_vandermonde(x,degree)
+return create_vandermonde(x,degree)
+end
+
+# ╔═╡ 81399219-f1fb-4a11-9d29-97ec50993ee6
+function add_dim_at_end(arr)
+    return reshape(arr, size(arr)..., 1)
+end
+
+# ╔═╡ cc41e0eb-6497-4ac0-9aa4-c1d0bba2264b
+@stable function numberPolynomials(n, d)
+    x, y = max(d, n), min(d, n)
+    return UInt128(prod(UInt128(x + 1):UInt128(d + n)) ÷ factorial(UInt128(y))) |> Int
+end
+
+# ╔═╡ f6f25064-a276-4c53-a411-25dcf28dd4cb
 function run_comparison(N,degree,onb)
 		FT = Float64
 		# N = 100
@@ -726,19 +737,7 @@ function run_comparison(N,degree,onb)
 
 end
 
-# ╔═╡ 84a908e5-4950-4401-92a8-d3b21f92b52e
-# run_comparison(10,4,false)
-
-# ╔═╡ e897a6a6-68da-4077-a41c-ab80b9e7f356
-# run_comparison(100,2,true)
-
-# ╔═╡ 962ba99e-2e94-443e-88e4-9164be1441b6
-function obj(α,Vm,Y) 
-	Yh = Vm*α
-	return sqrt(mean(abs.(Y.-Yh).^2))
-end
-
-# ╔═╡ c2be9c6b-a375-4ed9-8e93-71fa75c9300c
+# ╔═╡ c365faa2-c60d-4265-b667-1d01eaaf4382
 function get_V_onb(x,degree)
 	InputDimensions = size(x,2)
 MultivariatePolynomialDegrees = aPCE_MultivariatePolynomialDegrees(InputDimensions, degree, 1.0, 1.0)
@@ -750,7 +749,7 @@ MultivariatePolynomialDegrees = aPCE_MultivariatePolynomialDegrees(InputDimensio
 	return Ψ_train
 end
 
-# ╔═╡ e49b643a-f75e-4896-b61f-88ba3ef372c9
+# ╔═╡ d5168afc-8e08-4d5c-90c2-297f74729dd9
 function get_V_full(x,degree)
 	InputDimensions = size(x,2)
 MultivariatePolynomialDegrees = aPCE_MultivariatePolynomialDegrees(InputDimensions, degree, 1.0, 1.0)
@@ -762,235 +761,88 @@ MultivariatePolynomialDegrees = aPCE_MultivariatePolynomialDegrees(InputDimensio
 	return Ψ_train
 end
 
-# ╔═╡ 311735c7-5df8-4d99-bed9-85a8455b3341
-function get_V_vandermonde(x,degree)
-return create_vandermonde(x,degree)
+# ╔═╡ db3b7d9e-eca1-4355-bdd0-6ab8b4f26c66
+# @stable function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{S}) where {S,T<:Real}
+
+# ╔═╡ bb043422-3db6-4a52-a9e6-fa8a96c4498f
+const X = rand(100,2)
+
+# ╔═╡ 8033890f-2657-497b-a141-e0863aed4876
+begin
+	display(aPCE_OrthonormalBasis(X,1,Val(true)))
 end
 
-# ╔═╡ 1015535b-6a87-4b7f-84fc-1b683a52ee04
-function add_dim_at_end(arr)
-    return reshape(arr, size(arr)..., 1)
-end
+# ╔═╡ c8d7a673-1b1d-4ba1-ba9e-bddcb7519f57
+jac = ForwardDiff.jacobian(x->aPCE_OrthonormalBasis(x,1,Val(true)),X)
 
-# ╔═╡ 1371a89b-addf-48b2-aa75-3234c041f25e
-# begin
-	
-# 	# Slider for polynomial degree (1 to 10)
-# 	@bind polynomial_degree Slider(1:10, show_value=true, default=3, label="Polynomial Degree")
-	
-# 	# Slider for the number of samples (10 to 100)
-# 	@bind num_samples Slider(10:100, show_value=true, default=50, label="Number of Samples")
-# end
+# ╔═╡ ed48da4c-aa20-4c2c-b4d7-388880c20df1
+@b ForwardDiff.jacobian(x->aPCE_OrthonormalBasis(x,1,Val(true)),X)
 
-# ╔═╡ 441c5bdc-2b6e-4a9a-a6cf-4452c49bb08d
-@stable function numberPolynomials(n, d)
-    x, y = max(d, n), min(d, n)
-    return UInt128(prod(UInt128(x + 1):UInt128(d + n)) ÷ factorial(UInt128(y))) |> Int
-end
-
-# ╔═╡ 4d48a009-5773-4778-b961-71867593cfd4
-function table_create()
-	reset_timer!(to)
-		FT = Float64
-		N = 1000
-		# degree = 10
-		ps = []
-		errors = []
-	
-		for degree ∈ 1:2:11
-		outdim = 1
- #        file = matread("/data/homes/wildt/Projects/LuxApceLayer.jl/data/ReferenceSolution_10P.mat")
- #        # print(keys(file))
- #        indall = 1:N
- #        rng = Xoshiro(42)
- #        # @info "" size(file["TrainingOutput"])
- #        TrainingInput = file["TrainingInput"][indall, 1] |> Array{FT}
-	# # @info size(TrainingInput) TrainingInput
-		TrainingInput = 5.0.+randn(N,1)#LinRange(0,1,N) |> collect |> add_dim_at_end
-		f(x) = x^4+sin(x)+exp(x)
-		TrainingOutput = f.(TrainingInput)
-        # InputDistributions = file["Input_distributions"][:, 1] |> Array{FT}
-        # TrainingOutput = file["TrainingOutput"][indall, :] |> Array{FT}
-        # # @info "" size(TrainingInput)
-        # ValidationInput = file["Input_distributions"][:, 1] |> Array{FT}
-        # ValidationOutput = file["ValidationOutput"][:, :] |> Array{FT}
-		V1 = get_V_onb(TrainingInput,degree) 
-		V2 = get_V_full(TrainingInput,degree) 
-		V3 = get_V_vandermonde(TrainingInput,degree) 
-
-		Vs = Matrix{FT}[V1,V2,V3]
-		names = ["onb","full","vandermonde"]
-		for (i,V) in enumerate(Vs)
-			# @info names[i]
-			# display(V)
-			# Psi_inv = pinv(V)
-			# coeffs = zeros(FT, size(V,1), outdim)
-	    	# @tensor coeffs[i, k] := Psi_inv[i, j] * TrainingOutput[j, k]
-			# @info "" size(V) size(TrainingOutput) size(coeffs)
-			coeffs = undef
-			stats = undef
-			@timeit to "$(names[i])_backslash" begin
-						coeffs = V\TrainingOutput
-			end
-		
-			@timeit to "$(names[i])_lsqr" begin
-						coeffs = IterativeSolvers.lsqr(V, TrainingOutput|>vec)
-			end
-				@timeit to "$(names[i])_cgls" begin
-				(coeffs, stats) = cgls(V, TrainingOutput|>vec)
-			end
-			
-			@timeit to "$(names[i])_cgls_itmax_3" begin
-				(coeffs, _) = cgls(V, TrainingOutput|>vec;itmax=2)
-			end
-			
-			# @show size(coeffs) stats
-			coeffs = add_dim_at_end(coeffs)
-			TensorOperations.@tensor PredictionOutput[k, j] := V[k,i] * coeffs[i, j]
-			# @info "Deviation in mse" mean((PredictionOutput.-TrainingOutput).^2)
-			# @info mean(abs.(PredictionOutput.-TrainingOutput))
-
-			# UnicodePlots.scatterplot(TrainingInput |> vec,log.(abs.(PredictionOutput.-TrainingOutput))|> vec)  |> display
-			# push!(ps,p1)
-			push!(errors,(;basis=names[i],degree=degree,mse= mean((PredictionOutput.-TrainingOutput).^2),cond=cond(V),iter=stats.niter))
-		end
-		end
-	# Convert the named tuple list to a vector of vectors for pretty_table
-# data = [ (err.basis, err.degree, err.mse) for err in errors ]
-# data = reduce(hcat,errors)
-# # Define the headers
-header = ["Basis", "Degree", "MSE","cond","iter"]
-# @info "" data
-# # Display the table
-# 	display(to)
-# table = pretty_table(
-#     data;header =header)
-	
-	table = DataFrame(errors,header)
-	return table
-end
-
-# ╔═╡ 4be5c6de-edcc-4506-b33a-1e6c33051a4f
-table = table_create()
-
-# ╔═╡ 7bff53b5-f308-404f-b793-684245ec1571
-function normalize_by_group(df::DataFrame, group_col::Symbol, value_col)
-    # Convert value_col to Symbol if it is a String
-    value_col = String(value_col)
-    group_col = String(group_col)
-
-	grouped_df = groupby(df, group_col)
-    
-    # Normalize each group's values by the group's minimum value
-    normalized_values = combine(grouped_df) do subdf
-        max_value = maximum(subdf[!, value_col])
-        subdf[!, value_col] ./ max_value*100
-    end
-    
-    # Add normalized values as a new column
-    df[!, Symbol("Normalized_" * string(value_col))] = normalized_values[!,:x1]
-    df
-end
-
-# ╔═╡ 8c5898b7-9f4b-4a79-aa1e-d565f3ee71c5
+# ╔═╡ 7faff28c-f816-4e18-aa47-bc0aaaa21694
 let
-	df = DataFrame(table)
-	df = normalize_by_group(df, :Degree, :MSE)
-	df = normalize_by_group(df, :Degree, :iter)
-df
+	
+function obj(x::Vector{Float64})
+    return aPCE_OrthonormalBasis_Enzyme(x, 1, Val(true))[end, end]
 end
 
-# ╔═╡ a55b4658-f4e4-4181-813a-c51fb385a3f5
+function enzyme_jacobian(obj_func, x::Vector{Float64})
+    dx = zeros(eltype(x), length(x))
+    Enzyme.autodiff(
+        Enzyme.Reverse, 
+        obj_func, 
+        Enzyme.Active, 
+        x => dx
+    )
+    return dx
+end
+
+	enzyme_jacobian(obj,X[1,:])
+	
+end
+
+# ╔═╡ bd216d4e-88ad-4e18-8c8d-1a4caa7bc4ac
 let
-	with_theme(merge(CairoMakie.theme_latexfonts(),MakieThemes.ggthemr(:fresh))) do 
-	update_theme!(fontsize=14)
-	axis = (width = 600, height = 600)
-	df = DataFrame(table)
-	df = normalize_by_group(df, :Degree, :MSE)
-	df = normalize_by_group(df, :Degree, :iter)
-	
-	layers =visual(BarPlot, direction = :y, width = 0.8,dodge_gap=0.01)
-	d1 = data(df) *  mapping(:Degree,:Normalized_MSE,color=:Basis, dodge = :Basis) *layers
-	d2 = data(df) *  mapping(:Degree,:Normalized_iter,color=:Basis, dodge = :Basis) *layers
-	# f = Figure()
-	# draw!(f[1, 1], d1;axis=(yscale=log,))
-	# draw!(f[1, 2], d2)
-
-	f = Figure(figure_padding = 10.0;size=(800,250))
-	ga = f[1, 1] 
-	gb = f[1, 2] 
-	gc = f[1, 3] 
-		
-		
-	ax1 = Axis(ga,ylabel="Normalized MSE in log %",xlabel="Max degree",yscale=log,xticks = 1:2:11)
-	ax2 = Axis(gb,ylabel="Normalized iterationsi in log %",xlabel="Max degree",yscale=log,xticks =  1:2:11)
-
-	
-	
-		
-	grid1 = draw!(ax1, d1)
-	grid2 = draw!(ax2, d2)
-
-	leg = legend!(gc, grid1;framevisible = false,margin = (-10, -10, -10, -10),
-         orientation = :vertical,haligns=:right,valigns=:top,tellheight = false,
-        tellwidth = false,padding = (0, 0, 0, 0))
-
-		colsize!(f.layout, 3, Auto(0.3))
-		
-	f
-		save("comparison_basis.png",f)
-		save("comparison_basis.pdf",f)
-		
-		f
-	end
+	obj(x) = aPCE_OrthonormalBasis(x,1,Val(true))[end,end]
+	@show obj(X)
+	ForwardDiff.jacobian(x->[obj(x)],X[1,:])
 end
 
-# ╔═╡ e8f9ae3a-4ef1-4072-90ff-72cb60ab60ec
+# ╔═╡ bfdcf86e-019b-49b4-bc5a-9faefad5d8f3
 let
-	N = 10 
-	degree =3
-			TrainingInput = 5.0.+rand(N,1)#LinRange(0,1,N) |> collect |> add_dim_at_end
-
-		f(x) = x^4+sin(x)#+x^12+exp(x)
-		TrainingOutput = f.(TrainingInput)
-        # InputDistributions = file["Input_distributions"][:, 1] |> Array{FT}
-        # TrainingOutput = file["TrainingOutput"][indall, :] |> Array{FT}
-        # # @info "" size(TrainingInput)
-        # ValidationInput = file["Input_distributions"][:, 1] |> Array{FT}
-        # ValidationOutput = file["ValidationOutput"][:, :] |> Array{FT}
-		V1 = get_V_onb(TrainingInput,degree)  |> display
-		V2 = get_V_full(TrainingInput,degree)   |> display
-		V3 = get_V_vandermonde(TrainingInput,degree)   |> display
-
+	rosenbrock(x, y) = (1.0 - x)^2 + 100.0 * (y - x^2)^2
+	autodiff(Enzyme.Reverse, rosenbrock, Active, Active(1.0), Active(2.0))
 end
+
+# ╔═╡ dc97ee3f-22d1-4e5f-983c-d2a19b0b5e90
+
 
 # ╔═╡ Cell order:
-# ╠═ef446ee6-3065-452c-8dc5-762b864a8d10
-# ╠═7ea8a787-bc90-4682-88cb-5bd3d2320dd4
-# ╠═6d37e6ae-5a39-11ef-2591-e98200463156
-# ╠═661d360e-f23d-4452-85d3-f7d701717b50
-# ╠═03044526-09db-434f-a4fd-6061b2d115a5
-# ╠═84fb4fa6-3e31-4f96-95bb-48f808176d45
-# ╟─eed0d499-122c-4754-b35c-217d49a17cac
-# ╠═52623f4d-16d4-49c7-bbcc-627aa2691215
-# ╠═bdba7a82-ac0b-41d7-92bf-40ec723099fe
-# ╠═c886e031-9ca6-4b96-86fe-eeddbdf35499
-# ╠═e254e16b-924c-4a5e-9b16-fbcf6f52ebc0
-# ╠═f1eeedba-acd9-421e-9290-f30754197498
-# ╠═a5349a70-55d4-4610-8c54-7e29d4315467
-# ╠═ce23dde8-3d40-49af-8728-c5784509ac7c
-# ╠═84a908e5-4950-4401-92a8-d3b21f92b52e
-# ╠═e897a6a6-68da-4077-a41c-ab80b9e7f356
-# ╠═962ba99e-2e94-443e-88e4-9164be1441b6
-# ╠═c2be9c6b-a375-4ed9-8e93-71fa75c9300c
-# ╠═e49b643a-f75e-4896-b61f-88ba3ef372c9
-# ╠═311735c7-5df8-4d99-bed9-85a8455b3341
-# ╠═1015535b-6a87-4b7f-84fc-1b683a52ee04
-# ╠═1371a89b-addf-48b2-aa75-3234c041f25e
-# ╠═441c5bdc-2b6e-4a9a-a6cf-4452c49bb08d
-# ╠═4d48a009-5773-4778-b961-71867593cfd4
-# ╠═4be5c6de-edcc-4506-b33a-1e6c33051a4f
-# ╠═7bff53b5-f308-404f-b793-684245ec1571
-# ╠═8c5898b7-9f4b-4a79-aa1e-d565f3ee71c5
-# ╠═a55b4658-f4e4-4181-813a-c51fb385a3f5
-# ╠═e8f9ae3a-4ef1-4072-90ff-72cb60ab60ec
+# ╠═a14169e6-5e41-11ef-0598-d7c6a31747b2
+# ╠═8b102ffc-a2fc-41a3-9455-697805c4b07f
+# ╠═9fa1e99a-5aab-473b-b71c-bb5e7701b1e3
+# ╠═2b333004-09bc-4413-81d3-5a4588b6b1db
+# ╠═c48ac077-034c-4884-adf1-22fa59138b90
+# ╠═7ff9eae7-b2fc-42ff-8477-20612ff4c007
+# ╠═83cb1779-37a1-4df3-bd9d-5ff99c2e5b97
+# ╠═c6f4d465-85e5-4fbc-b836-a5a36ac0691f
+# ╠═5625d16c-5fb5-4d08-b0f6-a59b80501754
+# ╠═998207f9-118d-43e2-b611-d16d927e0844
+# ╠═5396f7bb-2458-443d-95fd-00d3523e27e6
+# ╠═348ba3a6-c7bc-4b58-b260-64363b821c6c
+# ╠═41272ec7-7175-41fd-a6c6-f501fc1ed1f2
+# ╠═f6f25064-a276-4c53-a411-25dcf28dd4cb
+# ╠═9b135908-e026-48d1-bf6d-43833699cff4
+# ╠═c365faa2-c60d-4265-b667-1d01eaaf4382
+# ╠═d5168afc-8e08-4d5c-90c2-297f74729dd9
+# ╠═53ec0628-9a03-4e2a-9099-f43dc0c6b669
+# ╠═81399219-f1fb-4a11-9d29-97ec50993ee6
+# ╠═cc41e0eb-6497-4ac0-9aa4-c1d0bba2264b
+# ╠═db3b7d9e-eca1-4355-bdd0-6ab8b4f26c66
+# ╠═bb043422-3db6-4a52-a9e6-fa8a96c4498f
+# ╠═8033890f-2657-497b-a141-e0863aed4876
+# ╠═c8d7a673-1b1d-4ba1-ba9e-bddcb7519f57
+# ╠═ed48da4c-aa20-4c2c-b4d7-388880c20df1
+# ╠═7faff28c-f816-4e18-aa47-bc0aaaa21694
+# ╠═bd216d4e-88ad-4e18-8c8d-1a4caa7bc4ac
+# ╠═bfdcf86e-019b-49b4-bc5a-9faefad5d8f3
+# ╠═dc97ee3f-22d1-4e5f-983c-d2a19b0b5e90

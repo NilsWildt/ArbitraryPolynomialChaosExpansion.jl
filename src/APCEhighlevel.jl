@@ -27,6 +27,7 @@ mutable struct aPCE{T<:Real}
         s_interactions=1.0,
         normalize_data=true,
         do_gauss=false,
+        full_basis=false
     ) where {T}
         input_dimensions = Int64(size(InputDistribution, 2))
         gauss_one_order_more = 0
@@ -35,7 +36,7 @@ mutable struct aPCE{T<:Real}
         end
         MultivariatePolynomialDegrees = aPCE_MultivariatePolynomialDegrees(input_dimensions, ExpansionDegree + gauss_one_order_more, s_marginals, s_interactions)
         NumberOfTerms = min(size(MultivariatePolynomialDegrees, 1), numberPolynomials(ExpansionDegree + gauss_one_order_more, input_dimensions))
-        OrthonormalBasis = create_basis(InputDistribution, ExpansionDegree + gauss_one_order_more; normalize_data=normalize_data)
+        OrthonormalBasis = create_basis(InputDistribution, ExpansionDegree + gauss_one_order_more, Val(full_basis); normalize_data=normalize_data)
         ExpansionCoefficients = zeros(T, NumberOfTerms, outdim)
         return new{T}(
             InputDistribution,

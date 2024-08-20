@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-export create_basis!, GaussianCollocation, aPCE_MultivariatePolynomialDegrees, compose_Ψ, aPCE_PsiPolynomialMatrix, special_sort_two_arrays!
+export create_basis!, GaussianCollocation, aPCE_MultivariatePolynomialDegrees, compose_Ψ, aPCE_PsiPolynomialMatrix, special_sort_two_arrays!, aPCE_FullBasis
 @info "Benchmarking Matrix mutplication speed" LinearAlgebra.peakflops(; parallel=true)
 
 # Strided.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
@@ -572,6 +572,17 @@ end
     return OrthonormalBasis
 end
 
+
+
+@stable @inbounds function aPCE_FullBasis(Data, Degree::S) where {S<:Integer}
+    T = eltype(Data)
+    d = Degree #Degree of polinomial expansion
+    dd = d #Degree of polinomial for roots defenition
+    FullBasis = [i >= j ? one(T) : zero(T) for i in 1:dd+1, j in 1:dd+1]
+    return FullBasis
+end
+
+
 # @stable function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S; normalize_data=false) where {T<:Real,S<:Integer}
 #     # ChainRulesCore.ignore_derivatives() do
 #     # T = eltype(Data)
@@ -834,14 +845,30 @@ end
 #     # end
 # end
 
-@stable function create_basis(x, degree; normalize_data=true)
+function create_basis(x, degree,onb=false; normalize_data=true)
+	return create_basis(x,degree,Val(onb);normalize_data=normalize_data)
+end
+
+
+@stable function create_basis(x, degree, onb::Val{false}; normalize_data=true)
     input_dimensions = size(x, 2)
     OrthonormalBasis = Array{eltype(x),3}(undef, degree + 1, degree + 1, input_dimensions)
     for i in 1:input_dimensions
-        OrthonormalBasis[:, :, i] .= aPCE_OrthonormalBasis(view(x, :, i), degree, Val(normalize_data)) # view(x, :, i)
+        OrthonormalBasis[:, :, i] .= aPCE_OrthonormalBasis(view(x, :, i), degree, Val(normalize_data))
     end
     return OrthonormalBasis
 end
+
+	
+@stable function create_basis(x, degree, onb::Val{true}; normalize_data=true,)
+    input_dimensions = size(x, 2)
+    OrthonormalBasis = Array{eltype(x),3}(undef, degree + 1, degree + 1, input_dimensions)
+    for i in 1:input_dimensions
+        OrthonormalBasis[:, :, i] .= aPCE_FullBasis(view(x, :, i), degree) 
+    end
+    return OrthonormalBasis
+end
+
 
 @stable function create_basis!(OrthonormalBasis, x, degree; normalize_data=false)
     # @ignore_derivatives begin

@@ -1,7 +1,7 @@
 name = "APCE"
 uuid = "e0c64dd9-0151-4106-bdf9-1cf426dd9187"
 authors = ["NilsWildt"]
-version = "0.2.1"
+version = "0.2.2"
 
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
@@ -22,6 +22,7 @@ DispatchDoctor = "8d63f2c5-f18a-4cf2-ba9d-b3f60fc568c8"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 DrWatson = "634d3b9d-ee7a-5ddf-bec9-22491ea816e1"
 Einsum = "b7d42ee7-0b51-5a75-98ca-779d3107e4c0"
+Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
 Estrin = "4642663a-9907-4130-9c18-0ebd857e5e35"
 ExplicitImports = "7d51a73a-1435-4ff3-83d9-f097790105c7"
 FastBroadcast = "7034ab61-46d4-4ed7-9d0f-46aef9175898"
@@ -77,8 +78,10 @@ TerminalLoggers = "5d786b92-1e48-4d6f-9151-6b4477ca9bed"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 Tracker = "9f7883ad-71c0-57eb-9f7f-b5c9e6d3789c"
-Tullio = "bc48ee85-29a4-5162-ae0b-a64e1601d4bc"
 UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"
 UnrolledUtilities = "0fe1646c-419e-43be-ac14-22321958931b"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
+[compat]
+Enzyme = "0.12.31"
+MakieThemes = "0.1.2"

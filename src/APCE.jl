@@ -40,7 +40,6 @@ using Bumper
 using TensorOperations: TensorOperations, @tensoropt, @tensor
 using TimerOutputs: TimerOutputs
 using Tracker: Tracker
-using Tullio: Tullio, @tullio
 using UnicodePlots: UnicodePlots
 using UnrolledUtilities: UnrolledUtilities
 using Zygote: Zygote, bufferfrom

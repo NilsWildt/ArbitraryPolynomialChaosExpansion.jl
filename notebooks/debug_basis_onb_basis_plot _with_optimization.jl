@@ -409,7 +409,6 @@ end
     return OrthonormalBasis
 end
 
-
 @stable function create_basis(x, degree,onb=true; normalize_data=true)
     input_dimensions = size(x, 2)
     OrthonormalBasis = Array{eltype(x),3}(undef, degree + 1, degree + 1, input_dimensions)
@@ -418,16 +417,15 @@ end
     end
     return OrthonormalBasis
 end
-
 	
-@stable function create_basis(x, degree,onb=false; normalize_data=true,)
-    input_dimensions = size(x, 2)
-    OrthonormalBasis = Array{eltype(x),3}(undef, degree + 1, degree + 1, input_dimensions)
-    for i in 1:input_dimensions
-        OrthonormalBasis[:, :, i] .= aPCE_FullBasis(view(x, :, i), degree) 
-    end
-    return OrthonormalBasis
-end
+# @stable function create_basis(x, degree,onb=false; normalize_data=true,)
+#     input_dimensions = size(x, 2)
+#     OrthonormalBasis = Array{eltype(x),3}(undef, degree + 1, degree + 1, input_dimensions)
+#     for i in 1:input_dimensions
+#         OrthonormalBasis[:, :, i] .= aPCE_FullBasis(view(x, :, i), degree) 
+#     end
+#     return OrthonormalBasis
+# end
 
 	@stable function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{S}) where {S,T<:Real}
     NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
