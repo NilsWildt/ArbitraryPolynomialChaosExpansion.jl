@@ -195,7 +195,7 @@ end
 # @stable function create_Polynomial_Degrees(input_dimensions, max_degree, s_marginals, s_interactions)
 #     MultivariatePolynomialDegrees = aPCE_MultivariatePolynomialDegrees(input_dimensions, max_degree, s_marginals, s_interactions)
 #     return MultivariatePolynomialDegrees
-# end
+# end 
 
 @stable function predict_from_coeffs(aPCE::aPCE{T}, PredictionInput, θ) where {T<:ForwardDiff.Dual}
     Psi = aPCE_PsiPolynomialMatrix(aPCE, PredictionInput)

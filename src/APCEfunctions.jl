@@ -574,11 +574,24 @@ end
 
 
 
-@stable @inbounds function aPCE_FullBasis(Data, Degree::S) where {S<:Integer}
+@stable function aPCE_FullBasis(Data, Degree)
     T = eltype(Data)
     d = Degree #Degree of polinomial expansion
     dd = d #Degree of polinomial for roots defenition
-    FullBasis = [i >= j ? one(T) : zero(T) for i in 1:dd+1, j in 1:dd+1]
+    # FullBasis = [i >= j ? one(T) : zero(T) for i in 1:dd+1, j in 1:dd+1]
+    # # Do this FullBasis = [i >= j ? one(T) : zero(T) for i in 1:dd+1, j in 1:dd+1] as pre allocated for loop to be type stable
+    FullBasis = Matrix{T}(undef, Degree+1, Degree+1)
+
+    # Fill the matrix using a type-stable for loop
+    for i in 1:Degree+1
+        for j in 1:Degree+1
+            if i >= j
+                FullBasis[i, j] = one(T)
+            else
+                FullBasis[i, j] = zero(T)
+            end
+        end
+    end
     return FullBasis
 end
 
@@ -845,8 +858,8 @@ end
 #     # end
 # end
 
-function create_basis(x, degree,onb=false; normalize_data=true)
-	return create_basis(x,degree,Val(onb);normalize_data=normalize_data)
+function create_basis(x, degree; normalize_data=true)
+	return create_basis(x,degree,Val(true);normalize_data=normalize_data)
 end
 
 
