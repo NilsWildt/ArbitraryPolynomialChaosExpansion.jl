@@ -450,17 +450,18 @@ function create_basis(x, degree; normalize_data=true)
 end
 
 
-@stable function create_basis(x, degree, onb::Val{false}; normalize_data=true)
+# Univartiate BASIS creation
+@stable function create_basis(x, degree, onb::Val{true}; normalize_data=true)
     input_dimensions = size(x, 2)
     OrthonormalBasis = Array{eltype(x),3}(undef, degree + 1, degree + 1, input_dimensions)
     for i in 1:input_dimensions
         OrthonormalBasis[:, :, i] .= aPCE_OrthonormalBasis(view(x, :, i), degree, Val(normalize_data))
-    end
+    end # x[:,i] 
     return OrthonormalBasis
 end
 
 	
-@stable function create_basis(x, degree, onb::Val{true}; normalize_data=true,)
+@stable function create_basis(x, degree, onb::Val{false}; normalize_data=true,)
     input_dimensions = size(x, 2)
     OrthonormalBasis = Array{eltype(x),3}(undef, degree + 1, degree + 1, input_dimensions)
     for i in 1:input_dimensions

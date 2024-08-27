@@ -55,11 +55,12 @@ function run()
         ValidationInput = file["ValidationInput"][indall, :] .|> FT
         ValidationOutput = file["ValidationOutput"][indall, :] .|> FT
     end
+
     degree = 10
     s_marginals = FT(1.0)
     s_interactions = FT(1.0)
     @info "" size(TrainingOutput, 2)
-    apc_instance = @timeit to "aPC_instance" APCE.aPCE(Input_distribution, degree; outdim=size(TrainingOutput, 2), OrthonormalRepresentation=true, s_marginals=s_marginals, s_interactions=s_interactions, normalize_data=true, do_gauss=true)
+    apc_instance = @timeit to "aPC_instance" APCE.aPCE(Input_distribution, degree; outdim=size(TrainingOutput, 2), OrthonormalRepresentation=true, s_marginals=s_marginals, s_interactions=s_interactions, normalize_data=true, do_gauss=false)
     @info "" apc_instance.NumberOfTerms
     @assert apc_instance.NumberOfTerms < 5000 "Too many coefficients: $(apc_instance.NumberOfTerms)"
   
