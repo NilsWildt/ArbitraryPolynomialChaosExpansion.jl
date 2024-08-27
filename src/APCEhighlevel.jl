@@ -98,6 +98,7 @@ function aPCE_PsiPolynomialMatrix(aPCE::aPCE{T}, TrainingInput::S)::S where {T<:
 end
 
 function GaussianCollocation(aPCE::aPCE{T}; strategy=:PCM) where {T<:Real}
+    @assert aPCE.do_gauss "Gaussian collocation requires the do_gauss flag to be set to true"
     # @info aPCE
     PointsVector = 1:aPCE.ExpansionDegree+1 |> collect
     UniqueCombinations = stack(reduce(vcat, (Iterators.product([PointsVector for _ in 1:aPCE.input_dimensions]...))))'
@@ -129,8 +130,6 @@ function GaussianCollocation(aPCE::aPCE{T}; strategy=:PCM) where {T<:Real}
     end
 end
 
-
-
 @stable function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion=:true, reg_order=3)
     @info "=> aPCE Toolbox: Training Arbitrary Polynomial Chaos ..."
     T = eltype(TrainingInput)
@@ -158,15 +157,6 @@ end
     @tensor aPCE.ExpansionCoefficients[i, k] = Psi_inv[i, j] * y_rhs[j, k]
     # aPCE.ExpansionCoefficients = outer_product_kernel(cu(Psi_inv), cu(y_rhs))
     
-
-    #! Other options!
-    # for k in axes(y_rhs, 2)
-    # 	@info "using lsqnonneg" k
-    # 	aPCE.ExpansionCoefficients[:, k] .= lsqnonneg(Psi,y_rhs[:,k])
-    # 	# aPCE.ExpansionCoefficients[:, k] .= flts(Psi,y_rhs[:,k]; outliers=0.1, verbose = true)
-    # end
-
-
     if bayesian_inversion
         @info "Using bayesian regularization y_rhs find the expansion coefficients"
         x₀ = aPCE.ExpansionCoefficients # Quite a good first guess :) And pinv is quite stable.
@@ -192,10 +182,6 @@ end
     return PredictionOutput
 end
 
-# @stable function create_Polynomial_Degrees(input_dimensions, max_degree, s_marginals, s_interactions)
-#     MultivariatePolynomialDegrees = aPCE_MultivariatePolynomialDegrees(input_dimensions, max_degree, s_marginals, s_interactions)
-#     return MultivariatePolynomialDegrees
-# end 
 
 @stable function predict_from_coeffs(aPCE::aPCE{T}, PredictionInput, θ) where {T<:ForwardDiff.Dual}
     Psi = aPCE_PsiPolynomialMatrix(aPCE, PredictionInput)

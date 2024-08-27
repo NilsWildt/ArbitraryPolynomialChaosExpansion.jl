@@ -4,20 +4,14 @@ using DrWatson
 @quickactivate "APCE"
 module Runner
 using CairoMakie
-using Makie
 
 using Statistics
 using DrWatson
 using PrettyTables
-# using PropDicts
 using Logging
 using TerminalLoggers: TerminalLogger
 using ProgressLogging
 using Logging
-# using BenchmarkTools
-
-# using StaticArrays
-
 using MAT
 using Random
 loggingdir(args...) = projectdir("output", "logs", args...)
@@ -36,29 +30,14 @@ using .APCE
 using TimerOutputs
 const to = TimerOutput()
 
-function partitionTrainTest(data; at=0.7, rng=Xoshiro())
-    num_samples = size(data, 1)
-    shuffled_indices = shuffle(rng, 1:num_samples)
-    split_index = floor(Int, at * num_samples)
-
-    train_indices = view(shuffled_indices, 1:split_index)
-    test_indices = view(shuffled_indices, (split_index+1):num_samples)
-
-    X_train = data[train_indices]
-    X_test = data[test_indices]
-
-    return X_train, X_test
-end
-
 function run()
     err = []
     ts = []
     ps = []
-    # degress = 1:1:5
 
     FT = Float64
 
-    @timeit to "lod_data" begin
+    @timeit to "load_data" begin
         #  Loading Input distributions, Training Data and Validation Data 
         # Extracting the variables
         # @info size(file["Xtr"])
@@ -66,65 +45,64 @@ function run()
         # m = 23
         m_out = 1
         rng = Xoshiro(42)
-        file = matread(datadir("Ishigami/ishigami_sobol.mat"))
+        file = matread(datadir("Data.mat"))
         indall = 1:500
+        @info keys(file)
         # indims = 1:8
         TrainingInput = file["TrainingInput"][indall, :] .|> FT
-        Input_distribution = file["Input_distribution"][:, :] .|> FT
+        Input_distribution = file["Input_distributions"][:, :] .|> FT
         TrainingOutput = file["TrainingOutput"][indall, :] .|> FT
         ValidationInput = file["ValidationInput"][indall, :] .|> FT
         ValidationOutput = file["ValidationOutput"][indall, :] .|> FT
-
     end
+
     degree = 10
     s_marginals = FT(1.0)
     s_interactions = FT(1.0)
     @info "" size(TrainingOutput, 2)
     apc_instance = @timeit to "aPC_instance" APCE.aPCE(Input_distribution, degree; outdim=size(TrainingOutput, 2), OrthonormalRepresentation=true, s_marginals=s_marginals, s_interactions=s_interactions, normalize_data=true, do_gauss=false)
-    @warn "" apc_instance.NumberOfTerms
+    @info "" apc_instance.NumberOfTerms
     @assert apc_instance.NumberOfTerms < 5000 "Too many coefficients: $(apc_instance.NumberOfTerms)"
-    # TrainingInput = KMeansCollocation(apc_instance)
-    # @debug "" TrainingInput
-    # display(	@report_call GaussianCollocation(apc_instance; strategy = :PCM) )
-    # @descend GaussianCollocation(apc_instance; strategy = :PCM)
-
+  
     # TrainingInput_selection = @timeit to "GaussianCollocation" GaussianCollocation(apc_instance; strategy=:PCM)
     # @info "" TrainingInput_selection
     # # Find indices of TrainingInput elements that are in TrainingInput_selection
-    # selected_indices = findall(in(TrainingInput_selection), TrainingInput)
-    # # # Select rows from TrainingInput based on the found indices
-    # TrainingOutput_selection = TrainingInput[selected_indices, :]
-    # @info "" TrainingInput_selection TrainingOutput_selection 
-
-    # Perform GaussianCollocation with timing
-    # TrainingInput_selection = GaussianCollocation(apc_instance; strategy = :PCM)
-
-    # Ensure TrainingInput_selection is a matrix of appropriate dimensions
-    # Find indices of rows in TrainingInput that are present in TrainingInput_selection
-    # Select rows from TrainingInput based on the found indices
-    # @info "" TrainingInput_selection TrainingInput
-
-    # Print results for verification
-    # println("TrainingInput_selection size: ", size(TrainingInput_selection))
-    # println("TrainingOutput_selection size: ", size(TrainingOutput_selection))
+    # # selected_indices = findall(in(TrainingInput_selection), TrainingInput)
+    # # # # Select rows from TrainingInput based on the found indices
+    # # TrainingOutput_selection = TrainingInput[selected_indices, :]
+    # # Find indices where elements in TrainingInput match elements in TrainingInput_selection
+    #     selected_indices = Int[]
+        
+    #     # Loop through each row of TrainingInput and check if it matches any row in TrainingInput_selection
+    #     for i in 1:size(TrainingInput, 1)
+    #         row = TrainingInput[i, :]
+    #         if any(r -> r == row, eachrow(TrainingInput_selection))
+    #             push!(selected_indices, i)
+    #         end
+    #     end
+        
+    #     # Select rows from TrainingInput based on the found indices
+    #     TrainingOutput_selection = TrainingInput[selected_indices, :]
+        
+    #     # Log the sizes of the selection and original data for debugging
+    #     @info "Training Input Selection size: $(size(TrainingInput_selection))"
+    #     @info "Training Output Selection size: $(size(TrainingOutput_selection))"
+    #     @info "Original Training Input size: $(size(TrainingInput))"
+    #     @info "Original Training Output size: $(size(TrainingOutput))"
+    @warn "Not using gaussian root training points."
 
     # TrainingInput = @timeit to "KMeansCollocation" KMeansCollocation(apc_instance)
     @timeit to "training" train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion=true, reg_order=3)
     PredictionOutput = @timeit to "prediction" predict(apc_instance, TrainingInput)
     ValidationPredictionOutput = @timeit to "prediction" predict(apc_instance, ValidationInput)
-    # Back to regular matrices:
-    # TrainingOutput = Matrix(TrainingOutput)
-    # ValidationOutput = Matrix(ValidationOutput)
-    # PredictionOutput = Matrix(PredictionOutput)
+ 
     uq = UQ(apc_instance)
     data = ["Mean" uq.OutputMean[1] mean(ValidationOutput); "Var" uq.OutputVar[1] var(ValidationOutput)]
     headers = ["Type", "aPCE", "Data"]
     # Display the table
     pretty_table(data; header=headers)
 
-
     gratio = (1.0 + sqrt(5.0)) / 2.0
-    # Assuming TrainingOutput, PredictionOutput, ValidationOutput, and ValidationPredictionOutput are defined
     num_plots = size(TrainingOutput, 2) * 2 # Total number of plots (training + validation for each column)
 
     # Aim for a square layout
@@ -138,7 +116,7 @@ function run()
     # Calculate total figure dimensions
     fig_width = subplot_width * num_columns
     fig_height = subplot_height * num_rows
-    fig = Makie.Figure(size=(fig_width, fig_height))
+    fig = Makie.Figure(;size=(fig_width, fig_height))
 
     # Visualization of Training and Validation Performance
     plot_index = 1 # Track the plot index across both rows and columns
@@ -155,12 +133,14 @@ function run()
         CairoMakie.scatter!(ax2, ValidationOutput[:, i], ValidationPredictionOutput[:, i], color=:blue, marker=:circle)
         plot_index += 1
     end
+
     fig_path = normpath(plotsdir("ishigami_test1"))
     @info fig_path
     mkpath(fig_path)
     save(joinpath(fig_path, "training_validation_performance_$(degree)_$(s_marginals)_$(s_interactions).png"), fig)
-    display(fig)
     display(to)
+    display(fig)
+
     return fig
 end
 run()

@@ -28,3 +28,8 @@ Manifest.toml
 plots/
 
 *.mat
+
+_research
+.vscode
+benchmark
+plots
