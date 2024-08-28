@@ -189,9 +189,9 @@ end
 
 @stable @inbounds function aPCE_OrthonormalBasis(Data, Degree::S, normalize_data::Val{true}) where {S <: Integer}
 	T = eltype(Data)
-	d = Degree #Degree of polinomial expansion
-	dd = d #Degree of polinomial for roots defenition
-	# @warn "Weird, ist that properly normalized? Not /std and minus mean?"
+	d = Degree #Degree of polynomial expansion
+	dd = d #Degree of polinomial for roots definitions
+	# @warn "Weird, is that properly normalized? Not /std and minus mean?"
 	NumberOfDataPoints = length(Data)
 	MeanOfData = mean(Data)
 	Data = Data ./ MeanOfData
@@ -266,7 +266,7 @@ end
 @stable @inbounds function aPCE_OrthonormalBasis(Data, Degree::S, normalize_data::Val{false}) where {S <: Integer}
 	T = eltype(Data)
 	d = Degree #Degree of polinomial expansion
-	dd = d #Degree of polinomial for roots defenition
+	dd = d #Degree of polynomial for roots definition
 	NumberOfDataPoints = length(Data)
 
 	m = zeros(T, 2 * dd + 2)
@@ -321,8 +321,8 @@ end
 
 @stable @inbounds function aPCE_OrthonormalBasis_zygote(Data, Degree::S, normalize_data::Val{false}) where {S <: Integer}
 	T = eltype(Data)
-	d = Degree #Degree of polinomial expansion
-	dd = d #Degree of polinomial for roots defenition
+	d = Degree #Degree of polynomial expansion
+	dd = d #Degree of polynomial for roots definition
 	NumberOfDataPoints = length(Data)
 
 	m = zeros(T, 2 * dd + 2)
@@ -378,8 +378,8 @@ end
 
 @stable function aPCE_FullBasis(Data, Degree)
 	T = eltype(Data)
-	d = Degree #Degree of polinomial expansion
-	dd = d #Degree of polinomial for roots defenition
+	d = Degree #Degree of polynomial expansion
+	dd = d #Degree of polynomial for roots definition
 	# FullBasis = [i >= j ? one(T) : zero(T) for i in 1:dd+1, j in 1:dd+1]
 	# # Do this FullBasis = [i >= j ? one(T) : zero(T) for i in 1:dd+1, j in 1:dd+1] as pre allocated for loop to be type stable
 	FullBasis = Matrix{T}(undef, Degree + 1, Degree + 1)
