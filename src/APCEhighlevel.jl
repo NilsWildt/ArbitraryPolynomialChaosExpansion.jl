@@ -12,7 +12,7 @@ mutable struct aPCE{T<:Real}
     const ExpansionDegree::Int64
     const NumberOfTerms::Int64
     const MultivariatePolynomialDegrees::AbstractArray{Int64}
-    const OrthonormalRepresentation::Bool
+    const is_orthonormal::Bool # if flase: then vandermonde// full basis
     const OrthonormalBasis::AbstractArray{T}
     ExpansionCoefficients::Matrix{T}
     do_gauss::Bool
@@ -22,12 +22,12 @@ mutable struct aPCE{T<:Real}
         InputDistribution::AbstractVecOrMat{T},
         ExpansionDegree::Int64;
         outdim::Int64=1,
-        OrthonormalRepresentation::Bool=true,
+        is_orthonormal::Bool=true,
         s_marginals=1.0,
         s_interactions=1.0,
         normalize_data=true,
         do_gauss=false,
-        full_basis=false
+        kwargs...
     ) where {T}
         input_dimensions = Int64(size(InputDistribution, 2))
         gauss_one_order_more = 0
@@ -36,7 +36,7 @@ mutable struct aPCE{T<:Real}
         end
         MultivariatePolynomialDegrees = aPCE_MultivariatePolynomialDegrees(input_dimensions, ExpansionDegree + gauss_one_order_more, s_marginals, s_interactions)
         NumberOfTerms = min(size(MultivariatePolynomialDegrees, 1), numberPolynomials(ExpansionDegree + gauss_one_order_more, input_dimensions))
-        OrthonormalBasis = create_basis(InputDistribution, ExpansionDegree + gauss_one_order_more, Val(full_basis); normalize_data=normalize_data)
+        OrthonormalBasis = create_basis(InputDistribution, ExpansionDegree + gauss_one_order_more, Val(is_orthonormal); normalize_data=normalize_data)
         ExpansionCoefficients = zeros(T, NumberOfTerms, outdim)
         return new{T}(
             InputDistribution,
@@ -45,7 +45,7 @@ mutable struct aPCE{T<:Real}
             ExpansionDegree,
             NumberOfTerms,
             MultivariatePolynomialDegrees,
-            OrthonormalRepresentation,
+            is_orthonormal,
             OrthonormalBasis,
             ExpansionCoefficients,
             do_gauss

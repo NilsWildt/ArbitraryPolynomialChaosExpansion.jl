@@ -22,7 +22,6 @@ DispatchDoctor = "8d63f2c5-f18a-4cf2-ba9d-b3f60fc568c8"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 DrWatson = "634d3b9d-ee7a-5ddf-bec9-22491ea816e1"
 Einsum = "b7d42ee7-0b51-5a75-98ca-779d3107e4c0"
-Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
 Estrin = "4642663a-9907-4130-9c18-0ebd857e5e35"
 ExplicitImports = "7d51a73a-1435-4ff3-83d9-f097790105c7"
 FastBroadcast = "7034ab61-46d4-4ed7-9d0f-46aef9175898"
@@ -83,5 +82,4 @@ UnrolledUtilities = "0fe1646c-419e-43be-ac14-22321958931b"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [compat]
-Enzyme = "0.12.31"
 MakieThemes = "0.1.2"
