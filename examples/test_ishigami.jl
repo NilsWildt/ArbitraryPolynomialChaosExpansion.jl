@@ -4,7 +4,6 @@ using DrWatson
 @quickactivate "APCE"
 module Runner
 using CairoMakie
-
 using Statistics
 using DrWatson
 using PrettyTables
