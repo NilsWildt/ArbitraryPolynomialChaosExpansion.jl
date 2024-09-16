@@ -63,7 +63,6 @@ import Base.show
     println(io, "Output Dimensions: ", aPCE.output_dimensions)
     println(io, "Expansion Degree: ", aPCE.ExpansionDegree)
     println(io, "Number Of Terms: ", aPCE.NumberOfTerms)
-    println(io, "Orthonormal Representation: ", aPCE.OrthonormalRepresentation ? "Yes" : "No")
     # Depending on the size, you might want to only show a preview of the arrays
     println(io, "Multivariate Polynomial Degrees: ", size(aPCE.MultivariatePolynomialDegrees))
     println(io, "Orthonormal Basis: Dimensions ", size(aPCE.OrthonormalBasis))
