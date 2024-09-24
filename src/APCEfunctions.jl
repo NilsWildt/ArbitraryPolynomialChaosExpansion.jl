@@ -80,7 +80,7 @@ end
 		return [summe, n_zeros, meanval, varval, mm.min, mm.max]
 	end
 
-	@stable function filter_by_percentage(array::AbstractArray, percentage)
+	function filter_by_percentage(array::AbstractArray, percentage)
 		# Ensure the percentage is within the valid range
 		try
             if percentage < 0.0 || percentage > 1.0
