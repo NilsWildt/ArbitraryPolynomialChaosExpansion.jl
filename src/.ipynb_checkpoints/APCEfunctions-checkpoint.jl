@@ -84,7 +84,8 @@ end
 		# Ensure the percentage is within the valid range
 		try
             if percentage < 0.0 || percentage > 1.0
-			throw(ArgumentError("Percentage must be between 0 and 1"))
+			# throw(ArgumentError("Percentage must be between 0 and 1"))
+                @warn "Percentage must be between 0 and 1"
 		end
 		n = length(array)
 		num_to_keep = round(Int, percentage * n)
