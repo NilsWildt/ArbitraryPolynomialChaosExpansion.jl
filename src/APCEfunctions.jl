@@ -227,12 +227,12 @@ end
 		Vc[degree+1] = one(T)
 
 
-		PolyCoeff_NonNorm[degree+1, 1:degree+1] .= LinearAlgebra.factorize(Hankel) \ Vc
+		# PolyCoeff_NonNorm[degree+1, 1:degree+1] .= LinearAlgebra.factorize(Hankel) \ Vc
 
 		# PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Krylov.usymlq(Hankel,Vc) |> first
 		# catch
 		#     @warn "Hankel matrix singular, trying pseudo inverse." #  Vp Hankel Vc
-		# PolyCoeff_NonNorm[degree+1, 1:degree+1] .= pinv(Hankel) * Vc
+		PolyCoeff_NonNorm[degree+1, 1:degree+1] .= pinv(Hankel) * Vc # more robust?
 		# end
 		# Vp = Hankel \ Vc
 		# PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Vp

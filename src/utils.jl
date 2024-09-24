@@ -56,10 +56,6 @@ function partitionTrainTest(data; at = 0.7,rng=Xoshiro())
 end
 
 
-function numberPolynomials(n::Int64, d::Int64)
-	x, y = max(d, n), min(d, n)
-	return UInt128(prod(UInt128(x + 1):UInt128(d + n)) ÷ factorial(UInt128(y))) |> Int
-end
 
 
 # Macro for checking arguments
@@ -85,17 +81,3 @@ macro check_args(K, param, cond, desc=string(cond))
     end
 end
 
-
-function partitionTrainTest(data; at=0.7, rng=Xoshiro())
-    num_samples = size(data, 1)
-    shuffled_indices = shuffle(rng, 1:num_samples)
-    split_index = floor(Int, at * num_samples)
-
-    train_indices = view(shuffled_indices, 1:split_index)
-    test_indices = view(shuffled_indices, (split_index+1):num_samples)
-
-    X_train = data[train_indices]
-    X_test = data[test_indices]
-
-    return X_train, X_test
-end
