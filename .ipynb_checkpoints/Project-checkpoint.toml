@@ -4,6 +4,7 @@ authors = ["NilsWildt"]
 version = "0.2.3"
 
 [deps]
+ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
 AlgebraOfGraphics = "cbdf2221-f076-402e-a563-3d30da359d67"
 Bumper = "8ce10254-0962-460f-a3d8-1f77fea1446e"
 CPUSummary = "2a0fbf3d-bb9c-48f3-b0a9-814d99fd7ab9"
