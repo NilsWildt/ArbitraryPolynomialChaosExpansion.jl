@@ -6,29 +6,29 @@ using InteractiveUtils
 
 # ╔═╡ 2ab336b8-a937-11ec-2077-03c15fed8d4c
 begin
-	using LinearAlgebra
-	using Makie
-	# using CairoMakie
-	using StaticArrays
-	# using GLMakie
-	# using JSServe
-	using GLMakie
-	using PlutoUI
-	using Colors
-	using ReverseDiff
-	using ForwardDiff
-	using Random
-	using ColorTypes
-	using KernelFunctions
-	using Distributions
-	using ColorSchemes
-	using BenchmarkTools
-	using Base.Iterators: flatten
-	using BlockArrays
-	using KrylovKit
-	# using Einsum
-		using CairoMakie
-	# using OMEinsum
+    using LinearAlgebra
+    using Makie
+    # using CairoMakie
+    using StaticArrays
+    # using GLMakie
+    # using JSServe
+    using GLMakie
+    using PlutoUI
+    using Colors
+    using ReverseDiff
+    using ForwardDiff
+    using Random
+    using ColorTypes
+    using KernelFunctions
+    using Distributions
+    using ColorSchemes
+    using BenchmarkTools
+    using Base.Iterators: flatten
+    using BlockArrays
+    using KrylovKit
+    # using Einsum
+    using CairoMakie
+    # using OMEinsum
 end
 
 # ╔═╡ 61cfcfa4-06af-4ace-8b1a-d851bae6d287
@@ -36,32 +36,32 @@ GLMakie.inline!(false)
 
 # ╔═╡ 98201945-6dae-40db-944f-7617b6e2904d
 begin
-		# Solution:
-		function u_true(t,x) 
-			return @. exp(-t)*sin(2*π*x)
-		end
-		# OVerload for array
-		u_true(t::AbstractArray,x::AbstractArray) = u_true.(t,x)
+    # Solution:
+    function u_true(t, x)
+        return @. exp(-t) * sin(2 * π * x)
+    end
+    # OVerload for array
+    u_true(t::AbstractArray, x::AbstractArray) = u_true.(t, x)
 
-	function f(t,x) 
-		return -exp(-t)*(4*π^2-1)*sin(2*π*x)
-	end
-	# Overload for array
-	f(t::AbstractArray,x::AbstractArray) = f.(t,x)
+    function f(t, x)
+        return -exp(-t) * (4 * π^2 - 1) * sin(2 * π * x)
+    end
+    # Overload for array
+    f(t::AbstractArray, x::AbstractArray) = f.(t, x)
 
-	function f(X)
-	x1 = X[:,1]
-	x2 = X[:,2]
-	return f(x1,x2)
-	end
-	
+    function f(X)
+        x1 = X[:, 1]
+        x2 = X[:, 2]
+        return f(x1, x2)
+    end
+
 end
 
 # ╔═╡ ae21e1e7-a750-4b04-a47a-9a022c8402bf
 function u_true(X)
-	x1 = X[:,1]
-	x2 = X[:,2]
-	return u_true(x1,x2)
+    x1 = X[:, 1]
+    x2 = X[:, 2]
+    return u_true(x1, x2)
 end
 
 # ╔═╡ cb823888-4668-4b3a-869a-7202654b5aeb
@@ -79,9 +79,9 @@ end
 
 # ╔═╡ b587a479-cb72-4c16-a23c-e7165f8011c8
 function meshgrid(x, y)
-   xx = [x for _ in y, x in x]
-   yy = [y for y in y, _ in x]
-	return xx,yy
+    xx = [x for _ in y, x in x]
+    yy = [y for y in y, _ in x]
+    return xx, yy
 end
 
 # ╔═╡ 15447e39-d4a8-4e79-bb11-63c8196efc5d
@@ -91,39 +91,39 @@ md"""
 
 # ╔═╡ 5b4bc70a-d4f4-4464-a5f9-f30d86794653
 begin
-function k_gauss(r;ϵ=0.1)
-	return  exp(-1/(2*ϵ^2) * r^2)
-end
-	∇G = x-> ForwardDiff.derivative(k_gauss,x)
-	ΔG = x-> ForwardDiff.derivative(∇G,x)
-	ΔΔG = x-> ForwardDiff.derivative(ΔG,x)
+    function k_gauss(r; ϵ = 0.1)
+        return  exp(-1 / (2 * ϵ^2) * r^2)
+    end
+    ∇G = x -> ForwardDiff.derivative(k_gauss, x)
+    ΔG = x -> ForwardDiff.derivative(∇G, x)
+    ΔΔG = x -> ForwardDiff.derivative(ΔG, x)
 
-function k_matern_quadratic(r;ϵ=0.1)
-	return exp(-ϵ*r)*(3+3*ϵ*r+(ϵ*r)^2)
-end
+    function k_matern_quadratic(r; ϵ = 0.1)
+        return exp(-ϵ * r) * (3 + 3 * ϵ * r + (ϵ * r)^2)
+    end
 
-function k_matern_cubic(r;ϵ=0.1)
-	return exp(-ϵ*r)*(15+15*ϵ*r+6*(ϵ*r)^2 + (ϵ*r)^3)
-end
+    function k_matern_cubic(r; ϵ = 0.1)
+        return exp(-ϵ * r) * (15 + 15 * ϵ * r + 6 * (ϵ * r)^2 + (ϵ * r)^3)
+    end
 
-	function k_matern_derivatives(k_matern_eps,ε)
-		# k_matern = x-> k_matern_eps(x;ϵ=ε)
-		# Φ¹ = x-> ForwardDiff.derivative(k_matern,x) 
-		# Φ² = x-> ForwardDiff.derivative(Φ¹,x) 
-		# Φ³ = x-> ForwardDiff.derivative(Φ²,x) 
-		# Φ⁴ = x-> ForwardDiff.derivative(Φ⁴,x) 
-		# Δ = x-> Φ²(x) +1/x*Φ¹(x)
-		# ΔΔ = x-> Φ⁴(x) + 2/x * Φ³  - 1/x^2 * Φ²(x) + 1/r^3*Φ¹(x)
-		rbf(r) = exp.(-ε.*r).*(3 + 3. .*ε.*r + (ε.*r).^2);
-	    lap_rbf(r) = exp.(-ε.*r).*(-2.0.*ε.^2 - 2.0.*ε.^3.0.*r + ε.^4.0.*r.^2);
-	    lap2_rbf(r) = exp.(-ε.*r).*(ε.^6.0.*r.^2 - 7.0.*ε.^5.0.*r + 8.0.*ε.^4);
-		
-			# rbf(r) = exp.(-ε.*r).*(15 + 15.0.*ε.*r + 6.0.*(ε.*r).^2 + (ε.*r).^3);
-		 #    lap_rbf(r) =exp.(-ε.*r).*(-6.0.*ε.^2 - 6.0.*ε.^3.0.*r - ε.^4.0.*r.^2 + ε.^5.0.*r.^3);
-		 #    lap2_rbf(r) = exp.(-ε.*r).*(8.0.*ε.^4 + 8.0.*ε.^5.0.*r - 8.0.*ε.^6.0.*r.^2 + ε.^7.0.*r.^3);
-		
-	return rbf,lap_rbf,lap2_rbf
-end
+    function k_matern_derivatives(k_matern_eps, ε)
+        # k_matern = x-> k_matern_eps(x;ϵ=ε)
+        # Φ¹ = x-> ForwardDiff.derivative(k_matern,x)
+        # Φ² = x-> ForwardDiff.derivative(Φ¹,x)
+        # Φ³ = x-> ForwardDiff.derivative(Φ²,x)
+        # Φ⁴ = x-> ForwardDiff.derivative(Φ⁴,x)
+        # Δ = x-> Φ²(x) +1/x*Φ¹(x)
+        # ΔΔ = x-> Φ⁴(x) + 2/x * Φ³  - 1/x^2 * Φ²(x) + 1/r^3*Φ¹(x)
+        rbf(r) = exp.(-ε .* r) .* (3 + 3.0 .* ε .* r + (ε .* r) .^ 2)
+        lap_rbf(r) = exp.(-ε .* r) .* (-2.0 .* ε .^ 2 - 2.0 .* ε .^ 3.0 .* r + ε .^ 4.0 .* r .^ 2)
+        lap2_rbf(r) = exp.(-ε .* r) .* (ε .^ 6.0 .* r .^ 2 - 7.0 .* ε .^ 5.0 .* r + 8.0 .* ε .^ 4)
+
+        # rbf(r) = exp.(-ε.*r).*(15 + 15.0.*ε.*r + 6.0.*(ε.*r).^2 + (ε.*r).^3);
+        #    lap_rbf(r) =exp.(-ε.*r).*(-6.0.*ε.^2 - 6.0.*ε.^3.0.*r - ε.^4.0.*r.^2 + ε.^5.0.*r.^3);
+        #    lap2_rbf(r) = exp.(-ε.*r).*(8.0.*ε.^4 + 8.0.*ε.^5.0.*r - 8.0.*ε.^6.0.*r.^2 + ε.^7.0.*r.^3);
+
+        return rbf, lap_rbf, lap2_rbf
+    end
 end
 
 # ╔═╡ 1698a554-26f3-43ea-b660-14987f55b979
@@ -132,7 +132,7 @@ md"""
 """
 
 # ╔═╡ 2d70df8a-fcbb-4cf5-aca6-2faac00641bd
-	RNG = Xoshiro(42)
+RNG = Xoshiro(42)
 
 # ╔═╡ 3498e878-8e4e-4e84-82d0-369b0fd3ffca
 md"""
@@ -153,13 +153,13 @@ md"""
 # f = X -> @. -pi^2.0 .* (sin(pi*X[:,1]).*sin(pi*X[:,2])+64.0 .*sin(4*pi*X[:,1]).*sin(4*pi*X[:,2]) + sin(pi*X[:,1]).*sin(pi*X[:,2])+64.0  .*sin(4*pi*X[:,1]).*sin(4*pi*X[:,2]));
 
 # ╔═╡ 5b56ef07-4f3c-4bc6-b249-4e0ac91bf8b3
-function g(x) 
-	n,m = size(x)
-	return u_true(x[:,1],x[:,2])#zeros(n,1)
+function g(x)
+    n, m = size(x)
+    return u_true(x[:, 1], x[:, 2]) #zeros(n,1)
 end
 
 # ╔═╡ 9c2bc347-1f98-4402-9031-f191af7ad71d
-M,ΔMC,ΔΔMC = k_matern_derivatives(k_matern_cubic,ε);
+M, ΔMC, ΔΔMC = k_matern_derivatives(k_matern_cubic, ε);
 
 # ╔═╡ e19be3ca-be52-4322-a346-150aaeb4756b
 N = 1000
@@ -168,262 +168,264 @@ N = 1000
 # u0 = solve_PDE(Λ,ΛEv,rhs)
 
 # ╔═╡ 586a9412-19a3-47e5-a280-6598b6629583
-begin	
-	function solve_PDE(Λ,ΛEv,rhs)
-		α = Λ \ rhs
-	    u = ΛEv * α |> vec 
-	end
-	
-	
+begin
+    function solve_PDE(Λ, ΛEv, rhs)
+        α = Λ \ rhs
+        return u = ΛEv * α |> vec
+    end
 
-	function RHS(f,g,X∂Ω,XΩ)
-		rhs = vcat(f(XΩ),g(X∂Ω))
-		return rhs |> vec
-	end
-	
-	function evaluation_matrix(rbf,Δrbf,ΔΔrbf,XΩ,X∂Ω,Xnew)
-		nin,_ = size(XΩ)
-		nbnd,_ = size(X∂Ω)
-		nnew,_ = size(Xnew)
-	
-		X = [XΩ;X∂Ω];
-		D = pwD(Xnew,X)
-		ΛEv  = zeros(nnew,nin+nbnd);
-				
-		@inbounds for i = 1:nnew
-		    for j = 1:nin+nbnd
-		       if j <= nin
-		            ΛEv[i,j] = Δrbf.(D[i,j])
-		        else
-		            ΛEv[i,j] = rbf.(D[i,j])
-		        end
-		    end
-		end
 
-		return ΛEv	
-	end
+    function RHS(f, g, X∂Ω, XΩ)
+        rhs = vcat(f(XΩ), g(X∂Ω))
+        return rhs |> vec
+    end
 
-	function collocation_points(M=1024,MΩ = 900)
-		x∂Ωt = LinRange(0,4,MΩ)#rand(RNG,Uniform(0,4),MΩ)
-		X∂Ω = zeros(MΩ,2)
-		for i in LinearIndices(x∂Ωt)
-			if 0.0 <= x∂Ωt[i] < 1.0 # Lower line
-				X∂Ω[i,:] = [x∂Ωt[i] 0.0]
-			elseif 1.0 <= x∂Ωt[i] < 2.0 # Right boarder
-				X∂Ω[i,:] = [1.0 x∂Ωt[i]-1.0]
-			elseif 2.0 <= x∂Ωt[i] < 3.0 # Top
-				X∂Ω[i,:] = [x∂Ωt[i]-2.0 1.0]
-			else 
-				X∂Ω[i,:] = [0.0 x∂Ωt[i]-3.0]
-			end
-		end
-		n = Int64(ceil(sqrt(M)))
-		# x = LinRange(0+1/n,1-1/n,n-2)
-		x = LinRange(0,1,n)
-		xx,yy=meshgrid(x,x)
-		XΩ  = [xx[:] yy[:]]
-		# XΩ  = xx#rand(RNG,Uniform(0,1),(M,2))
-		# unique!(X)
-		# unique!(x∂Ω)
-		return XΩ,X∂Ω
-	end
+    function evaluation_matrix(rbf, Δrbf, ΔΔrbf, XΩ, X∂Ω, Xnew)
+        nin, _ = size(XΩ)
+        nbnd, _ = size(X∂Ω)
+        nnew, _ = size(Xnew)
 
-	function collocation_matrix(rbf,Δrbf,ΔΔrbf,XΩ,X∂Ω)
-		nin,_= size(XΩ)
-		nbnd,_= size(X∂Ω)
-	
-		X = [XΩ;X∂Ω];
-		D = pwD(X,X)
-		Λ  = zeros(nin+nbnd,nin+nbnd);
-		# Could be speeded up, if matrix symmetric
-		@inbounds for i = 1:nin+nbnd
-		    for j = 1:nin+nbnd
-			    if ((i <= nin) && (j <= nin))
-	            	Λ[i,j]  = @views ΔΔrbf.(D[i,j]);
-				elseif ((i > nin) && (j > nin))
-	            	Λ[i,j]  = @views rbf(D[i,j]);
-		        else
-		            Λ[i,j] =@views Δrbf.(D[i,j]);
-		        end
-		    end
-		end
-		return Λ
-	end
+        X = [XΩ;X∂Ω]
+        D = pwD(Xnew, X)
+        ΛEv = zeros(nnew, nin + nbnd)
 
-	
-	function prepend_one(X::AbstractArray)
-	    X = cat(ones(size(X, 1)), X;dims = 2)
-	end
-	
-	""" 
-	pDist2 
-	pairwise euclidean distance
-	```math
-	(x - y) = sqrt(x ^ 2 + y ^ 2 - 2 * x * y)
-	```
-	""" 
+        @inbounds for i in 1:nnew
+            for j in 1:(nin + nbnd)
+                if j <= nin
+                    ΛEv[i, j] = Δrbf.(D[i, j])
+                else
+                    ΛEv[i, j] = rbf.(D[i, j])
+                end
+            end
+        end
 
-	function pairdist2(a::AbstractMatrix, b::AbstractMatrix)
-		return pairdist(a::AbstractMatrix, b::AbstractMatrix;doroot=false)
-	end
-	
-	function pairdist(a::AbstractMatrix, b::AbstractMatrix;doroot=true)
-		na,_=size(a)
-		nb,_=size(b)
-	    r = a*b'
-	    sa2 = sum(a.^2,dims=2)
-	    sb2 = sum(b.^2,dims=2)
-	    @inbounds for j = 1 : nb
-	        @simd for i = 1 : na
-	            r[i,j] = @views sa2[i] + sb2[j] - 2 * r[i,j]
-				if doroot
-	            	 r[i,j] = @views isnan(r[i,j]) ? NaN : sqrt(max(r[i,j], 0.))
-				end
-	        end
-	    end
-	    return r
-	end
+        return ΛEv
+    end
 
-	function pwD2(a::AbstractMatrix, b::AbstractMatrix)
-		pairdist(a, b;doroot=false)
-	end
-	
-		function pwD(a::AbstractMatrix, b::AbstractMatrix)
-		pairdist(a, b;doroot=true)
-	end
-		
-	
-	
-	# function pwDDD(X::AbstractArray, Y::AbstractArray)
-	#     D = sqrt.(pwD2(X, Y))
-	#     return D
-	# end
-	 
-	# function pwD2DDX::AbstractArray, Y::AbstractArray)
-	#     # This implementation uses
-	#     # (x - y) ^ 2 = x ^ 2 + y ^ 2 - 2 * x * y
-	#    		nx,mx = size(X)
-	# 		ny,my = size(Y)
-	# 	 	A = reshape(sum(X.^2;dims = 2),(nx,1)) * ones(1, ny)
-	# 	    B =  ones(nx, 1)*sum(Y.^2;dims = 2)'
-	# 	    D = A.+ B #.- 2.0.*X*Y
-	# 	return D
-	# end
-	
-	# @fastmath function kernel_dot(X::AbstractArray, Y::AbstractArray)
-	#     dimY = size(Y)
-	#     dimX = size(X)
-	#     Lx = Int64(dimX[1])
-	#     Ly = Int64(dimY[1])
-	#     A = zeros(Float64, (Lx, Ly))
-	#     @inbounds @simd for i in 1:Ly 
-	#         for j in 1:Lx
-	#             A[i,j] = @views X[i] * Y[j]
-	#         end
-	#     end
-	#     return A
-	# end
-	
+    function collocation_points(M = 1024, MΩ = 900)
+        x∂Ωt = LinRange(0, 4, MΩ) #rand(RNG,Uniform(0,4),MΩ)
+        X∂Ω = zeros(MΩ, 2)
+        for i in LinearIndices(x∂Ωt)
+            if 0.0 <= x∂Ωt[i] < 1.0 # Lower line
+                X∂Ω[i, :] = [x∂Ωt[i] 0.0]
+            elseif 1.0 <= x∂Ωt[i] < 2.0 # Right boarder
+                X∂Ω[i, :] = [1.0 x∂Ωt[i] - 1.0]
+            elseif 2.0 <= x∂Ωt[i] < 3.0 # Top
+                X∂Ω[i, :] = [x∂Ωt[i] - 2.0 1.0]
+            else
+                X∂Ω[i, :] = [0.0 x∂Ωt[i] - 3.0]
+            end
+        end
+        n = Int64(ceil(sqrt(M)))
+        # x = LinRange(0+1/n,1-1/n,n-2)
+        x = LinRange(0, 1, n)
+        xx, yy = meshgrid(x, x)
+        XΩ = [xx[:] yy[:]]
+        # XΩ  = xx#rand(RNG,Uniform(0,1),(M,2))
+        # unique!(X)
+        # unique!(x∂Ω)
+        return XΩ, X∂Ω
+    end
+
+    function collocation_matrix(rbf, Δrbf, ΔΔrbf, XΩ, X∂Ω)
+        nin, _ = size(XΩ)
+        nbnd, _ = size(X∂Ω)
+
+        X = [XΩ;X∂Ω]
+        D = pwD(X, X)
+        Λ = zeros(nin + nbnd, nin + nbnd)
+        # Could be speeded up, if matrix symmetric
+        @inbounds for i in 1:(nin + nbnd)
+            for j in 1:(nin + nbnd)
+                if ((i <= nin) && (j <= nin))
+                    Λ[i, j] = @views ΔΔrbf.(D[i, j])
+                elseif ((i > nin) && (j > nin))
+                    Λ[i, j] = @views rbf(D[i, j])
+                else
+                    Λ[i, j] = @views Δrbf.(D[i, j])
+                end
+            end
+        end
+        return Λ
+    end
+
+
+    function prepend_one(X::AbstractArray)
+        return X = cat(ones(size(X, 1)), X; dims = 2)
+    end
+
+    """ 
+    pDist2 
+    pairwise euclidean distance
+    ```math
+    (x - y) = sqrt(x ^ 2 + y ^ 2 - 2 * x * y)
+    ```
+    """
+
+    function pairdist2(a::AbstractMatrix, b::AbstractMatrix)
+        return pairdist(a::AbstractMatrix, b::AbstractMatrix; doroot = false)
+    end
+
+    function pairdist(a::AbstractMatrix, b::AbstractMatrix; doroot = true)
+        na, _ = size(a)
+        nb, _ = size(b)
+        r = a * b'
+        sa2 = sum(a .^ 2, dims = 2)
+        sb2 = sum(b .^ 2, dims = 2)
+        @inbounds for j in 1:nb
+            @simd for i in 1:na
+                r[i, j] = @views sa2[i] + sb2[j] - 2 * r[i, j]
+                if doroot
+                    r[i, j] = @views isnan(r[i, j]) ? NaN : sqrt(max(r[i, j], 0.0))
+                end
+            end
+        end
+        return r
+    end
+
+    function pwD2(a::AbstractMatrix, b::AbstractMatrix)
+        return pairdist(a, b; doroot = false)
+    end
+
+    function pwD(a::AbstractMatrix, b::AbstractMatrix)
+        return pairdist(a, b; doroot = true)
+    end
+
+
+    # function pwDDD(X::AbstractArray, Y::AbstractArray)
+    #     D = sqrt.(pwD2(X, Y))
+    #     return D
+    # end
+
+    # function pwD2DDX::AbstractArray, Y::AbstractArray)
+    #     # This implementation uses
+    #     # (x - y) ^ 2 = x ^ 2 + y ^ 2 - 2 * x * y
+    #    		nx,mx = size(X)
+    # 		ny,my = size(Y)
+    # 	 	A = reshape(sum(X.^2;dims = 2),(nx,1)) * ones(1, ny)
+    # 	    B =  ones(nx, 1)*sum(Y.^2;dims = 2)'
+    # 	    D = A.+ B #.- 2.0.*X*Y
+    # 	return D
+    # end
+
+    # @fastmath function kernel_dot(X::AbstractArray, Y::AbstractArray)
+    #     dimY = size(Y)
+    #     dimX = size(X)
+    #     Lx = Int64(dimX[1])
+    #     Ly = Int64(dimY[1])
+    #     A = zeros(Float64, (Lx, Ly))
+    #     @inbounds @simd for i in 1:Ly
+    #         for j in 1:Lx
+    #             A[i,j] = @views X[i] * Y[j]
+    #         end
+    #     end
+    #     return A
+    # end
+
 end
 
 # ╔═╡ 01ac88e8-563b-4481-8990-c15fae7b7eb9
-XΩ,X∂Ω = collocation_points(500,300);
+XΩ, X∂Ω = collocation_points(500, 300);
 
 # ╔═╡ e59ff35d-e5a1-4658-8a13-9013568ecc2e
 begin
-	# Just to double check ft
-	# operator to get the derivative of this function using AD
-	∇u = x -> ForwardDiff.jacobian(u_true, x)
-	Δu = x -> ForwardDiff.jacobian(∇u ,x)
-	ft = @. x-> tr(Δu(x))
-	fRHSX = ft([XΩ[i,:]' for i in 1:size(XΩ,1)])
+    # Just to double check ft
+    # operator to get the derivative of this function using AD
+    ∇u = x -> ForwardDiff.jacobian(u_true, x)
+    Δu = x -> ForwardDiff.jacobian(∇u, x)
+    ft = @. x -> tr(Δu(x))
+    fRHSX = ft([XΩ[i, :]' for i in 1:size(XΩ, 1)])
 end
 
 # ╔═╡ c43c3daa-c5a4-41bf-8e7b-5332e57407ab
-sum(f(XΩ).-fRHSX)
+sum(f(XΩ) .- fRHSX)
 
 # ╔═╡ 7205efc8-202a-41e3-a22a-fbedcf29fed4
 begin
-	fig1 = scatter(X∂Ω,color=:red,marker=:x,markersize=7)
-	scatter!(XΩ,color=:blue,marker=:x,markersize=10)
-	fig1
+    fig1 = scatter(X∂Ω, color = :red, marker = :x, markersize = 7)
+    scatter!(XΩ, color = :blue, marker = :x, markersize = 10)
+    fig1
 end
 
 # ╔═╡ 5d89d178-4f8b-4f9a-b9c5-a05f56e86bdd
-Λ = collocation_matrix(M,ΔMC,ΔΔMC,XΩ,X∂Ω) #+ 1E-13I;
+Λ = collocation_matrix(M, ΔMC, ΔΔMC, XΩ, X∂Ω) #+ 1E-13I;
 
 # ╔═╡ 97f8c31f-fba1-444b-b688-3772a4c09c44
-Xnew,_ = collocation_points(N,300);
+Xnew, _ = collocation_points(N, 300);
 
 # ╔═╡ edd9aa59-2323-4a4d-a57f-e51ef5e4529b
-uref = u_true(Xnew[:,1],Xnew[:,2])
+uref = u_true(Xnew[:, 1], Xnew[:, 2])
 
 # ╔═╡ 898b95e7-13f4-41e9-8b64-4a2452913b0c
-ΛEv =	evaluation_matrix(M,ΔMC,ΔΔMC,XΩ,X∂Ω,Xnew);
+ΛEv = evaluation_matrix(M, ΔMC, ΔΔMC, XΩ, X∂Ω, Xnew);
 
 # ╔═╡ a45d4b70-4f29-4113-83cb-a5f21424fb16
-rhs = RHS(f,g,X∂Ω,XΩ);
+rhs = RHS(f, g, X∂Ω, XΩ);
 
 # ╔═╡ 9c7ccbd5-49da-4093-917e-156a75c43ee1
- u = solve_PDE(Λ,ΛEv,rhs)
+u = solve_PDE(Λ, ΛEv, rhs)
 
 # ╔═╡ 492e36e3-6f58-4efe-8b95-513a4dd28460
-begin	
-	
-	dpi = 300
-	CairoMakie.activate!(type="svg")
-	
-	set_window_config!(;
-	    renderloop = GLMakie.renderloop,
-	    vsync = true,
-	    framerate = 60.0,
-	    float = true,
-	    pause_rendering = false,
-	    focus_on_show = true,
-	    decorated = true,
-	    title = "U"
-	)
-	fontsize_theme = Theme(fontsize = 32)
-	set_theme!(fontsize_theme)
-	set_theme!(theme_light())
+begin
 
-	# set_theme!(theme_black())
-	size_inches = (4,3)
-	size_pt = dpi .* size_inches
-    fig = Figure(resolution = size_pt, fontsize = 30,figure_padding = 0,)
-deg2rad(x) = x*π/180
-    ax = Axis3(fig[1, 1], aspect = (1,1,1),viewmode = :fitzoom, perspectiveness = 0.1, elevation = deg2rad(10) ,azimuth= deg2rad(200),
+    dpi = 300
+    CairoMakie.activate!(type = "svg")
+
+    set_window_config!(;
+        renderloop = GLMakie.renderloop,
+        vsync = true,
+        framerate = 60.0,
+        float = true,
+        pause_rendering = false,
+        focus_on_show = true,
+        decorated = true,
+        title = "U"
+    )
+    fontsize_theme = Theme(fontsize = 32)
+    set_theme!(fontsize_theme)
+    set_theme!(theme_light())
+
+    # set_theme!(theme_black())
+    size_inches = (4, 3)
+    size_pt = dpi .* size_inches
+    fig = Figure(resolution = size_pt, fontsize = 30, figure_padding = 0)
+    deg2rad(x) = x * π / 180
+    ax = Axis3(
+        fig[1, 1], aspect = (1, 1, 1), viewmode = :fitzoom, perspectiveness = 0.1, elevation = deg2rad(10), azimuth = deg2rad(200),
         xzpanelcolor = (:white, 0.0), yzpanelcolor = (:white, 0.0),
-        zgridcolor = :grey, ygridcolor = :grey, xgridcolor = :black,xlabel="t",ylabel = "x", zlabel = "u(t,x)")
-	
+        zgridcolor = :grey, ygridcolor = :grey, xgridcolor = :black, xlabel = "t", ylabel = "x", zlabel = "u(t,x)"
+    )
 
-	xx,yy =  meshgrid(XΩ[:,1],XΩ[:,2])
-	zz = u_true(xx,yy)
-	
-	surface!(ax,XΩ[:,1],XΩ[:,2],u_true(XΩ[:,1],XΩ[:,2]), colormap = (:Blues, 1.0),  transparency = false,shading=false)
-	
-	surface!(ax,Xnew[:,1],Xnew[:,2],vec(u), colormap = (:OrRd, 1.0), transparency = true,shading=false)
 
-	xmin, ymin, zmin = minimum(ax.finallimits[])
+    xx, yy = meshgrid(XΩ[:, 1], XΩ[:, 2])
+    zz = u_true(xx, yy)
+
+    surface!(ax, XΩ[:, 1], XΩ[:, 2], u_true(XΩ[:, 1], XΩ[:, 2]), colormap = (:Blues, 1.0), transparency = false, shading = false)
+
+    surface!(ax, Xnew[:, 1], Xnew[:, 2], vec(u), colormap = (:OrRd, 1.0), transparency = true, shading = false)
+
+    xmin, ymin, zmin = minimum(ax.finallimits[])
     xmax, ymax, zmax = maximum(ax.finallimits[])
-	
-	scatter!(ax,X∂Ω,color=:red,marker=:x,markersize=10,transformation = (:xy, zmin-1.5))
-	scatter!(ax, XΩ,color=:blue,marker=:x,markersize=10,transformation = (:xy, zmin-1.5))
 
-	
-    contour!(ax, XΩ[:,1],XΩ[:,2],u_true(XΩ[:,1],XΩ[:,2]); levels = 20, colormap = :Blues, linewidth = 2, transformation = (:xy, zmin),
-        transparency = true)
-	
+    scatter!(ax, X∂Ω, color = :red, marker = :x, markersize = 10, transformation = (:xy, zmin - 1.5))
+    scatter!(ax, XΩ, color = :blue, marker = :x, markersize = 10, transformation = (:xy, zmin - 1.5))
 
-	 contour!(ax, Xnew[:,1],Xnew[:,2],vec(u); levels = 20, colormap = :OrRd, linewidth = 2, transformation = (:xy, zmin-0.5),transparency = true)
-	
-	# gl_screen = display(current_figure())
-	# wait(gl_screen)
-	# print(hallo)
-	resize_to_layout!(fig)
-	# fig
-	save("Heat_1D_surface_GLMakie_Kernel_symm_$(ε).svg", fig, pt_per_unit = 1)
-	fig
+
+    contour!(
+        ax, XΩ[:, 1], XΩ[:, 2], u_true(XΩ[:, 1], XΩ[:, 2]); levels = 20, colormap = :Blues, linewidth = 2, transformation = (:xy, zmin),
+        transparency = true
+    )
+
+
+    contour!(ax, Xnew[:, 1], Xnew[:, 2], vec(u); levels = 20, colormap = :OrRd, linewidth = 2, transformation = (:xy, zmin - 0.5), transparency = true)
+
+    # gl_screen = display(current_figure())
+    # wait(gl_screen)
+    # print(hallo)
+    resize_to_layout!(fig)
+    # fig
+    save("Heat_1D_surface_GLMakie_Kernel_symm_$(ε).svg", fig, pt_per_unit = 1)
+    fig
 end
 
 # ╔═╡ a8e5f55e-ef47-479f-aa57-4992bd401b76

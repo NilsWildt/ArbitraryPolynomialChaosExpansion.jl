@@ -4,66 +4,66 @@ using TimerOutputs
 using Distances
 
 
-function pairdist1(a, b; doroot=true)
-        na = size(a, 1)
-        nb = size(b, 1)
-        r = a * b'
-        sa2 = sum(a .^ 2, dims=2)
-        sb2 = sum(b .^ 2, dims=2)
-        @inbounds for j = 1:nb
-                @simd for i = 1:na
-                        r[i, j] = @views sa2[i] + sb2[j] - 2 * r[i, j]
-                        if doroot
-                                r[i, j] = @views isnan(r[i, j]) ? NaN : sqrt(max(r[i, j], 0.0))
-                        end
-                end
+function pairdist1(a, b; doroot = true)
+    na = size(a, 1)
+    nb = size(b, 1)
+    r = a * b'
+    sa2 = sum(a .^ 2, dims = 2)
+    sb2 = sum(b .^ 2, dims = 2)
+    @inbounds for j in 1:nb
+        @simd for i in 1:na
+            r[i, j] = @views sa2[i] + sb2[j] - 2 * r[i, j]
+            if doroot
+                r[i, j] = @views isnan(r[i, j]) ? NaN : sqrt(max(r[i, j], 0.0))
+            end
         end
-        return r
+    end
+    return r
 end
 
 
-function pairdist(a, b; doroot=true)
-        na = size(a, 1)
-        nb = size(b, 1)
-        r = a * b'
-        sa2 = sum(a .^ 2, dims=2)
-        sb2 = sum(b .^ 2, dims=2)
-        @inbounds for j = 1:nb
-                @simd for i = j:na
-                        r[i, j] = @views sa2[i] + sb2[j] - 2 * r[i, j]
-                        if doroot
-                                r[i, j] = @views isnan(r[i, j]) ? NaN : sqrt(max(r[i, j], 0.0))
-                        end
-                end
-                @simd for i = 1:j-1
-                        r[i, j] = r[j, i]
-                end
+function pairdist(a, b; doroot = true)
+    na = size(a, 1)
+    nb = size(b, 1)
+    r = a * b'
+    sa2 = sum(a .^ 2, dims = 2)
+    sb2 = sum(b .^ 2, dims = 2)
+    @inbounds for j in 1:nb
+        @simd for i in j:na
+            r[i, j] = @views sa2[i] + sb2[j] - 2 * r[i, j]
+            if doroot
+                r[i, j] = @views isnan(r[i, j]) ? NaN : sqrt(max(r[i, j], 0.0))
+            end
         end
+        @simd for i in 1:(j - 1)
+            r[i, j] = r[j, i]
+        end
+    end
 
 
-        return r
+    return r
 end
 
-function pairdist_threaded(a, b; doroot=true)
-        na = size(a, 1)
-        nb = size(b, 1)
-        r = a * b'
-        sa2 = sum(a .^ 2, dims=2)
-        sb2 = sum(b .^ 2, dims=2)
-        Threads.@threads for j = 1:nb
-                @simd for i = j:na
-                        r[i, j] = @views sa2[i] + sb2[j] - 2 * r[i, j]
-                        if doroot
-                                r[i, j] = @views isnan(r[i, j]) ? NaN : sqrt(max(r[i, j], 0.0))
-                        end
-                end
-                @simd for i = 1:j-1
-                        r[i, j] = r[j, i]
-                end
+function pairdist_threaded(a, b; doroot = true)
+    na = size(a, 1)
+    nb = size(b, 1)
+    r = a * b'
+    sa2 = sum(a .^ 2, dims = 2)
+    sb2 = sum(b .^ 2, dims = 2)
+    Threads.@threads for j in 1:nb
+        @simd for i in j:na
+            r[i, j] = @views sa2[i] + sb2[j] - 2 * r[i, j]
+            if doroot
+                r[i, j] = @views isnan(r[i, j]) ? NaN : sqrt(max(r[i, j], 0.0))
+            end
         end
+        @simd for i in 1:(j - 1)
+            r[i, j] = r[j, i]
+        end
+    end
 
 
-        return r
+    return r
 end
 
 
@@ -81,57 +81,55 @@ end
 # end
 
 @fastmath function kernel_dot(X::AbstractArray, Y::AbstractArray)
-        dimY = size(Y)
-        dimX = size(X)
-        Lx = Int64(dimX[1])
-        Ly = Int64(dimY[1])
-        A = zeros(Float64, (Lx, Ly))
-        @inbounds @simd for i in 1:Ly
-                for j in 1:Lx
-                        A[i, j] = @views X[i] * Y[j]
-                end
+    dimY = size(Y)
+    dimX = size(X)
+    Lx = Int64(dimX[1])
+    Ly = Int64(dimY[1])
+    A = zeros(Float64, (Lx, Ly))
+    @inbounds @simd for i in 1:Ly
+        for j in 1:Lx
+            A[i, j] = @views X[i] * Y[j]
         end
-        # display(A)
-        return A
+    end
+    # display(A)
+    return A
 end
 
 
-
-
-function pairdist_tullio(x::AbstractArray{<:AbstractFloat,3}, y::AbstractArray{<:AbstractFloat,3})
-        @show "test"
-        @tullio z[i, j] := sqrt((x[1, i] - y[1, j])^2 + (x[2, i] - y[2, j])^2 + (x[3, i] - y[3, j])^2)
-        return z
+function pairdist_tullio(x::AbstractArray{<:AbstractFloat, 3}, y::AbstractArray{<:AbstractFloat, 3})
+    @show "test"
+    @tullio z[i, j] := sqrt((x[1, i] - y[1, j])^2 + (x[2, i] - y[2, j])^2 + (x[3, i] - y[3, j])^2)
+    return z
 end
 
-function pairdist2_tullio(x::AbstractArray{<:AbstractFloat,3}, y::AbstractArray{<:AbstractFloat,3})
-        @tullio z[i, j] := (x[1, i] - y[1, j])^2 + (x[2, i] - y[2, j])^2 + (x[3, i] - y[3, j])^2
-        return z
+function pairdist2_tullio(x::AbstractArray{<:AbstractFloat, 3}, y::AbstractArray{<:AbstractFloat, 3})
+    @tullio z[i, j] := (x[1, i] - y[1, j])^2 + (x[2, i] - y[2, j])^2 + (x[3, i] - y[3, j])^2
+    return z
 end
 
 function pairdist_3D(x::AbstractArray, y::AbstractArray)
-        @tullio z[i, j] := sqrt((x[1, i] - y[1, j])^2 + (x[2, i] - y[2, j])^2 + (x[3, i] - y[3, j])^2)
-        return z
+    @tullio z[i, j] := sqrt((x[1, i] - y[1, j])^2 + (x[2, i] - y[2, j])^2 + (x[3, i] - y[3, j])^2)
+    return z
 end
 
 
 const to = TimerOutput()
 reset_timer!(to)
 for i in 1:1000
-        @show i
-        x = rand(500, 3)
-        y = copy(x)
-        @timeit to "pdist 1" b = pairdist1(x, y)
-        @timeit to "pdist slow " c = pairdist_slow(x, y)
-        @timeit to "pdist thread" d = pairdist_threaded(x, y)
-        # @timeit to "pdist normal" e = pairdist(x, y)
-        @timeit to "pdist tullio" f = pairdist_tullio(x', y')
+    @show i
+    x = rand(500, 3)
+    y = copy(x)
+    @timeit to "pdist 1" b = pairdist1(x, y)
+    @timeit to "pdist slow " c = pairdist_slow(x, y)
+    @timeit to "pdist thread" d = pairdist_threaded(x, y)
+    # @timeit to "pdist normal" e = pairdist(x, y)
+    @timeit to "pdist tullio" f = pairdist_tullio(x', y')
 
 
 end
 to
-x = rand(3,5)
-y = rand(3,5)
+x = rand(3, 5)
+y = rand(3, 5)
 
 a = Distances.pairwise(Euclidean(), x, y)
 f = pairdist_t(x, y)
@@ -144,8 +142,6 @@ b = pairdist1(x, y)
 d = pairdist_threaded(x, y)
 
 
-
-
 a = Distances.pairwise(Euclidean(), x, y)
 
 # BenchmarkTools.Trial: 10000 samples with 1 evaluation.
@@ -153,7 +149,7 @@ a = Distances.pairwise(Euclidean(), x, y)
 #  Time  (median):     63.800 μs               ┊ GC (median):     0.00%
 #  Time  (mean ± σ):   83.671 μs ± 393.506 μs  ┊ GC (mean ± σ):  11.49% ±  2.62%
 
-#    █▂▂▅▃▂▄▂     
+#    █▂▂▅▃▂▄▂
 #   ▅████████▇▇█▇██▇▇▅▄▄▃▃▃▂▃▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▁▂▂ ▃
 #   35 μs           Histogram: frequency by time          252 μs <
 
@@ -166,7 +162,7 @@ f = pairdist_tullio(x, y)
 #  Time  (median):     24.800 μs               ┊ GC (median):     0.00%
 #  Time  (mean ± σ):   49.842 μs ± 602.748 μs  ┊ GC (mean ± σ):  22.37% ± 2.63%
 
-#      ▇█▅▁                  
+#      ▇█▅▁
 #   ▂▄▇████▅▅▅▆▅▆▄▃▂▂▂▃▄▅▆▆▆▆▄▄▄▃▃▃▃▃▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▁▂▂▂▂▂▂▂▂▂▂ ▃
 #   11.5 μs         Histogram: frequency by time          105 μs <
 

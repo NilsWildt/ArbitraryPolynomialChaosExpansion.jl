@@ -6,273 +6,273 @@ using InteractiveUtils
 
 # ╔═╡ dd009330-66de-11ef-0d13-b5d4100be938
 begin
-	using Chairmarks
-	using LinearAlgebra
-	using Test
-	using DispatchDoctor
-	using LazyArrays
-	using PrettyChairmarks
-	using FastBroadcast
+    using Chairmarks
+    using LinearAlgebra
+    using Test
+    using DispatchDoctor
+    using LazyArrays
+    using PrettyChairmarks
+    using FastBroadcast
 end
 
 # ╔═╡ 5e17ee6e-9feb-4f29-811b-01ff4362520e
 
 
 # ╔═╡ 312edb2b-4b0d-4390-b22b-29af90394598
-let 
-	d = 3
-	n = 5
-	aPCE_MultivariatePolynomialDegrees(d,n)
+let
+    d = 3
+    n = 5
+    aPCE_MultivariatePolynomialDegrees(d, n)
 end
 
 # ╔═╡ 0b6d8b47-c4b6-4d67-94b6-ad0f2347c8c4
-let 
-	d = 3
-	n = 5
-	calculateMultiIndices(d,n)
+let
+    d = 3
+    n = 5
+    calculateMultiIndices(d, n)
 end
 
 # ╔═╡ 01558ceb-89c0-4fd0-aae1-f0f72d44243c
-let 
-	d = 3
-	n = 5
-	@bs aPCE_MultivariatePolynomialDegrees(d,n) seconds=2
+let
+    d = 3
+    n = 5
+    @bs aPCE_MultivariatePolynomialDegrees(d, n) seconds = 2
 end
 
 # ╔═╡ ebd64888-eff2-4dc8-acf8-79093890f5e6
-let 
-	d = 3
-	n = 5
-	@bs calculateMultiIndices(d,n) seconds=2
+let
+    d = 3
+    n = 5
+    @bs calculateMultiIndices(d, n) seconds = 2
 end
 
 # ╔═╡ a6574509-35d1-46dd-b963-510eed3c56c6
-let 
-	d = 7
-	n = 10
-	@bs numberPolynomials(d,n) seconds=5
+let
+    d = 7
+    n = 10
+    @bs numberPolynomials(d, n) seconds = 5
 end
 
 # ╔═╡ ba2426ae-c6bd-42ea-8ebf-fb1f1120080a
-let 
-	
-	d = 7
-	n = 10
- 	PrettyChairmarks.@bs mynumberPolynomials(d,n) seconds=2
+let
+
+    d = 7
+    n = 10
+    PrettyChairmarks.@bs mynumberPolynomials(d, n) seconds = 2
 end
 
 # ╔═╡ b3577f44-462a-4595-91f6-d0c6a900da01
-let 
-	d = 3
-	n = 10
-	Ps =  calculateMultiIndices(d,n)
-	@show findUnivariateIndices(1,Ps)
-	@bs findUnivariateIndices(1,Ps)  seconds=2
+let
+    d = 3
+    n = 10
+    Ps = calculateMultiIndices(d, n)
+    @show findUnivariateIndices(1, Ps)
+    @bs findUnivariateIndices(1, Ps)  seconds = 2
 end
 
 # ╔═╡ adb7f181-03f6-4c94-98cb-7c4ab112fd39
-	@stable function mynumberPolynomials(n, d)
-	x, y = max(d, n), min(d, n)
-	return UInt128(prod(UInt128(x + 1):UInt128(d + n)) ÷ factorial(UInt128(y))) |> Int
+@stable function mynumberPolynomials(n, d)
+    x, y = max(d, n), min(d, n)
+    return UInt128(prod(UInt128(x + 1):UInt128(d + n)) ÷ factorial(UInt128(y))) |> Int
 end
 
 # ╔═╡ c60fff0d-07bb-4569-a568-ae150e0226d1
 begin
-	
-@stable function calculateMultiIndices(d::Int, n::Int)
-    # d denotes dimension of random variables/number of sources of uncertainty,
-    # n the maximum degree of multivariate basis
-    # function to calculate indices of multivariate basis following the algorithm
-    # from "Spectral Methods for Uncertainty Quantiﬁcation; Le Maitre, Knio;2014" p.516-517
-    # No::BigInt = factorial(BigInt(d+n))/(factorial(Bigint(d))*factorial(BigInt(n)));  #number of polynomials of multivariate basis
-    n < 0 && throw(DomainError(n, "maximum degree must be non-negative"))
-    d <= 0 && throw(DomainError(d, "number of uncertainties must be positive"))
-    # catch case n == 0 --> No-d==0
-    n == 0 && return zeros(Int64, 1, d)
-    # non-pathological cases begin here
-    No = numberPolynomials(d, n)
-    inds = vcat(zeros(Int64, 1, d), Matrix(1I, d, d), zeros(Int64, No - d - 1, d))  #initiate index matrix for basis
-    pi = ones(Int64, No, d)
 
-    for k in 2:No
-        g = 0
-        for l in 1:d
-            pi[k, l] = sum(pi[k - 1, :]) - g
-            g = g + pi[k - 1, l]
+    @stable function calculateMultiIndices(d::Int, n::Int)
+        # d denotes dimension of random variables/number of sources of uncertainty,
+        # n the maximum degree of multivariate basis
+        # function to calculate indices of multivariate basis following the algorithm
+        # from "Spectral Methods for Uncertainty Quantiﬁcation; Le Maitre, Knio;2014" p.516-517
+        # No::BigInt = factorial(BigInt(d+n))/(factorial(Bigint(d))*factorial(BigInt(n)));  #number of polynomials of multivariate basis
+        n < 0 && throw(DomainError(n, "maximum degree must be non-negative"))
+        d <= 0 && throw(DomainError(d, "number of uncertainties must be positive"))
+        # catch case n == 0 --> No-d==0
+        n == 0 && return zeros(Int64, 1, d)
+        # non-pathological cases begin here
+        No = numberPolynomials(d, n)
+        inds = vcat(zeros(Int64, 1, d), Matrix(1I, d, d), zeros(Int64, No - d - 1, d))  #initiate index matrix for basis
+        pi = ones(Int64, No, d)
+
+        for k in 2:No
+            g = 0
+            for l in 1:d
+                pi[k, l] = sum(pi[k - 1, :]) - g
+                g = g + pi[k - 1, l]
+            end
         end
-    end
 
-    P = d + 1
-    for k in 2:n
-        L = P
-        for j in 1:d, m in (L - pi[k, j] + 1):L
-            P += 1
-            inds[P, :] = inds[m, :]
-            inds[P, j] = inds[P, j] + 1
+        P = d + 1
+        for k in 2:n
+            L = P
+            for j in 1:d, m in (L - pi[k, j] + 1):L
+                P += 1
+                inds[P, :] = inds[m, :]
+                inds[P, j] = inds[P, j] + 1
+            end
         end
+
+        return inds
     end
 
-    return inds
-end
+    """
+        computes the number of polynomials with a multivariate basis
+        `(d+n)!/(d!+n!)`
+    """
 
-"""
-    computes the number of polynomials with a multivariate basis
-    `(d+n)!/(d!+n!)`
-"""
-
-@stable function numberPolynomials(d::Int64, n::Int64)
-    x, y = max(d, n), min(d, n)
-    return UInt128(prod(UInt128(x + 1):UInt128(d + n)) ÷ factorial(UInt128(y)))
-end
-
-"""
-    findUnivariateIndices(i::Int,ind::AbstractMatrix{Int64,2})
-
-Given the multi-index `ind` this function returns all entries of the multivariate basis
-that correspond to the `i`th univariate basis.
-"""
-@stable function findUnivariateIndices(i::Int, ind::AbstractMatrix{Int})
-    l, p = size(ind)
-    i > p && throw(DomainError((i, p), "basis is $p-variate, you requested $i-variate"))
-    deg = ind[end, end]
-    deg < 0 && throw(DomainError(deg, "invalid degree"))
-    col = ind[:, i]
-    myind = zeros(Int64, deg)
-    for deg_ in 1:deg
-        myind[deg_] = findfirst(x -> x == deg_, col)
+    @stable function numberPolynomials(d::Int64, n::Int64)
+        x, y = max(d, n), min(d, n)
+        return UInt128(prod(UInt128(x + 1):UInt128(d + n)) ÷ factorial(UInt128(y)))
     end
-    pushfirst!(myind, 1)
-end
+
+    """
+        findUnivariateIndices(i::Int,ind::AbstractMatrix{Int64,2})
+
+    Given the multi-index `ind` this function returns all entries of the multivariate basis
+    that correspond to the `i`th univariate basis.
+    """
+    @stable function findUnivariateIndices(i::Int, ind::AbstractMatrix{Int})
+        l, p = size(ind)
+        i > p && throw(DomainError((i, p), "basis is $p-variate, you requested $i-variate"))
+        deg = ind[end, end]
+        deg < 0 && throw(DomainError(deg, "invalid degree"))
+        col = ind[:, i]
+        myind = zeros(Int64, deg)
+        for deg_ in 1:deg
+            myind[deg_] = findfirst(x -> x == deg_, col)
+        end
+        pushfirst!(myind, 1)
+    end
 end
 
 # ╔═╡ 3e465f39-460d-4b5e-a937-a5a9547b572d
 begin
-	
-# Sort mean and variance at same time
-struct SpecialCoSorterElement{T1, T2, T3}
-	x::T1
-	z::T2
-	y::T3
-end
 
-struct CoSorter{T1, T2, T3, A <: AbstractVecOrMat{T1}, B <: AbstractVecOrMat{T2}, C <: AbstractVecOrMat{T3}} <: AbstractVector{SpecialCoSorterElement{T1, T2, T3}}
-	sortarray::A
-	otherarray::B
-	coarray::C
-end
+    # Sort mean and variance at same time
+    struct SpecialCoSorterElement{T1, T2, T3}
+        x::T1
+        z::T2
+        y::T3
+    end
 
-Base.size(c::CoSorter) = size(c.sortarray)
-Base.getindex(c::CoSorter, i...) =
-	SpecialCoSorterElement(getindex(c.sortarray, i...), getindex(c.otherarray, i...), getindex(c.coarray, i...))
-Base.setindex!(c::CoSorter, t::SpecialCoSorterElement, i...) =
-	(setindex!(c.sortarray, t.x, i...); setindex!(c.coarray, t.y, i...); c)
+    struct CoSorter{T1, T2, T3, A <: AbstractVecOrMat{T1}, B <: AbstractVecOrMat{T2}, C <: AbstractVecOrMat{T3}} <: AbstractVector{SpecialCoSorterElement{T1, T2, T3}}
+        sortarray::A
+        otherarray::B
+        coarray::C
+    end
 
-Base.isless(a::SpecialCoSorterElement, b::SpecialCoSorterElement) = isless(a.x, b.x) || (a.x == b.x && isless(a.z, b.z))
+    Base.size(c::CoSorter) = size(c.sortarray)
+    Base.getindex(c::CoSorter, i...) =
+        SpecialCoSorterElement(getindex(c.sortarray, i...), getindex(c.otherarray, i...), getindex(c.coarray, i...))
+    Base.setindex!(c::CoSorter, t::SpecialCoSorterElement, i...) =
+        (setindex!(c.sortarray, t.x, i...); setindex!(c.coarray, t.y, i...); c)
 
-
-Base.Sort.defalg(v::C) where {T <: Union{Number, Missing}, C <: CoSorter{T}} =
-	Base.DEFAULT_UNSTABLE
-@stable function special_sort_two_arrays!(x::AbstractArray, y::AbstractArray)
-	T = CoSorter(x[:, 1], x[:, 2], y)
-	sort!(T)
-	x = T.sortarray
-	y = T.coarray
-end
+    Base.isless(a::SpecialCoSorterElement, b::SpecialCoSorterElement) = isless(a.x, b.x) || (a.x == b.x && isless(a.z, b.z))
 
 
-@stable function aPCE_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T, s_marginals::F, s_interactions::F) where {T <: Integer, F <: Real}
-	# Initialize the indices for the first parameter
-	@stable function get_stats(r)::Array{F} # Returns sum, nzeros, mean, var, min,max
-		o = Series(Mean(), Variance(), Extrema())
-		n = length(r)
-		summe = 0
-		n_zeros = 0
-		@inbounds for e in 1:n
-			if Base.iszero(r[e])
-				n_zeros += 1
-			else
-				summe += r[e]
-			end
-			fit!(o, r[e])
-		end
-		meanval = summe / n
-		meanval, varval, mm = value(o)
-		return [summe, n_zeros, meanval, varval, mm.min, mm.max]
-	end
-
-	@stable function filter_by_percentage(array::AbstractArray, percentage)
-		# Ensure the percentage is within the valid range
-		if percentage < 0.0 || percentage > 1.0
-			throw(ArgumentError("Percentage must be between 0 and 1"))
-		end
-		n = length(array)
-		num_to_keep = round(Int, percentage * n)
-		return @views array[1:num_to_keep]
-	end
+    Base.Sort.defalg(v::C) where {T <: Union{Number, Missing}, C <: CoSorter{T}} =
+        Base.DEFAULT_UNSTABLE
+    @stable function special_sort_two_arrays!(x::AbstractArray, y::AbstractArray)
+        T = CoSorter(x[:, 1], x[:, 2], y)
+        sort!(T)
+        x = T.sortarray
+        y = T.coarray
+    end
 
 
-	indices = vcat(zeros(Int64, 1, d), Matrix(1I, d, d), zeros(Int64, No - d - 1, d)) 
-    pi = ones(Int64, No, d)
-	  
-	# Precompute sums to avoid recomputing inside the loop
-	@inbounds for k in 2:No
-	    g = 0
-	    row_sum = sum(pi[k - 1, :])  # Precompute the sum of the previous row
-	    for l in 1:d
-	        pi[k, l] = row_sum - g
-	        g += pi[k - 1, l]  # Accumulate g in-place
-	    end
-	end
-	
-	P = d + 1
-	
-	@inbounds for k in 2:n
-	    L = P
-	    for j in 1:d
-	        ms = L - pi[k, j] + 1
-	        me = L
-	        for m in ms:me
-	            P += 1
-	           @.. indices[P, :] = indices[m, :]  
-	            indices[P, j] += 1 
-	        end
-	    end
-	end
-		
+    @stable function aPCE_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T, s_marginals::F, s_interactions::F) where {T <: Integer, F <: Real}
+        # Initialize the indices for the first parameter
+        @stable function get_stats(r)::Array{F} # Returns sum, nzeros, mean, var, min,max
+            o = Series(Mean(), Variance(), Extrema())
+            n = length(r)
+            summe = 0
+            n_zeros = 0
+            @inbounds for e in 1:n
+                if Base.iszero(r[e])
+                    n_zeros += 1
+                else
+                    summe += r[e]
+                end
+                fit!(o, r[e])
+            end
+            meanval = summe / n
+            meanval, varval, mm = value(o)
+            return [summe, n_zeros, meanval, varval, mm.min, mm.max]
+        end
 
-	if (s_marginals != 1.0) || (s_interactions != 1.0)
-		stats = reduce(hcat, map(x -> get_stats(x), eachrow(indices)))'
-		d_marginal_indices = T[]
-		d_interactions_indices = T[]
-		@inbounds for r in axes(stats, 1) # Go over columns
-			if stats[r, 1] <= max_degree
-				if stats[r, 2] == (num_dimensions - 1)
-					push!(d_marginal_indices, r)
-				elseif (num_dimensions - stats[r, 2]) >= 1
-					push!(d_interactions_indices, r)
-				end
-			end
-		end
-		sorting_d_marginal = stats[d_marginal_indices, 3:4]
-		sorting_d_interactions = stats[d_interactions_indices, 3:4]
-		all_marginals = 1:length(d_marginal_indices) |> collect
-		all_interactions = 1:length(d_interactions_indices) |> collect
-		if length(all_marginals) > 1
-			special_sort_two_arrays!(sorting_d_marginal, all_marginals)
-		end
-		if length(all_interactions) > 1
-			special_sort_two_arrays!(sorting_d_interactions, all_interactions)
-		end
-		keeper_marginals = d_marginal_indices[filter_by_percentage(all_marginals, s_marginals)]
-		keeper_interactions = d_interactions_indices[filter_by_percentage(all_interactions, s_interactions)]
-		idxkeep = vcat(keeper_marginals, keeper_interactions)
-		indices = @views indices[idxkeep, :]
-		indices = vcat(indices, Base.zeros(T, num_dimensions)')
-		indices = sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
-	end
-	
-	return indices::Matrix{T}# from sparse to matrix.
-end
+        @stable function filter_by_percentage(array::AbstractArray, percentage)
+            # Ensure the percentage is within the valid range
+            if percentage < 0.0 || percentage > 1.0
+                throw(ArgumentError("Percentage must be between 0 and 1"))
+            end
+            n = length(array)
+            num_to_keep = round(Int, percentage * n)
+            return @views array[1:num_to_keep]
+        end
+
+
+        indices = vcat(zeros(Int64, 1, d), Matrix(1I, d, d), zeros(Int64, No - d - 1, d))
+        pi = ones(Int64, No, d)
+
+        # Precompute sums to avoid recomputing inside the loop
+        @inbounds for k in 2:No
+            g = 0
+            row_sum = sum(pi[k - 1, :])  # Precompute the sum of the previous row
+            for l in 1:d
+                pi[k, l] = row_sum - g
+                g += pi[k - 1, l]  # Accumulate g in-place
+            end
+        end
+
+        P = d + 1
+
+        @inbounds for k in 2:n
+            L = P
+            for j in 1:d
+                ms = L - pi[k, j] + 1
+                me = L
+                for m in ms:me
+                    P += 1
+                    @.. indices[P, :] = indices[m, :]
+                    indices[P, j] += 1
+                end
+            end
+        end
+
+
+        if (s_marginals != 1.0) || (s_interactions != 1.0)
+            stats = reduce(hcat, map(x -> get_stats(x), eachrow(indices)))'
+            d_marginal_indices = T[]
+            d_interactions_indices = T[]
+            @inbounds for r in axes(stats, 1) # Go over columns
+                if stats[r, 1] <= max_degree
+                    if stats[r, 2] == (num_dimensions - 1)
+                        push!(d_marginal_indices, r)
+                    elseif (num_dimensions - stats[r, 2]) >= 1
+                        push!(d_interactions_indices, r)
+                    end
+                end
+            end
+            sorting_d_marginal = stats[d_marginal_indices, 3:4]
+            sorting_d_interactions = stats[d_interactions_indices, 3:4]
+            all_marginals = 1:length(d_marginal_indices) |> collect
+            all_interactions = 1:length(d_interactions_indices) |> collect
+            if length(all_marginals) > 1
+                special_sort_two_arrays!(sorting_d_marginal, all_marginals)
+            end
+            if length(all_interactions) > 1
+                special_sort_two_arrays!(sorting_d_interactions, all_interactions)
+            end
+            keeper_marginals = d_marginal_indices[filter_by_percentage(all_marginals, s_marginals)]
+            keeper_interactions = d_interactions_indices[filter_by_percentage(all_interactions, s_interactions)]
+            idxkeep = vcat(keeper_marginals, keeper_interactions)
+            indices = @views indices[idxkeep, :]
+            indices = vcat(indices, Base.zeros(T, num_dimensions)')
+            indices = sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
+        end
+
+        return indices::Matrix{T} # from sparse to matrix.
+    end
 
 end
 

@@ -6,418 +6,412 @@ using InteractiveUtils
 
 # ╔═╡ 164482a0-66e4-11ef-1820-efb1dec13a4e
 begin
-	using Chairmarks
-	using LinearAlgebra
-	using PrettyChairmarks
-	using StableRNGs
-	using DispatchDoctor
-	using TensorOperations
-	using FastBroadcast
-	using Polyester
-	import StatsBase:mean
-	using OnlineStats: OnlineStats, Extrema, Mean, Series, Variance, eachrow, value, fit!
-	using Estrin
-	using Polynomials
-	using MaybeInplace
-	using StaticPolynomials: gradient;
-	import DynamicPolynomials: @polyvar;
-	using Makie
-	using LeastSquaresOptim
-	using StaticPolynomials
-	using GLMakie
-	using PlutoUI
-	using ChainRulesCore
-	using Colors
-	using RegularizationTools
-	using Cthulhu
+    using Chairmarks
+    using LinearAlgebra
+    using PrettyChairmarks
+    using StableRNGs
+    using DispatchDoctor
+    using TensorOperations
+    using FastBroadcast
+    using Polyester
+    import StatsBase: mean
+    using OnlineStats: OnlineStats, Extrema, Mean, Series, Variance, eachrow, value, fit!
+    using Estrin
+    using Polynomials
+    using MaybeInplace
+    using StaticPolynomials: gradient
+    import DynamicPolynomials: @polyvar
+    using Makie
+    using LeastSquaresOptim
+    using StaticPolynomials
+    using GLMakie
+    using PlutoUI
+    using ChainRulesCore
+    using Colors
+    using RegularizationTools
+    using Cthulhu
 end
 
 # ╔═╡ d3ac8020-77d6-46e7-8eab-5b089913fd84
 begin
 
 
-	
-@stable @inbounds function aPCE_OrthonormalBasis(Data, Degree::S, normalize_data::Val{false}) where {S <: Integer}
-	T = eltype(Data)
-	d = Degree #Degree of polinomial expansion
-	dd = d #Degree of polynomial for roots definition
-	NumberOfDataPoints = length(Data)
+    @stable @inbounds function aPCE_OrthonormalBasis(Data, Degree::S, normalize_data::Val{false}) where {S <: Integer}
+        T = eltype(Data)
+        d = Degree #Degree of polinomial expansion
+        dd = d #Degree of polynomial for roots definition
+        NumberOfDataPoints = length(Data)
 
-	m = zeros(T, 2 * dd + 2)
-	@batch for col in axes(Data, 2)
-		compute_moments!(m, view(Data, :, col), NumberOfDataPoints, dd)
-	end
-	OrthonormalBasis = zeros(T, dd + 1, dd + 1)
-	OrthogonalBasis = zeros(T, dd + 1, dd + 1) # Allocate once for all :)
-	PolyCoeff_NonNorm_prealloc = zeros(T, dd + 1, dd + 1) # Allocate once for all :)
+        m = zeros(T, 2 * dd + 2)
+        @batch for col in axes(Data, 2)
+            compute_moments!(m, view(Data, :, col), NumberOfDataPoints, dd)
+        end
+        OrthonormalBasis = zeros(T, dd + 1, dd + 1)
+        OrthogonalBasis = zeros(T, dd + 1, dd + 1) # Allocate once for all :)
+        PolyCoeff_NonNorm_prealloc = zeros(T, dd + 1, dd + 1) # Allocate once for all :)
 
-	for degree ∈ 0:dd
-		Hankel = @views OrthogonalBasis[1:degree+1, 1:degree+1]
-		Vc = zeros(T, degree + 1)
-		PolyCoeff_NonNorm = @views PolyCoeff_NonNorm_prealloc[1:degree+1, 1:degree+1]
+        for degree in 0:dd
+            Hankel = @views OrthogonalBasis[1:(degree + 1), 1:(degree + 1)]
+            Vc = zeros(T, degree + 1)
+            PolyCoeff_NonNorm = @views PolyCoeff_NonNorm_prealloc[1:(degree + 1), 1:(degree + 1)]
 
-		for i in 0:degree-1
-			for j in 0:degree
-				Hankel[i+1, j+1] = @views m[i+j+1]  # put in the moment
-			end
-			Hankel[i+1, :] = @views Hankel[i+1, :] / maximum(abs.(@views Hankel[i+1, :]))
-		end
-		for j in 0:degree-1
-			Hankel[degree+1, j+1] = zero(T)
-		end
-		Hankel[degree+1, degree+1] = one(T)
-		Hankel[degree+1, :] = @views Hankel[degree+1, :] / maximum(abs.(@views Hankel[degree+1, :]))
+            for i in 0:(degree - 1)
+                for j in 0:degree
+                    Hankel[i + 1, j + 1] = @views m[i + j + 1]  # put in the moment
+                end
+                Hankel[i + 1, :] = @views Hankel[i + 1, :] / maximum(abs.(@views Hankel[i + 1, :]))
+            end
+            for j in 0:(degree - 1)
+                Hankel[degree + 1, j + 1] = zero(T)
+            end
+            Hankel[degree + 1, degree + 1] = one(T)
+            Hankel[degree + 1, :] = @views Hankel[degree + 1, :] / maximum(abs.(@views Hankel[degree + 1, :]))
 
-		# Loop for Vc
-		for i in 0:degree-1
-			Vc[i+1] = zero(T)
-		end
-		Vc[degree+1] = one(T)
+            # Loop for Vc
+            for i in 0:(degree - 1)
+                Vc[i + 1] = zero(T)
+            end
+            Vc[degree + 1] = one(T)
 
-		PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Hankel \ Vc #  pinv(Hankel) * Vc # 
+            PolyCoeff_NonNorm[degree + 1, 1:(degree + 1)] .= Hankel \ Vc #  pinv(Hankel) * Vc #
 
-		P_norm = 0.0
-		for i ∈ 1:NumberOfDataPoints
-			Poly = 0
-			for k ∈ 0:degree
-				Poly += @views PolyCoeff_NonNorm[degree+1, k+1] * Data[i]^k
-			end
-			P_norm += Poly^2 / NumberOfDataPoints
-		end
-		for k ∈ 0:degree
-			OrthonormalBasis[degree+1, k+1] = @views PolyCoeff_NonNorm[degree+1, k+1] / sqrt(P_norm)
-		end
-	end
+            P_norm = 0.0
+            for i in 1:NumberOfDataPoints
+                Poly = 0
+                for k in 0:degree
+                    Poly += @views PolyCoeff_NonNorm[degree + 1, k + 1] * Data[i]^k
+                end
+                P_norm += Poly^2 / NumberOfDataPoints
+            end
+            for k in 0:degree
+                OrthonormalBasis[degree + 1, k + 1] = @views PolyCoeff_NonNorm[degree + 1, k + 1] / sqrt(P_norm)
+            end
+        end
 
-	return OrthonormalBasis
-end
+        return OrthonormalBasis
+    end
 
-function create_basis(x, degree; normalize_data = true)
-		return create_basis(x, degree, Val(true); normalize_data = normalize_data)
-	end
-	
-	# Univartiate BASIS creation
-	@stable function create_basis(x, degree, is_orthonormal::Val{true}; normalize_data = true)
-		input_dimensions = size(x, 2)
-		OrthonormalBasis = Array{eltype(x), 3}(undef, degree + 1, degree + 1, input_dimensions)
-		for i in 1:input_dimensions
-			OrthonormalBasis[:, :, i] .= aPCE_OrthonormalBasis(view(x, :, i), degree, Val(normalize_data))
-		end # x[:,i] 
-		return OrthonormalBasis
-	end
-	
-	@stable function create_basis(x, degree, is_orthonormal::Val{false}; normalize_data = true)
-		input_dimensions = size(x, 2)
-		OrthonormalBasis = Array{eltype(x), 3}(undef, degree + 1, degree + 1, input_dimensions)
-		for i in 1:input_dimensions
-			OrthonormalBasis[:, :, i] .= aPCE_FullBasis(view(x, :, i), degree)
-		end
-		return OrthonormalBasis
-	end
+    function create_basis(x, degree; normalize_data = true)
+        return create_basis(x, degree, Val(true); normalize_data = normalize_data)
+    end
 
-	
-@stable function evalpoly_two(x, cs::AbstractArray)
-	i = lastindex(cs)
-	out = cs[i]
-	i -= 1
-	fi = firstindex(cs)
-	while i > fi
-		out = muladd(out, x, cs[i])
-		out = muladd(out, x, cs[i-1])
-		i -= 2
-	end
+    # Univartiate BASIS creation
+    @stable function create_basis(x, degree, is_orthonormal::Val{true}; normalize_data = true)
+        input_dimensions = size(x, 2)
+        OrthonormalBasis = Array{eltype(x), 3}(undef, degree + 1, degree + 1, input_dimensions)
+        for i in 1:input_dimensions
+            OrthonormalBasis[:, :, i] .= aPCE_OrthonormalBasis(view(x, :, i), degree, Val(normalize_data))
+        end # x[:,i]
+        return OrthonormalBasis
+    end
 
-	return i == fi ? muladd(out, x, @inbounds(cs[fi])) : out
-end
-
-	
-@stable function aPCE_PsiPolynomialMatrix_zygote(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis) where {T <: Real}
-	NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
-	NCpoints = size(TrainingInput, 1)
-	Psi = Zygote.bufferfrom(ones(eltype(TrainingInput), NumberOfTerms, NCpoints))
-	# OrthonormalBasis = T.(OrthonormalBasis)
-	# Function to evaluate polynomials for a given term and input sample
-	@inbounds for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
-		# product = 1.0  # Initialize the product for this term and sample
-		for ii ∈ 1:InputDimensions  # For each dimension of the input
-			degree = MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
-			coeffs = @views OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
-			# p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
-			# p = Poly(coeffs)
-			for j ∈ 1:NCpoints  # For each input sample
-				x = TrainingInput[j, ii]
-				Psi[i, j] *= evalpoly_two(x, coeffs)
-				# Psi[i,j] *= evalpoly(x, p)
-			end
-		end
-	end
-	return copy(Psi)
-end
-
-	
-	
-	# Need this function for Orthonormal Basis is a ForwardDiff.
-@stable function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{S}) where {S, T <: Real}
-	NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
-	NCpoints = size(TrainingInput, 1)
-	Psi = ones(T, NumberOfTerms, NCpoints)
-	# OrthonormalBasis = T.(OrthonormalBasis)
-	# Function to evaluate polynomials for a given term and input sample
-	for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
-		# product = 1.0  # Initialize the product for this term and sample
-		for ii ∈ 1:InputDimensions  # For each dimension of the input
-			degree = MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
-			coeffs = @views OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
-			p = Polynomials.Polynomial(coeffs)  # Create the polynomial
-			# p = Poly(coeffs)
-			x = @views TrainingInput[:, ii]
-			@.. Psi[i, :] *= p(x)  # Evaluate the polynomial at x and multiply
-			# Psi[i,j] *= evalpoly(x, p)
-		end
-	end
-	return Psi
-end
+    @stable function create_basis(x, degree, is_orthonormal::Val{false}; normalize_data = true)
+        input_dimensions = size(x, 2)
+        OrthonormalBasis = Array{eltype(x), 3}(undef, degree + 1, degree + 1, input_dimensions)
+        for i in 1:input_dimensions
+            OrthonormalBasis[:, :, i] .= aPCE_FullBasis(view(x, :, i), degree)
+        end
+        return OrthonormalBasis
+    end
 
 
-@stable @inline function compute_moments!(m::AbstractArray{T}, Data::AbstractArray{T}, NumberOfDataPoints, dd) where {T <: Real}
-	current_power = ones(T, length(Data))  # Start with Data .^ 0 which is 1
-	@inbounds for l ∈ 0:(2*dd+1)
-		m[l+1] = sum(current_power) / NumberOfDataPoints
-		current_power .*= Data  # Increment the power of Data
-	end
-end
+    @stable function evalpoly_two(x, cs::AbstractArray)
+        i = lastindex(cs)
+        out = cs[i]
+        i -= 1
+        fi = firstindex(cs)
+        while i > fi
+            out = muladd(out, x, cs[i])
+            out = muladd(out, x, cs[i - 1])
+            i -= 2
+        end
+
+        return i == fi ? muladd(out, x, @inbounds(cs[fi])) : out
+    end
 
 
-@stable @inbounds function aPCE_OrthonormalBasis(Data, Degree::S, normalize_data::Val{true}) where {S <: Integer}
-	T = eltype(Data)
-	d = Degree #Degree of polynomial expansion
-	dd = d #Degree of polinomial for roots definitions
-	# @warn "Weird, is that properly normalized? Not /std and minus mean?"
-	NumberOfDataPoints = length(Data)
-	MeanOfData = mean(Data)
-	Data = Data ./ MeanOfData
-	m = zeros(T, 2 * dd + 2)
-	@batch for col in axes(Data, 2)
-		compute_moments!(m, view(Data, :, col), NumberOfDataPoints, dd)
-	end
-	OrthonormalBasis = zeros(T, dd + 1, dd + 1)
-	OrthogonalBasis = zeros(T, dd + 1, dd + 1) # Allocate once for all :)
-	PolyCoeff_NonNorm_prealloc = zeros(T, dd + 1, dd + 1) # Allocate once for all :)
-
-	for degree ∈ 0:dd
-		Hankel = @views OrthogonalBasis[1:degree+1, 1:degree+1]
-		Vc = zeros(T, degree + 1)
-		PolyCoeff_NonNorm = @views PolyCoeff_NonNorm_prealloc[1:degree+1, 1:degree+1]
-
-		for i in 0:degree-1
-			for j in 0:degree
-				Hankel[i+1, j+1] = @views m[i+j+1]  # put in the moment
-			end
-			Hankel[i+1, :] = @views Hankel[i+1, :] / maximum(abs.(@views Hankel[i+1, :]))
-		end
-		for j in 0:degree-1
-			Hankel[degree+1, j+1] = zero(T)
-		end
-		Hankel[degree+1, degree+1] = one(T)
-		Hankel[degree+1, :] = @views Hankel[degree+1, :] / maximum(abs.(@views Hankel[degree+1, :]))
-
-		# Loop for Vc
-		for i in 0:degree-1
-			Vc[i+1] = zero(T)
-		end
-		Vc[degree+1] = one(T)
+    @stable function aPCE_PsiPolynomialMatrix_zygote(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis) where {T <: Real}
+        NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
+        NCpoints = size(TrainingInput, 1)
+        Psi = Zygote.bufferfrom(ones(eltype(TrainingInput), NumberOfTerms, NCpoints))
+        # OrthonormalBasis = T.(OrthonormalBasis)
+        # Function to evaluate polynomials for a given term and input sample
+        @inbounds for i in 1:NumberOfTerms  # For each term in the polynomial expansion
+            # product = 1.0  # Initialize the product for this term and sample
+            for ii in 1:InputDimensions  # For each dimension of the input
+                degree = MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
+                coeffs = @views OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
+                # p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
+                # p = Poly(coeffs)
+                for j in 1:NCpoints  # For each input sample
+                    x = TrainingInput[j, ii]
+                    Psi[i, j] *= evalpoly_two(x, coeffs)
+                    # Psi[i,j] *= evalpoly(x, p)
+                end
+            end
+        end
+        return copy(Psi)
+    end
 
 
-		# PolyCoeff_NonNorm[degree+1, 1:degree+1] .= LinearAlgebra.factorize(Hankel) \ Vc
-
-		# PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Krylov.usymlq(Hankel,Vc) |> first
-		# catch
-		#     @warn "Hankel matrix singular, trying pseudo inverse." #  Vp Hankel Vc
-		PolyCoeff_NonNorm[degree+1, 1:degree+1] .= pinv(Hankel) * Vc
-		# end
-		# Vp = Hankel \ Vc
-		# PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Vp
-		# @ignore_derivatives begin
-
-		# deviation = 100 * abs(sum(abs.(Hankel * PolyCoeff_NonNorm[degree+1, 1:degree+1])) - sum(abs.(Vc)))
-		# if (deviation > 0.5)
-		#     @warn "Computational error of the linear solver is too high: $(round(deviation;digits=3))"
-		# end
-
-		#Normalization of polynomial coefficients
-		P_norm = 0.0
-		for i ∈ 1:NumberOfDataPoints
-			Poly = 0
-			for k ∈ 0:degree
-				@fastmath Poly += @views PolyCoeff_NonNorm[degree+1, k+1] * Data[i]^k
-			end
-			P_norm += Poly^2 / NumberOfDataPoints
-		end
-		for k ∈ 0:degree
-			@fastmath OrthonormalBasis[degree+1, k+1] = @views PolyCoeff_NonNorm[degree+1, k+1] / sqrt(P_norm)
-		end
-	end
-	for k ∈ 1:lastindex(OrthonormalBasis, 2)
-		@fastmath OrthonormalBasis[:, k] = @views OrthonormalBasis[:, k] ./ (MeanOfData^(k - 1))
-	end
-	return OrthonormalBasis
-end
-
-	
-		@stable function compose_Ψ(x::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis, degree) where {T}
-		Ψ = aPCE_PsiPolynomialMatrix(x, MultivariatePolynomialDegrees, OrthonormalBasis)' |> Matrix{T}
-		return Ψ
-	end
-	
-	
-	@stable function evaluate_Ψ(x, coeffs, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name)
-		T = eltype(coeffs)
-		Ψ = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree) #.|> T
-		TensorOperations.@tensor PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
-		# PredictionOutput = outer_product_kernel(cu(Ψ), cu(coeffs))
-		return PredictionOutput
-	end
+    # Need this function for Orthonormal Basis is a ForwardDiff.
+    @stable function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{S}) where {S, T <: Real}
+        NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
+        NCpoints = size(TrainingInput, 1)
+        Psi = ones(T, NumberOfTerms, NCpoints)
+        # OrthonormalBasis = T.(OrthonormalBasis)
+        # Function to evaluate polynomials for a given term and input sample
+        for i in 1:NumberOfTerms  # For each term in the polynomial expansion
+            # product = 1.0  # Initialize the product for this term and sample
+            for ii in 1:InputDimensions  # For each dimension of the input
+                degree = MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
+                coeffs = @views OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
+                p = Polynomials.Polynomial(coeffs)  # Create the polynomial
+                # p = Poly(coeffs)
+                x = @views TrainingInput[:, ii]
+                @.. Psi[i, :] *= p(x)  # Evaluate the polynomial at x and multiply
+                # Psi[i,j] *= evalpoly(x, p)
+            end
+        end
+        return Psi
+    end
 
 
-	
-	@stable function numberPolynomials(n, d)
-	x, y = max(d, n), min(d, n)
-	return UInt128(prod(UInt128(x + 1):UInt128(d + n)) ÷ factorial(UInt128(y))) |> Int
-end
-	
-# Sort mean and variance at same time
-struct SpecialCoSorterElement{T1, T2, T3}
-	x::T1
-	z::T2
-	y::T3
-end
-
-struct CoSorter{T1, T2, T3, A <: AbstractVecOrMat{T1}, B <: AbstractVecOrMat{T2}, C <: AbstractVecOrMat{T3}} <: AbstractVector{SpecialCoSorterElement{T1, T2, T3}}
-	sortarray::A
-	otherarray::B
-	coarray::C
-end
-
-Base.size(c::CoSorter) = size(c.sortarray)
-Base.getindex(c::CoSorter, i...) =
-	SpecialCoSorterElement(getindex(c.sortarray, i...), getindex(c.otherarray, i...), getindex(c.coarray, i...))
-Base.setindex!(c::CoSorter, t::SpecialCoSorterElement, i...) =
-	(setindex!(c.sortarray, t.x, i...); setindex!(c.coarray, t.y, i...); c)
-
-Base.isless(a::SpecialCoSorterElement, b::SpecialCoSorterElement) = isless(a.x, b.x) || (a.x == b.x && isless(a.z, b.z))
+    @stable @inline function compute_moments!(m::AbstractArray{T}, Data::AbstractArray{T}, NumberOfDataPoints, dd) where {T <: Real}
+        current_power = ones(T, length(Data))  # Start with Data .^ 0 which is 1
+        @inbounds for l in 0:(2 * dd + 1)
+            m[l + 1] = sum(current_power) / NumberOfDataPoints
+            current_power .*= Data  # Increment the power of Data
+        end
+    end
 
 
-Base.Sort.defalg(v::C) where {T <: Union{Number, Missing}, C <: CoSorter{T}} =
-	Base.DEFAULT_UNSTABLE
-@stable function special_sort_two_arrays!(x::AbstractArray, y::AbstractArray)
-	T = CoSorter(x[:, 1], x[:, 2], y)
-	sort!(T)
-	x = T.sortarray
-	y = T.coarray
-end
+    @stable @inbounds function aPCE_OrthonormalBasis(Data, Degree::S, normalize_data::Val{true}) where {S <: Integer}
+        T = eltype(Data)
+        d = Degree #Degree of polynomial expansion
+        dd = d #Degree of polinomial for roots definitions
+        # @warn "Weird, is that properly normalized? Not /std and minus mean?"
+        NumberOfDataPoints = length(Data)
+        MeanOfData = mean(Data)
+        Data = Data ./ MeanOfData
+        m = zeros(T, 2 * dd + 2)
+        @batch for col in axes(Data, 2)
+            compute_moments!(m, view(Data, :, col), NumberOfDataPoints, dd)
+        end
+        OrthonormalBasis = zeros(T, dd + 1, dd + 1)
+        OrthogonalBasis = zeros(T, dd + 1, dd + 1) # Allocate once for all :)
+        PolyCoeff_NonNorm_prealloc = zeros(T, dd + 1, dd + 1) # Allocate once for all :)
+
+        for degree in 0:dd
+            Hankel = @views OrthogonalBasis[1:(degree + 1), 1:(degree + 1)]
+            Vc = zeros(T, degree + 1)
+            PolyCoeff_NonNorm = @views PolyCoeff_NonNorm_prealloc[1:(degree + 1), 1:(degree + 1)]
+
+            for i in 0:(degree - 1)
+                for j in 0:degree
+                    Hankel[i + 1, j + 1] = @views m[i + j + 1]  # put in the moment
+                end
+                Hankel[i + 1, :] = @views Hankel[i + 1, :] / maximum(abs.(@views Hankel[i + 1, :]))
+            end
+            for j in 0:(degree - 1)
+                Hankel[degree + 1, j + 1] = zero(T)
+            end
+            Hankel[degree + 1, degree + 1] = one(T)
+            Hankel[degree + 1, :] = @views Hankel[degree + 1, :] / maximum(abs.(@views Hankel[degree + 1, :]))
+
+            # Loop for Vc
+            for i in 0:(degree - 1)
+                Vc[i + 1] = zero(T)
+            end
+            Vc[degree + 1] = one(T)
 
 
- function aPCE_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T, s_marginals::F, s_interactions::F) where {T <: Integer, F <: Real}
-	d = num_dimensions
-	n = max_degree
-	No =  numberPolynomials(d, n)
-	
-	# Initialize the indices for the first parameter
-	function get_stats(r)::Array{F} # Returns sum, nzeros, mean, var, min,max
-		o = Series(Mean(), Variance(), Extrema())
-		n = length(r)
-		summe = 0
-		n_zeros = 0
-		@inbounds for e in 1:n
-			if Base.iszero(r[e])
-				n_zeros += 1
-			else
-				summe += r[e]
-			end
-			fit!(o, r[e])
-		end
-		meanval = summe / n
-		meanval, varval, mm = value(o)
-		return [summe, n_zeros, meanval, varval, mm.min, mm.max]
-	end
+            # PolyCoeff_NonNorm[degree+1, 1:degree+1] .= LinearAlgebra.factorize(Hankel) \ Vc
 
-	 function filter_by_percentage(array::AbstractArray, percentage)
-		# Ensure the percentage is within the valid range
-		if percentage < 0.0 || percentage > 1.0
-			throw(ArgumentError("Percentage must be between 0 and 1"))
-		end
-		n = length(array)
-		num_to_keep = round(Int, percentage * n)
-		return @views array[1:num_to_keep]
-	end
+            # PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Krylov.usymlq(Hankel,Vc) |> first
+            # catch
+            #     @warn "Hankel matrix singular, trying pseudo inverse." #  Vp Hankel Vc
+            PolyCoeff_NonNorm[degree + 1, 1:(degree + 1)] .= pinv(Hankel) * Vc
+            # end
+            # Vp = Hankel \ Vc
+            # PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Vp
+            # @ignore_derivatives begin
+
+            # deviation = 100 * abs(sum(abs.(Hankel * PolyCoeff_NonNorm[degree+1, 1:degree+1])) - sum(abs.(Vc)))
+            # if (deviation > 0.5)
+            #     @warn "Computational error of the linear solver is too high: $(round(deviation;digits=3))"
+            # end
+
+            #Normalization of polynomial coefficients
+            P_norm = 0.0
+            for i in 1:NumberOfDataPoints
+                Poly = 0
+                for k in 0:degree
+                    @fastmath Poly += @views PolyCoeff_NonNorm[degree + 1, k + 1] * Data[i]^k
+                end
+                P_norm += Poly^2 / NumberOfDataPoints
+            end
+            for k in 0:degree
+                @fastmath OrthonormalBasis[degree + 1, k + 1] = @views PolyCoeff_NonNorm[degree + 1, k + 1] / sqrt(P_norm)
+            end
+        end
+        for k in 1:lastindex(OrthonormalBasis, 2)
+            @fastmath OrthonormalBasis[:, k] = @views OrthonormalBasis[:, k] ./ (MeanOfData^(k - 1))
+        end
+        return OrthonormalBasis
+    end
 
 
-	
-	indices = vcat(zeros(Int64, 1, d), Matrix(1I, d, d), zeros(Int64, No - d - 1, d)) 
-    pi = ones(Int64, No, d)
-	  
-	# Precompute sums to avoid recomputing inside the loop
-	@inbounds for k in 2:No
-	    g = 0
-	    row_sum = sum(pi[k - 1, :])  # Precompute the sum of the previous row
-	    for l in 1:d
-	        pi[k, l] = row_sum - g
-	        g += pi[k - 1, l]  # Accumulate g in-place
-	    end
-	end
-	
-	P = d + 1
-	
-	@inbounds for k in 2:n
-	    L = P
-	    for j in 1:d
-	        ms = L - pi[k, j] + 1
-	        me = L
-	        for m in ms:me
-	            P += 1
-	           @.. indices[P, :] = indices[m, :]  
-	            indices[P, j] += 1 
-	        end
-	    end
-	end
+    @stable function compose_Ψ(x::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis, degree) where {T}
+        Ψ = aPCE_PsiPolynomialMatrix(x, MultivariatePolynomialDegrees, OrthonormalBasis)' |> Matrix{T}
+        return Ψ
+    end
 
-	if (s_marginals != 1.0) || (s_interactions != 1.0)
-		stats = reduce(hcat, map(x -> get_stats(x), eachrow(indices)))'
-		d_marginal_indices = T[]
-		d_interactions_indices = T[]
-		@inbounds for r in axes(stats, 1) # Go over columns
-			if stats[r, 1] <= max_degree
-				if stats[r, 2] == (num_dimensions - 1)
-					push!(d_marginal_indices, r)
-				elseif (num_dimensions - stats[r, 2]) >= 1
-					push!(d_interactions_indices, r)
-				end
-			end
-		end
-		sorting_d_marginal = stats[d_marginal_indices, 3:4]
-		sorting_d_interactions = stats[d_interactions_indices, 3:4]
-		all_marginals = 1:length(d_marginal_indices) |> collect
-		all_interactions = 1:length(d_interactions_indices) |> collect
-		if length(all_marginals) > 1
-			special_sort_two_arrays!(sorting_d_marginal, all_marginals)
-		end
-		if length(all_interactions) > 1
-			special_sort_two_arrays!(sorting_d_interactions, all_interactions)
-		end
-		keeper_marginals = d_marginal_indices[filter_by_percentage(all_marginals, s_marginals)]
-		keeper_interactions = d_interactions_indices[filter_by_percentage(all_interactions, s_interactions)]
-		idxkeep = vcat(keeper_marginals, keeper_interactions)
-		indices = @views indices[idxkeep, :]
-		indices = vcat(indices, Base.zeros(T, num_dimensions)')
-		indices = sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
-	end
-	
-	return indices::Matrix{T}# from sparse to matrix.
-end
+
+    @stable function evaluate_Ψ(x, coeffs, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name)
+        T = eltype(coeffs)
+        Ψ = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree) #.|> T
+        TensorOperations.@tensor PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
+        # PredictionOutput = outer_product_kernel(cu(Ψ), cu(coeffs))
+        return PredictionOutput
+    end
+
+
+    @stable function numberPolynomials(n, d)
+        x, y = max(d, n), min(d, n)
+        return UInt128(prod(UInt128(x + 1):UInt128(d + n)) ÷ factorial(UInt128(y))) |> Int
+    end
+
+    # Sort mean and variance at same time
+    struct SpecialCoSorterElement{T1, T2, T3}
+        x::T1
+        z::T2
+        y::T3
+    end
+
+    struct CoSorter{T1, T2, T3, A <: AbstractVecOrMat{T1}, B <: AbstractVecOrMat{T2}, C <: AbstractVecOrMat{T3}} <: AbstractVector{SpecialCoSorterElement{T1, T2, T3}}
+        sortarray::A
+        otherarray::B
+        coarray::C
+    end
+
+    Base.size(c::CoSorter) = size(c.sortarray)
+    Base.getindex(c::CoSorter, i...) =
+        SpecialCoSorterElement(getindex(c.sortarray, i...), getindex(c.otherarray, i...), getindex(c.coarray, i...))
+    Base.setindex!(c::CoSorter, t::SpecialCoSorterElement, i...) =
+        (setindex!(c.sortarray, t.x, i...); setindex!(c.coarray, t.y, i...); c)
+
+    Base.isless(a::SpecialCoSorterElement, b::SpecialCoSorterElement) = isless(a.x, b.x) || (a.x == b.x && isless(a.z, b.z))
+
+
+    Base.Sort.defalg(v::C) where {T <: Union{Number, Missing}, C <: CoSorter{T}} =
+        Base.DEFAULT_UNSTABLE
+    @stable function special_sort_two_arrays!(x::AbstractArray, y::AbstractArray)
+        T = CoSorter(x[:, 1], x[:, 2], y)
+        sort!(T)
+        x = T.sortarray
+        y = T.coarray
+    end
+
+
+    function aPCE_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T, s_marginals::F, s_interactions::F) where {T <: Integer, F <: Real}
+        d = num_dimensions
+        n = max_degree
+        No = numberPolynomials(d, n)
+
+        # Initialize the indices for the first parameter
+        function get_stats(r)::Array{F} # Returns sum, nzeros, mean, var, min,max
+            o = Series(Mean(), Variance(), Extrema())
+            n = length(r)
+            summe = 0
+            n_zeros = 0
+            @inbounds for e in 1:n
+                if Base.iszero(r[e])
+                    n_zeros += 1
+                else
+                    summe += r[e]
+                end
+                fit!(o, r[e])
+            end
+            meanval = summe / n
+            meanval, varval, mm = value(o)
+            return [summe, n_zeros, meanval, varval, mm.min, mm.max]
+        end
+
+        function filter_by_percentage(array::AbstractArray, percentage)
+            # Ensure the percentage is within the valid range
+            if percentage < 0.0 || percentage > 1.0
+                throw(ArgumentError("Percentage must be between 0 and 1"))
+            end
+            n = length(array)
+            num_to_keep = round(Int, percentage * n)
+            return @views array[1:num_to_keep]
+        end
+
+
+        indices = vcat(zeros(Int64, 1, d), Matrix(1I, d, d), zeros(Int64, No - d - 1, d))
+        pi = ones(Int64, No, d)
+
+        # Precompute sums to avoid recomputing inside the loop
+        @inbounds for k in 2:No
+            g = 0
+            row_sum = sum(pi[k - 1, :])  # Precompute the sum of the previous row
+            for l in 1:d
+                pi[k, l] = row_sum - g
+                g += pi[k - 1, l]  # Accumulate g in-place
+            end
+        end
+
+        P = d + 1
+
+        @inbounds for k in 2:n
+            L = P
+            for j in 1:d
+                ms = L - pi[k, j] + 1
+                me = L
+                for m in ms:me
+                    P += 1
+                    @.. indices[P, :] = indices[m, :]
+                    indices[P, j] += 1
+                end
+            end
+        end
+
+        if (s_marginals != 1.0) || (s_interactions != 1.0)
+            stats = reduce(hcat, map(x -> get_stats(x), eachrow(indices)))'
+            d_marginal_indices = T[]
+            d_interactions_indices = T[]
+            @inbounds for r in axes(stats, 1) # Go over columns
+                if stats[r, 1] <= max_degree
+                    if stats[r, 2] == (num_dimensions - 1)
+                        push!(d_marginal_indices, r)
+                    elseif (num_dimensions - stats[r, 2]) >= 1
+                        push!(d_interactions_indices, r)
+                    end
+                end
+            end
+            sorting_d_marginal = stats[d_marginal_indices, 3:4]
+            sorting_d_interactions = stats[d_interactions_indices, 3:4]
+            all_marginals = 1:length(d_marginal_indices) |> collect
+            all_interactions = 1:length(d_interactions_indices) |> collect
+            if length(all_marginals) > 1
+                special_sort_two_arrays!(sorting_d_marginal, all_marginals)
+            end
+            if length(all_interactions) > 1
+                special_sort_two_arrays!(sorting_d_interactions, all_interactions)
+            end
+            keeper_marginals = d_marginal_indices[filter_by_percentage(all_marginals, s_marginals)]
+            keeper_interactions = d_interactions_indices[filter_by_percentage(all_interactions, s_interactions)]
+            idxkeep = vcat(keeper_marginals, keeper_interactions)
+            indices = @views indices[idxkeep, :]
+            indices = vcat(indices, Base.zeros(T, num_dimensions)')
+            indices = sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
+        end
+
+        return indices::Matrix{T} # from sparse to matrix.
+    end
 
 end
-
-	
 
 
 # ╔═╡ 92315295-2678-433d-8f8e-3a0e42669960
@@ -439,84 +433,86 @@ end
 
 # ╔═╡ 187ac091-8793-4c60-aa10-59a04cf63135
 begin
-	function train(Ψ, y_rhs,bayesian_inversion::Val{false}, reg_order = 0)
-	    Psi_inv = pinv(Ψ)
-		y_rhs = ensure_matrix(y_rhs)
+    function train(Ψ, y_rhs, bayesian_inversion::Val{false}, reg_order = 0)
+        Psi_inv = pinv(Ψ)
+        y_rhs = ensure_matrix(y_rhs)
 
-		@info "" size(Psi_inv) size(y_rhs) 
-	    @tensor coeffs[i, k] := Psi_inv[j,i] * y_rhs[j, k] 
-	    ChainRulesCore.ignore_derivatives() do
-	        for k in axes(coeffs, 2)
-	            res = (@views sqrt(mean((Ψ' * coeffs[:, k] .- y_rhs[:, k]) .^ 2)))
-	            @info "Error for axis $k" res
-	        end
-	    end
-	    return coeffs
-	end
-	
-	# Specialized function for training with Bayesian inversion using Val{true}
-	function train(Ψ, y_rhs, bayesian_inversion::Val{true}, reg_order = 0) 
-	coeffs = train(Ψ, y_rhs, Val(false)) 
-	    @info "Using Bayesian regularization to find the expansion coefficients"
-	    x₀ = coeffs 
-	    for i in axes(y_rhs, 2)
-	        @info "Bayesian regularization for axis $i"
-	        coeffs[:, i] .= invert(
-	            Matrix(Ψ'), y_rhs[:, i], 
-	            Lₖx₀(reg_order, view(x₀, :, i)); 
-	            alg = :gcv_svd
-	        )
-	    end
-	
-	    ChainRulesCore.ignore_derivatives() do
-	        for k in axes(coeffs, 2)
-	            res = (@views sqrt(mean((Ψ' * coeffs[:, k] .- y_rhs[:, k]) .^ 2)))
-	            @info "Error for axis $k" res
-	        end
-	    end
-	    return coeffs
-	end
+        @info "" size(Psi_inv) size(y_rhs)
+        @tensor coeffs[i, k] := Psi_inv[j, i] * y_rhs[j, k]
+        ChainRulesCore.ignore_derivatives() do
+            for k in axes(coeffs, 2)
+                res = (@views sqrt(mean((Ψ' * coeffs[:, k] .- y_rhs[:, k]) .^ 2)))
+                @info "Error for axis $k" res
+            end
+            return
+        end
+        return coeffs
+    end
+
+    # Specialized function for training with Bayesian inversion using Val{true}
+    function train(Ψ, y_rhs, bayesian_inversion::Val{true}, reg_order = 0)
+        coeffs = train(Ψ, y_rhs, Val(false))
+        @info "Using Bayesian regularization to find the expansion coefficients"
+        x₀ = coeffs
+        for i in axes(y_rhs, 2)
+            @info "Bayesian regularization for axis $i"
+            coeffs[:, i] .= invert(
+                Matrix(Ψ'), y_rhs[:, i],
+                Lₖx₀(reg_order, view(x₀, :, i));
+                alg = :gcv_svd
+            )
+        end
+
+        ChainRulesCore.ignore_derivatives() do
+            for k in axes(coeffs, 2)
+                res = (@views sqrt(mean((Ψ' * coeffs[:, k] .- y_rhs[:, k]) .^ 2)))
+                @info "Error for axis $k" res
+            end
+            return
+        end
+        return coeffs
+    end
 end
 
 # ╔═╡ bc2f1434-6b60-459e-bb12-25b4fab65ac6
-function u_true(x1,x2)
-	p1 = @. pi*x1
-	p2 = @. pi*x2
-	return@. sin(p1)*sin(p2) + 4*sin(4*p1)*sin(4*p2)
+function u_true(x1, x2)
+    p1 = @. pi * x1
+    p2 = @. pi * x2
+    return@. sin(p1) * sin(p2) + 4 * sin(4 * p1) * sin(4 * p2)
 end
 
 # ╔═╡ e16ca2f6-b9c8-468f-99f4-9fda7dd0a27e
 function u_true(X)
-	x1 = X[:,1]
-	x2 = X[:,2]
-	p1 = pi.*x1 
-	p2 = pi.*x2
-	return @. sin(p1)*sin(p2) + 4*sin(4*p1)*sin(4*p2)
+    x1 = X[:, 1]
+    x2 = X[:, 2]
+    p1 = pi .* x1
+    p2 = pi .* x2
+    return @. sin(p1) * sin(p2) + 4 * sin(4 * p1) * sin(4 * p2)
 end
 
 # ╔═╡ 27216bfb-28a1-486e-ab00-0cb19e280d21
 function meshgrid(x, y)
-   xx = [x for _ in y, x in x]
-   yy = [y for y in y, _ in x]
-	return xx,yy
+    xx = [x for _ in y, x in x]
+    yy = [y for y in y, _ in x]
+    return xx, yy
 end
 
 # ╔═╡ 0bd16fa0-e33c-438d-9fb1-a3e73bf7d3ac
 @stable function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{T}) where {T <: Real}
-	NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
-	NCpoints = size(TrainingInput, 1)
-	Psi = ones(T, NumberOfTerms, NCpoints)
-	for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
-		for ii ∈ 1:InputDimensions  # For each dimension of the input
-			degree = MultivariatePolynomialDegrees[i, ii] + 1 
-			coeffs = @views OrthonormalBasis[degree, 1:degree, ii] 
-			p = Polynomials.Polynomial(coeffs)
-			x = @views TrainingInput[:, ii]
-			# @.. Psi[i, :] *= p(x)  # Evaluate the polynomial at x and multiply
-			@.. Psi[i, :]  *= evalpoly(x, p)
-		end
-	end
-	return Psi
+    NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
+    NCpoints = size(TrainingInput, 1)
+    Psi = ones(T, NumberOfTerms, NCpoints)
+    for i in 1:NumberOfTerms  # For each term in the polynomial expansion
+        for ii in 1:InputDimensions  # For each dimension of the input
+            degree = MultivariatePolynomialDegrees[i, ii] + 1
+            coeffs = @views OrthonormalBasis[degree, 1:degree, ii]
+            p = Polynomials.Polynomial(coeffs)
+            x = @views TrainingInput[:, ii]
+            # @.. Psi[i, :] *= p(x)  # Evaluate the polynomial at x and multiply
+            @.. Psi[i, :] *= evalpoly(x, p)
+        end
+    end
+    return Psi
 end
 
 # ╔═╡ c60b2cfb-0390-4d0b-aee2-441d544a9084
@@ -526,19 +522,19 @@ end
 # 	poly_lin = Polynomials.Polynomial([0.0,1.0])
 
 # 	PolyMatrix = Array{Polynomials.Polynomial{Float64, :x}, 2}
-	
+
 # 	# Create an uninitialized 10x3 matrix of polynomials
 # 	Psi = PolyMatrix(undef, NumberOfTerms, NCpoints)
 
 # 	poly_lin = Polynomials.Polynomial([0.0, 1.0])  # Represents the polynomial 0 + 1*x
-	
+
 # 	# Fill the matrix with the polynomial poly_lin
 # 	for i in 1:size(Psi, 1)
 # 	    for j in 1:size(Psi, 2)
 # 	        Psi[i, j] = poly_lin
 # 	    end
 # 	end
-	
+
 # 	# @info Psi
 # 	# OrthonormalBasis = T.(OrthonormalBasis)
 # 	# Function to evaluate polynomials for a given term and input sample
@@ -551,7 +547,7 @@ end
 # 			# p = Poly(coeffs)
 # 			# x = @views TrainingInput[:, ii]
 # 			# for k in axes(Psi,2)
-# 			@..	Psi[i, :] *= p 
+# 			@..	Psi[i, :] *= p
 # 			# end
 # 		end
 # 	end
@@ -562,231 +558,238 @@ end
 # let
 # 	# Define the type alias for Polynomial with Float64 coefficients
 # 	PolyMatrix = Array{Polynomials.Polynomial{Float64, :x}, 2}
-	
+
 # 	# Create an uninitialized 10x3 matrix of polynomials
 # 	Psi = PolyMatrix(undef, 10, 3)
-	
+
 
 # 	@info Psi
 # end
 
 # ╔═╡ ff525771-32f0-4b2b-904e-03e6d9648c27
- let
-	RNG = StableRNGs.LehmerRNG(1)
+let
+    RNG = StableRNGs.LehmerRNG(1)
     FT = Float64
-	N_data = 100
-    TrainingInput = rand(RNG,N_data, 2) |> Array{FT}
-    TrainingOutput = TrainingInput[:,1].^2+ exp.(TrainingInput[:,2]) |> Array{FT}
-	degree_max = 3
-	n,d = size(TrainingInput)
-	α_multi_index = aPCE_MultivariatePolynomialDegrees(d,degree_max,1.0,1.0)
-	orthonormal_basis = create_basis(TrainingInput,degree_max)
-	aPCE_PsiPolynomialMatrix(TrainingInput,α_multi_index,orthonormal_basis) 
+    N_data = 100
+    TrainingInput = rand(RNG, N_data, 2) |> Array{FT}
+    TrainingOutput = TrainingInput[:, 1] .^ 2 + exp.(TrainingInput[:, 2]) |> Array{FT}
+    degree_max = 3
+    n, d = size(TrainingInput)
+    α_multi_index = aPCE_MultivariatePolynomialDegrees(d, degree_max, 1.0, 1.0)
+    orthonormal_basis = create_basis(TrainingInput, degree_max)
+    aPCE_PsiPolynomialMatrix(TrainingInput, α_multi_index, orthonormal_basis)
 end
 
 # ╔═╡ e077e3b7-aedd-4410-83ad-d028e17b53b0
 resolution = 2^10
 
 # ╔═╡ a12f3075-b320-4464-bed8-5594692df932
-f = X -> @. -pi^2.0 .* (sin(pi*X[:,1]).*sin(pi*X[:,2])+64.0 .*sin(4*pi*X[:,1]).*sin(4*pi*X[:,2]) + sin(pi*X[:,1]).*sin(pi*X[:,2])+64.0  .*sin(4*pi*X[:,1]).*sin(4*pi*X[:,2]));
+f = X -> @. -pi^2.0 .* (sin(pi * X[:, 1]) .* sin(pi * X[:, 2]) + 64.0 .* sin(4 * pi * X[:, 1]) .* sin(4 * pi * X[:, 2]) + sin(pi * X[:, 1]) .* sin(pi * X[:, 2]) + 64.0 .* sin(4 * pi * X[:, 1]) .* sin(4 * pi * X[:, 2]));
 
 # ╔═╡ a00e11a2-b0a7-4afc-9d5e-074339779190
-	# function solve_PDE(Λ,ΛEv,rhs)
-	# 	function f(α)
-	# 		return Λ*α-rhs
-	# 	end
-	# 	α0_cheat = fill(1.0,size(rhs))
-	# 	res = LeastSquaresOptim.optimize(f, α0_cheat, LevenbergMarquardt())
-	# 	α = res.minimizer
-	#     u = ΛEv * α |> vec 
-	# end
+# function solve_PDE(Λ,ΛEv,rhs)
+# 	function f(α)
+# 		return Λ*α-rhs
+# 	end
+# 	α0_cheat = fill(1.0,size(rhs))
+# 	res = LeastSquaresOptim.optimize(f, α0_cheat, LevenbergMarquardt())
+# 	α = res.minimizer
+#     u = ΛEv * α |> vec
+# end
 
 # ╔═╡ b195f75b-e209-4312-ad8d-d326661de325
-	function prepend_one(X::AbstractArray)
-	    X = cat(ones(size(X, 1)), X;dims = 2)
-	end
+function prepend_one(X::AbstractArray)
+    return X = cat(ones(size(X, 1)), X; dims = 2)
+end
 
 # ╔═╡ c5e3c324-2cce-4a17-b8fb-2fa11275e14a
-function g(x) 
-	n,m = size(x)
-	return zeros(n,1)
+function g(x)
+    n, m = size(x)
+    return zeros(n, 1)
 end
 
 # ╔═╡ 4b538b9b-8ed4-428c-bb60-f50048b24b57
-function collocation_points(M=1024,MΩ = 900)
-		x∂Ωt = LinRange(0,4,MΩ)#rand(RNG,Uniform(0,4),MΩ)
-		X∂Ω = zeros(MΩ,2)
-		for i in LinearIndices(x∂Ωt)
-			if 0.0 <= x∂Ωt[i] < 1.0 # Lower line
-				X∂Ω[i,:] = [x∂Ωt[i] 0.0]
-			elseif 1.0 <= x∂Ωt[i] < 2.0 # Right boarder
-				X∂Ω[i,:] = [1.0 x∂Ωt[i]-1.0]
-			elseif 2.0 <= x∂Ωt[i] < 3.0 # Top
-				X∂Ω[i,:] = [x∂Ωt[i]-2.0 1.0]
-			else 
-				X∂Ω[i,:] = [0.0 x∂Ωt[i]-3.0]
-			end
-		end
-		n = Int64(ceil(sqrt(M)))
-		# x = LinRange(0+1/n,1-1/n,n-2)
-		x = LinRange(0,1,n)
-		xx,yy=meshgrid(x,x)
-		XΩ  = [xx[:] yy[:]]
-		# XΩ  = xx#rand(RNG,Uniform(0,1),(M,2))
-		# unique!(X)
-		# unique!(x∂Ω)
-		return XΩ,X∂Ω
-	end
+function collocation_points(M = 1024, MΩ = 900)
+    x∂Ωt = LinRange(0, 4, MΩ) #rand(RNG,Uniform(0,4),MΩ)
+    X∂Ω = zeros(MΩ, 2)
+    for i in LinearIndices(x∂Ωt)
+        if 0.0 <= x∂Ωt[i] < 1.0 # Lower line
+            X∂Ω[i, :] = [x∂Ωt[i] 0.0]
+        elseif 1.0 <= x∂Ωt[i] < 2.0 # Right boarder
+            X∂Ω[i, :] = [1.0 x∂Ωt[i] - 1.0]
+        elseif 2.0 <= x∂Ωt[i] < 3.0 # Top
+            X∂Ω[i, :] = [x∂Ωt[i] - 2.0 1.0]
+        else
+            X∂Ω[i, :] = [0.0 x∂Ωt[i] - 3.0]
+        end
+    end
+    n = Int64(ceil(sqrt(M)))
+    # x = LinRange(0+1/n,1-1/n,n-2)
+    x = LinRange(0, 1, n)
+    xx, yy = meshgrid(x, x)
+    XΩ = [xx[:] yy[:]]
+    # XΩ  = xx#rand(RNG,Uniform(0,1),(M,2))
+    # unique!(X)
+    # unique!(x∂Ω)
+    return XΩ, X∂Ω
+end
 
 # ╔═╡ 2e160742-b510-474d-ae7b-ef0d84e3807a
-XΩ,X∂Ω = collocation_points(resolution,resolution÷4)
+XΩ, X∂Ω = collocation_points(resolution, resolution ÷ 4)
 
 # ╔═╡ 54cbdaf8-7d37-4ddc-86b0-8f1fef69aa16
- begin
-	RNG = StableRNGs.LehmerRNG(1)
+begin
+    RNG = StableRNGs.LehmerRNG(1)
     FT = Float64
     rhs = f(XΩ) #|> Array{FT}
-	degree_max = 25
-	n,d = size(XΩ)
-	α_multi_index = aPCE_MultivariatePolynomialDegrees(d,degree_max,1.0,1.0)
-	onb = create_basis(XΩ, degree_max)
-	Ψ = aPCE_PsiPolynomialMatrix(XΩ, α_multi_index, onb)
-	ξ = train(Ψ,rhs,Val(true))
+    degree_max = 25
+    n, d = size(XΩ)
+    α_multi_index = aPCE_MultivariatePolynomialDegrees(d, degree_max, 1.0, 1.0)
+    onb = create_basis(XΩ, degree_max)
+    Ψ = aPCE_PsiPolynomialMatrix(XΩ, α_multi_index, onb)
+    ξ = train(Ψ, rhs, Val(true))
 end
 
 # ╔═╡ 9fbc7caa-d9f3-487b-88bc-106f8d78926c
-XΩ_eval,X∂Ω_eval = collocation_points(resolution*4,resolution)
+XΩ_eval, X∂Ω_eval = collocation_points(resolution * 4, resolution)
 
 # ╔═╡ e7e59767-da10-40eb-a805-e079d07a2ae4
 y_apce = let
-	onb_eval = create_basis(XΩ_eval, degree_max)
-	Ψ_eval = aPCE_PsiPolynomialMatrix(XΩ_eval, α_multi_index, onb_eval)
-	@tensor y_apce[i,j] := ξ[k,j] * Ψ_eval[k,i]
-	y_apce
+    onb_eval = create_basis(XΩ_eval, degree_max)
+    Ψ_eval = aPCE_PsiPolynomialMatrix(XΩ_eval, α_multi_index, onb_eval)
+    @tensor y_apce[i, j] := ξ[k, j] * Ψ_eval[k, i]
+    y_apce
 end
 
 # ╔═╡ 8aa866e1-a98c-4eb2-a245-aa69e733f2c7
 let
-	# Set theme and font size
-	fontsize_theme = Theme(fontsize = 30)
-	set_theme!(fontsize_theme)
-	set_theme!(theme_light())  # You can change this to theme_dark() or other themes as needed
-	
-	# Create a new figure with specified resolution and font size
-	fig = Figure(;size = (500, 500), fontsize = 22)
-	
-	# Define a 3D axis with custom view mode and aspect ratio
-	ax = Axis3(fig[1, 1],
-	    aspect = (1, 1, 1),
-	    viewmode = :stretch,
-	    perspectiveness = 0.6,
-	    elevation = π / 18,
-	    azimuth = π / 3,
-	    xzpanelcolor = (:white, 0.75),
-	    yzpanelcolor = (:white, 0.75),
-	    zgridcolor = :grey,
-	    ygridcolor = :grey,
-	    xgridcolor = :grey
-		
-	)
-	
-	# Create meshgrid and calculate z-values
-	xx, yy = meshgrid(XΩ[:, 1], XΩ[:, 2])
-	zz = u_true(xx, yy)
-	
-	# Plot surfaces with different color maps and transparency settings
-	surface!(ax, XΩ[:, 1], XΩ[:, 2], u_true(XΩ[:, 1], XΩ[:, 2]),
-	    colormap = (:Blues, 0.3),
-	    transparency = false,
-	    shading = MultiLightShading
-	)
-	
-	surface!(ax, XΩ_eval[:, 1], XΩ_eval[:, 2], vec(y_apce),
-	    colormap = (:OrRd, 0.3),
-	    transparency = true,
-	    shading = MultiLightShading
-	)
-	
-	# # Define axis limits
-	xmin, ymin, zmin = minimum(ax.finallimits[])
-	xmax, ymax, zmax = maximum(ax.finallimits[])
-	
-	# Add scatter plots
-	scatter!(ax, X∂Ω,
-	    color = :red,
-	    marker = :x,
-	    markersize = 10,
-	    transformation = (:xy, zmin - 2)
-	)
-	
-	scatter!(ax, XΩ,
-	    color = :blue,
-	    marker = :x,
-	    markersize = 10,
-	    transformation = (:xy, zmin - 2)
-	)
-	
-		
-    contour!(ax, XΩ[:,1],XΩ[:,2],u_true(XΩ[:,1],XΩ[:,2]); levels = 20, colormap = :Blues, linewidth = 2, transformation = (:xy, zmin+1500),
-        transparency = true)
-	
+    # Set theme and font size
+    fontsize_theme = Theme(fontsize = 30)
+    set_theme!(fontsize_theme)
+    set_theme!(theme_light())  # You can change this to theme_dark() or other themes as needed
 
-	 contour!(ax, XΩ_eval[:,1],XΩ_eval[:,2],vec(y_apce); levels = 20, colormap = :OrRd, linewidth = 2, transformation = (:xy, zmin-1500),transparency = true)
+    # Create a new figure with specified resolution and font size
+    fig = Figure(; size = (500, 500), fontsize = 22)
 
-	
-	# Display the figure
-	display(fig)
+    # Define a 3D axis with custom view mode and aspect ratio
+    ax = Axis3(
+        fig[1, 1],
+        aspect = (1, 1, 1),
+        viewmode = :stretch,
+        perspectiveness = 0.6,
+        elevation = π / 18,
+        azimuth = π / 3,
+        xzpanelcolor = (:white, 0.75),
+        yzpanelcolor = (:white, 0.75),
+        zgridcolor = :grey,
+        ygridcolor = :grey,
+        xgridcolor = :grey
+
+    )
+
+    # Create meshgrid and calculate z-values
+    xx, yy = meshgrid(XΩ[:, 1], XΩ[:, 2])
+    zz = u_true(xx, yy)
+
+    # Plot surfaces with different color maps and transparency settings
+    surface!(
+        ax, XΩ[:, 1], XΩ[:, 2], u_true(XΩ[:, 1], XΩ[:, 2]),
+        colormap = (:Blues, 0.3),
+        transparency = false,
+        shading = MultiLightShading
+    )
+
+    surface!(
+        ax, XΩ_eval[:, 1], XΩ_eval[:, 2], vec(y_apce),
+        colormap = (:OrRd, 0.3),
+        transparency = true,
+        shading = MultiLightShading
+    )
+
+    # # Define axis limits
+    xmin, ymin, zmin = minimum(ax.finallimits[])
+    xmax, ymax, zmax = maximum(ax.finallimits[])
+
+    # Add scatter plots
+    scatter!(
+        ax, X∂Ω,
+        color = :red,
+        marker = :x,
+        markersize = 10,
+        transformation = (:xy, zmin - 2)
+    )
+
+    scatter!(
+        ax, XΩ,
+        color = :blue,
+        marker = :x,
+        markersize = 10,
+        transformation = (:xy, zmin - 2)
+    )
+
+
+    contour!(
+        ax, XΩ[:, 1], XΩ[:, 2], u_true(XΩ[:, 1], XΩ[:, 2]); levels = 20, colormap = :Blues, linewidth = 2, transformation = (:xy, zmin + 1500),
+        transparency = true
+    )
+
+
+    contour!(ax, XΩ_eval[:, 1], XΩ_eval[:, 2], vec(y_apce); levels = 20, colormap = :OrRd, linewidth = 2, transformation = (:xy, zmin - 1500), transparency = true)
+
+
+    # Display the figure
+    display(fig)
 end
 
 # ╔═╡ 9017f6b2-95fa-4ae4-a481-d6878557efe3
-function RHS(f,g,X∂Ω,XΩ)
-	rhs = vcat(f(XΩ),g(X∂Ω))
-	return rhs |> vec
+function RHS(f, g, X∂Ω, XΩ)
+    rhs = vcat(f(XΩ), g(X∂Ω))
+    return rhs |> vec
 end
 
 # ╔═╡ 987dc146-f999-4ab1-9fc2-de3fb6cc12c2
-function collocation_matrix(rbf,∇rbf,Δrbf,XΩ,X∂Ω)
-			nin,_= size(XΩ)
-			nbnd,_= size(X∂Ω)
-			N = nin+nbnd
-			X = [XΩ;X∂Ω];
-			D = pwD(X,X)
-			Λ  = zeros(N,N);
-			# Could be speeded up, if matrix symmetric
-			@inbounds for i = 1:N
-			     @simd for j = 1:N
-				    if ((i <= nin) && (j <= nin))
-		            	Λ[i,j]  = @views Δrbf.(D[i,j])
-					elseif ((i > nin) && (j > nin))
-		            	Λ[i,j]  = @views rbf.(D[i,j]);
-			        end
-			    end
-			end
-			return Λ
-		end
+function collocation_matrix(rbf, ∇rbf, Δrbf, XΩ, X∂Ω)
+    nin, _ = size(XΩ)
+    nbnd, _ = size(X∂Ω)
+    N = nin + nbnd
+    X = [XΩ;X∂Ω]
+    D = pwD(X, X)
+    Λ = zeros(N, N)
+    # Could be speeded up, if matrix symmetric
+    @inbounds for i in 1:N
+        @simd for j in 1:N
+            if ((i <= nin) && (j <= nin))
+                Λ[i, j] = @views Δrbf.(D[i, j])
+            elseif ((i > nin) && (j > nin))
+                Λ[i, j] = @views rbf.(D[i, j])
+            end
+        end
+    end
+    return Λ
+end
 
 # ╔═╡ 97ed63f9-f5b9-4380-ad92-e1cc338e569d
-function evaluation_matrix(rbf,∇rbf,Δrbf,XΩ,X∂Ω,Xnew)
-		nin,_ = size(XΩ)
-		nbnd,_ = size(X∂Ω)
-		nnew,_ = size(Xnew)
-	
-		X = [XΩ;X∂Ω];
-		D = pwD(Xnew,X)
-		ΛEv  = zeros(nnew,nin+nbnd);
-		ΛEv .= rbf.(D[:,:])	
-		# @inbounds for i = 1:nnew
-		#     for j = 1:nin+nbnd
-		#        if j <= nin
-		#             ΛEv[i,j] = Δrbf.(D[i,j])
-		#         else
-		#             ΛEv[i,j] = rbf.(D[i,j])
-		#         end
-		#     end
-		# end
+function evaluation_matrix(rbf, ∇rbf, Δrbf, XΩ, X∂Ω, Xnew)
+    nin, _ = size(XΩ)
+    nbnd, _ = size(X∂Ω)
+    nnew, _ = size(Xnew)
 
-		return ΛEv	
-	end
+    X = [XΩ;X∂Ω]
+    D = pwD(Xnew, X)
+    ΛEv = zeros(nnew, nin + nbnd)
+    ΛEv .= rbf.(D[:, :])
+    # @inbounds for i = 1:nnew
+    #     for j = 1:nin+nbnd
+    #        if j <= nin
+    #             ΛEv[i,j] = Δrbf.(D[i,j])
+    #         else
+    #             ΛEv[i,j] = rbf.(D[i,j])
+    #         end
+    #     end
+    # end
+
+    return ΛEv
+end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """

@@ -6,64 +6,64 @@ using InteractiveUtils
 
 # ╔═╡ 391faf90-f605-11ec-2d46-43b4e0ec2850
 begin
-	using LinearAlgebra
-	using Makie
-	# using CairoMakie
-	using StaticArrays
-	# using GLMakie
-	# using JSServe
-	using GLMakie
-	using PlutoUI
-	using Colors
-	using ReverseDiff
-	using ForwardDiff
-	using Random
-	using ColorTypes
-	using KernelFunctions
-	using Distributions
-	using ColorSchemes
-	using BenchmarkTools
-	using Base.Iterators: flatten
-	using BlockArrays
-	using KrylovKit
-	using SparseArrays
-	using Random
-	using Optim
-	using BenchmarkTools
-	using KernelFunctions
-	using LineSearches
-	# using Einsum
-	# using OMEinsum
-	# using ParallelStencil
-	const USE_GPU = true
-	# using ImplicitGlobalGrid
-	# import MPI
-	# using ParallelStencil.FiniteDifferences2D
+    using LinearAlgebra
+    using Makie
+    # using CairoMakie
+    using StaticArrays
+    # using GLMakie
+    # using JSServe
+    using GLMakie
+    using PlutoUI
+    using Colors
+    using ReverseDiff
+    using ForwardDiff
+    using Random
+    using ColorTypes
+    using KernelFunctions
+    using Distributions
+    using ColorSchemes
+    using BenchmarkTools
+    using Base.Iterators: flatten
+    using BlockArrays
+    using KrylovKit
+    using SparseArrays
+    using Random
+    using Optim
+    using BenchmarkTools
+    using KernelFunctions
+    using LineSearches
+    # using Einsum
+    # using OMEinsum
+    # using ParallelStencil
+    const USE_GPU = true
+    # using ImplicitGlobalGrid
+    # import MPI
+    # using ParallelStencil.FiniteDifferences2D
 end
 
 # ╔═╡ d2c0a7ae-6459-4e19-ac25-cc6db812da47
 begin
-	# RHS to 3.2 https://arxiv.org/pdf/1701.02440.pdf
-	function f(t,x) 
-		return exp(-t)*(4*π^2-1)*sin(2*π*x)
-	end
-	# Overload for array
-	f(t::AbstractArray,x::AbstractArray) = f.(t,x)
-	
-	# Solution:
-	function u_true(t,x) 
-		return exp(-t)*sin(2*π*x)
-	end
-	# OVerload for array
-	u_true(t::AbstractArray,x::AbstractArray) = u_true.(t,x)
+    # RHS to 3.2 https://arxiv.org/pdf/1701.02440.pdf
+    function f(t, x)
+        return exp(-t) * (4 * π^2 - 1) * sin(2 * π * x)
+    end
+    # Overload for array
+    f(t::AbstractArray, x::AbstractArray) = f.(t, x)
+
+    # Solution:
+    function u_true(t, x)
+        return exp(-t) * sin(2 * π * x)
+    end
+    # OVerload for array
+    u_true(t::AbstractArray, x::AbstractArray) = u_true.(t, x)
 end
 
 # ╔═╡ b5a32fcf-fc6f-4f71-8f80-71a565d5c7a7
 # function K(X,Y,θ)
-	# x_t = X[:,1]
-	# x_u = X[:,2]
-	# xp_t = Y[:,1]
-	# xp_u = Y[:,2]
+# x_t = X[:,1]
+# x_u = X[:,2]
+# xp_t = Y[:,1]
+# xp_u = Y[:,2]
 # K(x_t,x_u,xp_t, xp_u,θ) = θ[1]*exp(-1/2*((x_t-xp_t)^2+(x_u-xp_u)^2))
 # 	 K = θ[1].*exp.(-0.5.*(pwD2(X,Y)))
 # 	return K
@@ -103,12 +103,12 @@ end
 
 # ╔═╡ 97ac9a6f-4035-494d-96cf-e1fc0f7d1829
 macro samp(exp)
-	    sampler(eval(exp))
-	end
+    return sampler(eval(exp))
+end
 
 # ╔═╡ 69aaf490-10c4-4b07-b88d-69e8095582b5
 # begin
-# 	C(h) = exp(-abs(h)^2)	
+# 	C(h) = exp(-abs(h)^2)
 # 	function sampler_cholesky(x,C)
 # 		N = length(x)
 # 		Σ = zeros(N,N)
@@ -119,7 +119,7 @@ macro samp(exp)
 # 		end
 # 		return () -> begin
 # 			X = rand((@samp Normal(0,1)),(N,1)) |> vec
-# 			C = cholesky(Σ)		
+# 			C = cholesky(Σ)
 # 			C.U*X
 # 		end
 # 	end
@@ -133,339 +133,334 @@ macro samp(exp)
 
 # ╔═╡ 9667930b-9fc4-4eea-93b1-4d6f205d55f5
 begin
-	@fastmath function kernel_dot(X::AbstractArray, Y::AbstractArray)
-    dimY = size(Y)
-    dimX = size(X)
-    Lx = Int64(dimX[1])
-    Ly = Int64(dimY[1])
-    A = zeros(Float64, (Lx, Ly))
-    @inbounds  for i in 1:Ly 
-       @simd for j in 1:Lx
-            A[i,j] = @views X[i] * Y[j]
-        end
-    end
-    # display(A)
-    return A
-	end
-
-
-	
-function meshgrid(x, y)
-    xx = [x for _ in y, x in x]
-    yy = [y for y in y, _ in x]
-    return xx, yy
-end
-
-function prepend_one(X::AbstractArray)
-    X = cat(ones(size(X, 1)), X; dims = 2)
-end
-
-
-"""
-pairdist
-pairwise euclidean distance
-```math
-(x - y) = sqrt(x ^ 2 + y ^ 2 - 2 * x * y)
-```
-"""
-function pairdist(a::AbstractArray, b::AbstractArray; doroot = true)
-    na = length(a)
-    nb = length(b)
-    if ndims(a) == 1
-        a = reshape(a, (length(a), 1))
-    else
-        na, _ = size(a)
-    end
-    if ndims(b) == 1
-        b = reshape(b, (length(b), 1))
-    else
-        nb, _ = size(b)
-    end
-
-    r = a * b'
-    sa2 = sum(a .^ 2, dims = 2)
-    sb2 = sum(b .^ 2, dims = 2)
-    @inbounds for j = 1:nb
-        @simd for i = 1:na
-            r[i, j] = @views sa2[i] + sb2[j] - 2 * r[i, j]
-            if doroot
-                r[i, j] = @views isnan(r[i, j]) ? NaN : sqrt(max(r[i, j], 0.0))
+    @fastmath function kernel_dot(X::AbstractArray, Y::AbstractArray)
+        dimY = size(Y)
+        dimX = size(X)
+        Lx = Int64(dimX[1])
+        Ly = Int64(dimY[1])
+        A = zeros(Float64, (Lx, Ly))
+        @inbounds  for i in 1:Ly
+            @simd for j in 1:Lx
+                A[i, j] = @views X[i] * Y[j]
             end
         end
+        # display(A)
+        return A
     end
-    return r
-end
-
-function pwD2(a::AbstractArray, b::AbstractArray)
-    pairdist(a, b; doroot = false)
-end
-
-function pwD(a::AbstractArray, b::AbstractArray)
-    pairdist(a, b; doroot = true)
-end
 
 
+    function meshgrid(x, y)
+        xx = [x for _ in y, x in x]
+        yy = [y for y in y, _ in x]
+        return xx, yy
+    end
 
-	function sampler_circulant(x, C)
-	N = length(x)
-	h = abs(x[2]-x[1])
-    c = vcat([C(i*h) for i in 0:N], [C(i*h) for i in N-1:-1:1])
-	tmp = real(fft(c))
-	tmp[tmp.<=0.0] .= 0.0 # not sure here.
-    λ_root = sqrt.(tmp)
-    # preallocate y and precompute plan for fourier transform
-    y = similar(λ_root, ComplexF64)
-    plan = plan_fft!(y)
-    normalize = length(λ_root)^(-1/2)
-	res = 2*N
-    # return lambda that simulates one sample of size N
-    return () -> begin
-        # compute y = √λ * ε
-        Threads.@threads for i in eachindex(y)
-            y[i] = λ_root[i]*(randn(RNG)+im*randn(RNG))
+    function prepend_one(X::AbstractArray)
+        return X = cat(ones(size(X, 1)), X; dims = 2)
+    end
+
+
+    """
+    pairdist
+    pairwise euclidean distance
+    ```math
+    (x - y) = sqrt(x ^ 2 + y ^ 2 - 2 * x * y)
+    ```
+    """
+    function pairdist(a::AbstractArray, b::AbstractArray; doroot = true)
+        na = length(a)
+        nb = length(b)
+        if ndims(a) == 1
+            a = reshape(a, (length(a), 1))
+        else
+            na, _ = size(a)
         end
-		# y = λ_root.*(randn(2*N)+im.*randn(2*N))
-        # compute fft!(y) and normalize
-        plan * y # Operates in place on argument
-        y .*= normalize
-        # return Re(y[0]), ..., Re(y[N])
-        @view reinterpret(Float64, y)[1:2:res]
+        if ndims(b) == 1
+            b = reshape(b, (length(b), 1))
+        else
+            nb, _ = size(b)
+        end
+
+        r = a * b'
+        sa2 = sum(a .^ 2, dims = 2)
+        sb2 = sum(b .^ 2, dims = 2)
+        @inbounds for j in 1:nb
+            @simd for i in 1:na
+                r[i, j] = @views sa2[i] + sb2[j] - 2 * r[i, j]
+                if doroot
+                    r[i, j] = @views isnan(r[i, j]) ? NaN : sqrt(max(r[i, j], 0.0))
+                end
+            end
+        end
+        return r
     end
+
+    function pwD2(a::AbstractArray, b::AbstractArray)
+        return pairdist(a, b; doroot = false)
+    end
+
+    function pwD(a::AbstractArray, b::AbstractArray)
+        return pairdist(a, b; doroot = true)
+    end
+
+
+    function sampler_circulant(x, C)
+        N = length(x)
+        h = abs(x[2] - x[1])
+        c = vcat([C(i * h) for i in 0:N], [C(i * h) for i in (N - 1):-1:1])
+        tmp = real(fft(c))
+        tmp[tmp .<= 0.0] .= 0.0 # not sure here.
+        λ_root = sqrt.(tmp)
+        # preallocate y and precompute plan for fourier transform
+        y = similar(λ_root, ComplexF64)
+        plan = plan_fft!(y)
+        normalize = length(λ_root)^(-1 / 2)
+        res = 2 * N
+        # return lambda that simulates one sample of size N
+        return () -> begin
+            # compute y = √λ * ε
+            Threads.@threads for i in eachindex(y)
+                y[i] = λ_root[i] * (randn(RNG) + im * randn(RNG))
+            end
+            # y = λ_root.*(randn(2*N)+im.*randn(2*N))
+            # compute fft!(y) and normalize
+            plan * y # Operates in place on argument
+            y .*= normalize
+            # return Re(y[0]), ..., Re(y[N])
+            @view reinterpret(Float64, y)[1:2:res]
+        end
+    end
+
+
 end
-
-
-
-
-
-
-
-	
-end
-
 
 
 # ╔═╡ 4f7dcf80-f855-497a-985b-7707e79efa7c
 begin
-	# collocation points
-	n_u = 50
-	x_u = LinRange(0,1,n_u) |> vec
-	t_u = LinRange(0,1,n_u)|> vec
-	xx_u,tt_u = meshgrid(x_u,t_u)
-	X_u = [t_u x_u]
+    # collocation points
+    n_u = 50
+    x_u = LinRange(0, 1, n_u) |> vec
+    t_u = LinRange(0, 1, n_u) |> vec
+    xx_u, tt_u = meshgrid(x_u, t_u)
+    X_u = [t_u x_u]
 
-	n_f = 50
-	x_f = LinRange(0,1,n_f)
-	t_f = LinRange(0,1,n_u)
-	xx_f,tt_f = meshgrid(x_f,t_f)
-	X_f = [t_u x_u]
-	
+    n_f = 50
+    x_f = LinRange(0, 1, n_f)
+    t_f = LinRange(0, 1, n_u)
+    xx_f, tt_f = meshgrid(x_f, t_f)
+    X_f = [t_u x_u]
+
 end;
 
 # ╔═╡ ccf470c2-a218-40f3-97bf-c4cb96f875be
 begin
-	N_points = 20
-	ind1 = shuffle(1:n_u)[1:N_points]
-	ind2 = shuffle(1:n_u)[1:N_points]
-	points = [x_u[ind1] t_u[ind2]]
+    N_points = 20
+    ind1 = shuffle(1:n_u)[1:N_points]
+    ind2 = shuffle(1:n_u)[1:N_points]
+    points = [x_u[ind1] t_u[ind2]]
 end;
 
 # ╔═╡ 9c30c61b-3ae3-443e-8eb3-e61b25e69b9d
-let	
-	set_window_config!(;
-	    renderloop = GLMakie.renderloop,
-	    vsync = true,
-	    framerate = 60.0,
-	    float = true,
-	    pause_rendering = false,
-	    focus_on_show = true,
-	    decorated = true,
-	    title = "U"
-	)
-	fontsize_theme = Theme(fontsize = 28)
-	set_theme!(fontsize_theme)
-	set_theme!(theme_light())
+let
+    set_window_config!(;
+        renderloop = GLMakie.renderloop,
+        vsync = true,
+        framerate = 60.0,
+        float = true,
+        pause_rendering = false,
+        focus_on_show = true,
+        decorated = true,
+        title = "U"
+    )
+    fontsize_theme = Theme(fontsize = 28)
+    set_theme!(fontsize_theme)
+    set_theme!(theme_light())
 
-	# set_theme!(theme_black())
+    # set_theme!(theme_black())
     fig = Figure(resolution = (500, 500), fontsize = 28)
 
-    ax = Axis3(fig[1, 1], aspect = (1,1,1),viewmode = :stretch, perspectiveness = 0.6, elevation = π / 5,azimuth=4*π/3,
+    ax = Axis3(
+        fig[1, 1], aspect = (1, 1, 1), viewmode = :stretch, perspectiveness = 0.6, elevation = π / 5, azimuth = 4 * π / 3,
         xzpanelcolor = (:white, 0.0), yzpanelcolor = (:white, 0.0),
-        zgridcolor = :grey, ygridcolor = :grey, xgridcolor = :grey,xlabel="t",ylabel = "x", zlabel = "f(t,x)")
+        zgridcolor = :grey, ygridcolor = :grey, xgridcolor = :grey, xlabel = "t", ylabel = "x", zlabel = "f(t,x)"
+    )
 
-	
-	zz = f(tt_u,xx_u)
-	
-	surface!(ax,x_u,t_u,zz, colormap = (:Blues, 0.8),  transparency = true,shading=false)
-	
-	# surface!(ax,Xnew[:,1],Xnew[:,2],vec(u), colormap = (:OrRd, 0.2), transparency = true,shading=false)
 
-	# xmin, ymin, zmin = minimum(ax.finallimits[])
- #    xmax, ymax, zmax = maximum(ax.finallimits[])
-	
-	scatter!(ax,points[:,1],points[:,2], f(points[:,1],points[:,2]),color=:red,marker=:point,markersize=20) # ,transformation = (:xy, zmin-2)
-	# scatter!(ax, XΩ,color=:blue,marker=:x,markersize=10,transformation = (:xy, zmin-2))
+    zz = f(tt_u, xx_u)
 
-	
- #    contour!(ax, XΩ[:,1],XΩ[:,2],u_true(XΩ[:,1],XΩ[:,2]); levels = 20, colormap = :Blues, linewidth = 2, transformation = (:xy, zmin),
- #        transparency = true)
-	
+    surface!(ax, x_u, t_u, zz, colormap = (:Blues, 0.8), transparency = true, shading = false)
 
-	#  contour!(ax, Xnew[:,1],Xnew[:,2],vec(u); levels = 20, colormap = :OrRd, linewidth = 2, transformation = (:xy, zmin-1),transparency = true)
-	
-	# gl_screen = display(current_figure())
-	# wait(gl_screen)
-	fig
+    # surface!(ax,Xnew[:,1],Xnew[:,2],vec(u), colormap = (:OrRd, 0.2), transparency = true,shading=false)
+
+    # xmin, ymin, zmin = minimum(ax.finallimits[])
+    #    xmax, ymax, zmax = maximum(ax.finallimits[])
+
+    scatter!(ax, points[:, 1], points[:, 2], f(points[:, 1], points[:, 2]), color = :red, marker = :point, markersize = 20) # ,transformation = (:xy, zmin-2)
+    # scatter!(ax, XΩ,color=:blue,marker=:x,markersize=10,transformation = (:xy, zmin-2))
+
+
+    #    contour!(ax, XΩ[:,1],XΩ[:,2],u_true(XΩ[:,1],XΩ[:,2]); levels = 20, colormap = :Blues, linewidth = 2, transformation = (:xy, zmin),
+    #        transparency = true)
+
+
+    #  contour!(ax, Xnew[:,1],Xnew[:,2],vec(u); levels = 20, colormap = :OrRd, linewidth = 2, transformation = (:xy, zmin-1),transparency = true)
+
+    # gl_screen = display(current_figure())
+    # wait(gl_screen)
+    fig
 end
 
 # ╔═╡ e359a6a2-deb6-44fd-9da2-d86acd6e97f7
-let	
-	set_window_config!(;
-	    renderloop = GLMakie.renderloop,
-	    vsync = true,
-	    framerate = 60.0,
-	    float = true,
-	    pause_rendering = false,
-	    focus_on_show = true,
-	    decorated = true,
-	    title = "U"
-	)
-	fontsize_theme = Theme(fontsize = 28)
-	set_theme!(fontsize_theme)
-	set_theme!(theme_light())
+let
+    set_window_config!(;
+        renderloop = GLMakie.renderloop,
+        vsync = true,
+        framerate = 60.0,
+        float = true,
+        pause_rendering = false,
+        focus_on_show = true,
+        decorated = true,
+        title = "U"
+    )
+    fontsize_theme = Theme(fontsize = 28)
+    set_theme!(fontsize_theme)
+    set_theme!(theme_light())
 
-	# set_theme!(theme_black())
+    # set_theme!(theme_black())
     fig = Figure(resolution = (500, 500), fontsize = 28)
 
-    ax = Axis3(fig[1, 1], aspect = (1,1,1),viewmode = :stretch, perspectiveness = 0.6, elevation = π / 5,azimuth=4*π/3,
+    ax = Axis3(
+        fig[1, 1], aspect = (1, 1, 1), viewmode = :stretch, perspectiveness = 0.6, elevation = π / 5, azimuth = 4 * π / 3,
         xzpanelcolor = (:white, 0.0), yzpanelcolor = (:white, 0.0),
-        zgridcolor = :grey, ygridcolor = :grey, xgridcolor = :grey,xlabel="t",ylabel = "x", zlabel = "u(t,x)")
+        zgridcolor = :grey, ygridcolor = :grey, xgridcolor = :grey, xlabel = "t", ylabel = "x", zlabel = "u(t,x)"
+    )
 
-	
-	zz = u_true(tt_u,xx_u)
-	
-	surface!(ax,x_u,t_u,zz, colormap = (:Blues, 0.8),  transparency = true,shading=true)
-	
-	# surface!(ax,Xnew[:,1],Xnew[:,2],vec(u), colormap = (:OrRd, 0.2), transparency = true,shading=false)
 
-	# xmin, ymin, zmin = minimum(ax.finallimits[])
- #    xmax, ymax, zmax = maximum(ax.finallimits[])
-	
-	scatter!(ax,points[:,1],points[:,2], u_true(points[:,1],points[:,2]),color=:red,marker=:point,markersize=20) # ,transformation = (:xy, zmin-2)
-	# scatter!(ax, XΩ,color=:blue,marker=:x,markersize=10,transformation = (:xy, zmin-2))
+    zz = u_true(tt_u, xx_u)
 
-	
- #    contour!(ax, XΩ[:,1],XΩ[:,2],u_true(XΩ[:,1],XΩ[:,2]); levels = 20, colormap = :Blues, linewidth = 2, transformation = (:xy, zmin),
- #        transparency = true)
-	
+    surface!(ax, x_u, t_u, zz, colormap = (:Blues, 0.8), transparency = true, shading = true)
 
-	#  contour!(ax, Xnew[:,1],Xnew[:,2],vec(u); levels = 20, colormap = :OrRd, linewidth = 2, transformation = (:xy, zmin-1),transparency = true)
-	
-	# gl_screen = display(current_figure())
-	# wait(gl_screen)
-	fig
+    # surface!(ax,Xnew[:,1],Xnew[:,2],vec(u), colormap = (:OrRd, 0.2), transparency = true,shading=false)
+
+    # xmin, ymin, zmin = minimum(ax.finallimits[])
+    #    xmax, ymax, zmax = maximum(ax.finallimits[])
+
+    scatter!(ax, points[:, 1], points[:, 2], u_true(points[:, 1], points[:, 2]), color = :red, marker = :point, markersize = 20) # ,transformation = (:xy, zmin-2)
+    # scatter!(ax, XΩ,color=:blue,marker=:x,markersize=10,transformation = (:xy, zmin-2))
+
+
+    #    contour!(ax, XΩ[:,1],XΩ[:,2],u_true(XΩ[:,1],XΩ[:,2]); levels = 20, colormap = :Blues, linewidth = 2, transformation = (:xy, zmin),
+    #        transparency = true)
+
+
+    #  contour!(ax, Xnew[:,1],Xnew[:,2],vec(u); levels = 20, colormap = :OrRd, linewidth = 2, transformation = (:xy, zmin-1),transparency = true)
+
+    # gl_screen = display(current_figure())
+    # wait(gl_screen)
+    fig
 end
 
 # ╔═╡ 619794c1-45ce-4723-96f5-0ed1429604c1
 begin
-	
-	
-	abstract type Kernel end
-	
-	mutable struct Gaussian{T <: Number} <: Kernel
-	    σ::T
-		l::T
-	end
-	Gaussian(σ::T) where T = Gaussian{T}(σ, 1.0)
-	_evalKmatrix(gaussian::Gaussian, xy_dist) = @fastmath @.  gaussian.σ^2 *exp(-1. / (2.0 * gaussian.l^2 ) * xy_dist)
-		
-	function evalKmatrix(gaussian::Gaussian, x::T, y::T) where {T<:AbstractArray}
-	    xy_dist = pwD2(x, y)
-	    K = _evalKmatrix(gaussian, xy_dist) # Do the inner product and get the polynomial Kernel Matrix
-	end
-	function evalKernel(gaussian::Gaussian, x)
-	    return @fastmath  @.   gaussian.σ^2 * exp.(- x^2 / (2. * gaussian.l^2 ))
-	end
-	Base.string(x::Gaussian) = "Gaussian Kernel function with σ=$(x.σ) and l=$(x.l)."
-	
+
+
+    abstract type Kernel end
+
+    mutable struct Gaussian{T <: Number} <: Kernel
+        σ::T
+        l::T
+    end
+    Gaussian(σ::T) where {T} = Gaussian{T}(σ, 1.0)
+    _evalKmatrix(gaussian::Gaussian, xy_dist) = @fastmath @.  gaussian.σ^2 * exp(-1.0 / (2.0 * gaussian.l^2) * xy_dist)
+
+    function evalKmatrix(gaussian::Gaussian, x::T, y::T) where {T <: AbstractArray}
+        xy_dist = pwD2(x, y)
+        return K = _evalKmatrix(gaussian, xy_dist) # Do the inner product and get the polynomial Kernel Matrix
+    end
+    function evalKernel(gaussian::Gaussian, x)
+        return @fastmath  @.   gaussian.σ^2 * exp.(- x^2 / (2.0 * gaussian.l^2))
+    end
+    Base.string(x::Gaussian) = "Gaussian Kernel function with σ=$(x.σ) and l=$(x.l)."
+
 end
 
 # ╔═╡ e68d9137-ddb5-47b8-bd65-edb0661e07dd
-function assemble_K(k, X_u, X_f,  θ,ϕ)
-	σ²_nu = θ[1]
-	σ²_nf= θ[2]
-	K = x -> evalKernel(k(θ...), x)
-	∇K = x -> ForwardDiff.derivative(K, x)
+function assemble_K(k, X_u, X_f, θ, ϕ)
+    σ²_nu = θ[1]
+    σ²_nf = θ[2]
+    K = x -> evalKernel(k(θ...), x)
+    ∇K = x -> ForwardDiff.derivative(K, x)
     ΔK = x -> ForwardDiff.derivative(∇K, x)
-	kuu = evalKmatrix(k(θ...),X_u,X_u)  + σ²_nu*I
-	D1 = pwD(X_u,X_f)
-	kuf = ∇K.(D1)-ϕ[1].*ΔK.(D1)
-	D3 = pwD(X_f,X_u)
-	kfu = -kuf#∇K.(D3)-ϕ[1].*ΔK.(D3)
-	D2 = pwD(X_f,X_f)
-	kff = ∇K.(D2)-ϕ[1].*ΔK.(D2) + σ²_nf*I # Hier fehlen ein paar Ableitungen...
-	Km = [kuu kuf; kfu kff]
+    kuu = evalKmatrix(k(θ...), X_u, X_u) + σ²_nu * I
+    D1 = pwD(X_u, X_f)
+    kuf = ∇K.(D1) - ϕ[1] .* ΔK.(D1)
+    D3 = pwD(X_f, X_u)
+    kfu = -kuf #∇K.(D3)-ϕ[1].*ΔK.(D3)
+    D2 = pwD(X_f, X_f)
+    kff = ∇K.(D2) - ϕ[1] .* ΔK.(D2) + σ²_nf * I # Hier fehlen ein paar Ableitungen...
+    return Km = [kuu kuf; kfu kff]
 end
 
 # ╔═╡ 5b3d5247-007d-4bdb-ad77-409ad64b04e8
-function marginal_negloglikelihod(y,t_u,x_u,t_f,x_f, θ, ϕ, reg)
-	N = length(y)
+function marginal_negloglikelihod(y, t_u, x_u, t_f, x_f, θ, ϕ, reg)
+    N = length(y)
 
-	Kfull = assemble_K(Gaussian, X_u, X_f, 10.0 .^ θ, 10.0 .^ϕ) + reg*I
-	dK = det(Kfull)
-	if dK > 0.0
-	tmp = 0.5*y'*inv(Kfull)*y + N/2*log(2*π) +  0.5*log(dK)
-		return tmp
-	else
-		return  Inf
-	end
+    Kfull = assemble_K(Gaussian, X_u, X_f, 10.0 .^ θ, 10.0 .^ ϕ) + reg * I
+    dK = det(Kfull)
+    if dK > 0.0
+        tmp = 0.5 * y' * inv(Kfull) * y + N / 2 * log(2 * π) + 0.5 * log(dK)
+        return tmp
+    else
+        return  Inf
+    end
 end
 
 # ╔═╡ 2269e040-9e4b-446f-86b0-568eebb815d8
 begin
-	σ²_nu = 0.1
-	σ²_nf = 0.1
-	ϕ = [1.0 0.1]
-	θ = [1.0 1.0]
-	Kfull = assemble_K(Gaussian, X_u, X_f, θ, ϕ) 
+    σ²_nu = 0.1
+    σ²_nf = 0.1
+    ϕ = [1.0 0.1]
+    θ = [1.0 1.0]
+    Kfull = assemble_K(Gaussian, X_u, X_f, θ, ϕ)
 end
 
 # ╔═╡ b8cc7a96-8d43-4a6f-8500-459927596197
 begin
-	f_noise(t,x) = f(t,x) + rand(Normal(0,σ²_nu),length(t))
-	u_noise(t,x) = u_true(t,x) + rand(Normal(0,σ²_nf),length(t))
+    f_noise(t, x) = f(t, x) + rand(Normal(0, σ²_nu), length(t))
+    u_noise(t, x) = u_true(t, x) + rand(Normal(0, σ²_nf), length(t))
 end
 
 # ╔═╡ 9a4f77b9-6cc7-474a-bda5-97c956f368d7
 begin
-		y_u = u_noise(t_u,x_u)
-		y_f = f_noise(t_f,x_f)
-		y = [y_u; y_f]
+    y_u = u_noise(t_u, x_u)
+    y_f = f_noise(t_f, x_f)
+    y = [y_u; y_f]
 end
 
 # ╔═╡ 4e2d94aa-3335-45ed-b302-220663ec097f
 function marginal_negloglikelihod_optim(o)
-	θ = o[1:2]
-	ϕ = o[3]
-	reg = o[4]
-	return marginal_negloglikelihod(y,t_u,x_u,t_f,x_f, θ, ϕ, reg)
+    θ = o[1:2]
+    ϕ = o[3]
+    reg = o[4]
+    return marginal_negloglikelihod(y, t_u, x_u, t_f, x_f, θ, ϕ, reg)
 end
 
 # ╔═╡ 24576b43-4833-415d-af5b-f2972138d29d
-marginal_negloglikelihod_optim( [θ ϕ])
+marginal_negloglikelihod_optim([θ ϕ])
 
 # ╔═╡ d2f63e4c-b373-4d16-895e-86fe99828ced
-opt = optimize(marginal_negloglikelihod_optim,  [θ ϕ],LBFGS(linesearch = BackTracking(order=2)))
+opt = optimize(marginal_negloglikelihod_optim, [θ ϕ], LBFGS(linesearch = BackTracking(order = 2)))
 
 # ╔═╡ f3aa5aae-78cf-4f3d-8bb7-a687c602e567
-10.0.^opt.minimizer
+10.0 .^ opt.minimizer
 
 # ╔═╡ fd36c05b-a800-4422-a5c4-acd8c9af53f7
-function GP_marginal_loglikelihod(X::T, Y::T,K::Kt) where {T<:AbstractArray, Kt<:Kernel} 
-	R = evalKmatrix(K,X,Y)
-	Kinv = inv(R)
-	n = size(Y,1)
-	dk = det(R)
-	return -0.5*Y'*Kinv*Y - 0.5 * log(dk) - n/2*log(2*pi)
+function GP_marginal_loglikelihod(X::T, Y::T, K::Kt) where {T <: AbstractArray, Kt <: Kernel}
+    R = evalKmatrix(K, X, Y)
+    Kinv = inv(R)
+    n = size(Y, 1)
+    dk = det(R)
+    return -0.5 * Y' * Kinv * Y - 0.5 * log(dk) - n / 2 * log(2 * pi)
 end
 
 # ╔═╡ ae86f45c-aa43-448e-a4ba-339303802f7d
