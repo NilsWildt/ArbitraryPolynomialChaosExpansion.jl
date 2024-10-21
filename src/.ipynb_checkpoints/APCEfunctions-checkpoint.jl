@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+using ChainRulesCore
 
 @info "Benchmarking Matrix mutplication speed" LinearAlgebra.peakflops(; parallel = true)
 
@@ -138,28 +139,50 @@ end
 end
 
 
-@stable function aPCE_PsiPolynomialMatrix_zygote(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis) where {T <: Real}
+function aPCE_PsiPolynomialMatrix_zygote(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis) where {T <: Real}
     NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
     NCpoints = size(TrainingInput, 1)
-    Psi = Zygote.bufferfrom(ones(eltype(TrainingInput), NumberOfTerms, NCpoints))
-    # OrthonormalBasis = T.(OrthonormalBasis)
-    # Function to evaluate polynomials for a given term and input sample
-    @inbounds for i in 1:NumberOfTerms  # For each term in the polynomial expansion
-        # product = 1.0  # Initialize the product for this term and sample
-        for ii in 1:InputDimensions  # For each dimension of the input
-            degree = MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
-            coeffs = @views OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
-            # p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
-            # p = Poly(coeffs)
-            for j in 1:NCpoints  # For each input sample
-                x = TrainingInput[j, ii]
-                Psi[i, j] *= evalpoly_two(x, coeffs)
-                # Psi[i,j] *= evalpoly(x, p)
-            end
-        end
-    end
-    return copy(Psi)
+    
+    Psi = [compute_Psi_element(i, j, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, InputDimensions) 
+           for i in 1:NumberOfTerms, j in 1:NCpoints]
+    return reshape(Psi, NumberOfTerms, NCpoints)
 end
+
+function compute_Psi_element(i, j, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, InputDimensions)
+    product = one(eltype(TrainingInput))
+    for ii in 1:InputDimensions
+        degree = MultivariatePolynomialDegrees[i, ii] + 1
+        coeffs = OrthonormalBasis[degree, 1:degree, ii]
+        x = TrainingInput[j, ii]
+        p_x = evalpoly(x, coeffs)
+        product *= p_x
+    end
+    return product
+end
+
+
+# @stable function aPCE_PsiPolynomialMatrix_zygote(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis) where {T <: Real}
+#     NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
+#     NCpoints = size(TrainingInput, 1)
+#     Psi = Zygote.bufferfrom(ones(eltype(TrainingInput), NumberOfTerms, NCpoints))
+#     # OrthonormalBasis = T.(OrthonormalBasis)
+#     # Function to evaluate polynomials for a given term and input sample
+#     @inbounds for i in 1:NumberOfTerms  # For each term in the polynomial expansion
+#         # product = 1.0  # Initialize the product for this term and sample
+#         for ii in 1:InputDimensions  # For each dimension of the input
+#             degree = MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
+#             coeffs = @views OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
+#             # p = Polynomials.Polynomial{T}(coeffs)  # Create the polynomial
+#             # p = Poly(coeffs)
+#             for j in 1:NCpoints  # For each input sample
+#                 x = TrainingInput[j, ii]
+#                 Psi[i, j] *= evalpoly_two(x, coeffs)
+#                 # Psi[i,j] *= evalpoly(x, p)
+#             end
+#         end
+#     end
+#     return copy(Psi)
+# end
 
 # Need this function for Orthonormal Basis is a ForwardDiff.
 @stable function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{S}) where {S, T <: Real}
@@ -517,7 +540,7 @@ end
 end
 
 
-@stable function evalpoly_two(x, cs::AbstractArray)
+function evalpoly_two(x, cs::AbstractArray)
     i = lastindex(cs)
     out = cs[i]
     i -= 1
@@ -529,7 +552,6 @@ end
     end
     return i == fi ? muladd(out, x, @inbounds(cs[fi])) : out
 end
-
 
 @stable function evaluate_derivative_horner(x, coeffs)
     n = length(coeffs) - 1
@@ -594,4 +616,57 @@ end
         end
     end
     return coeffs
+end
+
+
+
+function ChainRulesCore.frule((_, Δx), ::typeof(reverse_columns!), x)
+    Δx_reversed = similar(Δx)
+    for row in axes(Δx, 1)
+        Δx_reversed[row, :] = reverse(Δx[row, :])
+    end
+    y = reverse_columns!(x)
+    return y, Δx_reversed
+end
+
+function ChainRulesCore.rrule(::typeof(aPCE_PsiPolynomialMatrix), TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis)
+    x = ensure_matrix(TrainingInput)
+    Psi = aPCE_PsiPolynomialMatrix(x, MultivariatePolynomialDegrees, OrthonormalBasis)
+    NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
+    NCpoints = size(x, 1)
+    p_values = zeros(eltype(x), NumberOfTerms, InputDimensions, NCpoints)
+    dp_values = zeros(eltype(x), NumberOfTerms, InputDimensions, NCpoints)
+
+    for i in 1:NumberOfTerms
+        for ii in 1:InputDimensions
+            degree = MultivariatePolynomialDegrees[i, ii] + 1
+            coeffs = OrthonormalBasis[degree, 1:degree, ii]
+            x_ii = x[:, ii]
+            p_x = evalpoly.(x_ii, coeffs)
+            dp_x = evalpoly_derivative.(x_ii, coeffs)
+            p_values[i, ii, :] .= p_x
+            dp_values[i, ii, :] .= dp_x
+        end
+    end
+
+    function aPCE_pullback(ΔPsi)
+        Δx = zeros(size(x))
+        for i in 1:NumberOfTerms
+            for j in 1:NCpoints
+                for k in 1:InputDimensions
+                    prod = prod(p_values[i, setdiff(1:InputDimensions, k), j])
+                    Δx[j, k] += ΔPsi[i, j] * prod * dp_values[i, k, j]
+                end
+            end
+        end
+        return (NoTangent(), Δx, NoTangent(), NoTangent())
+    end
+
+    return Psi, aPCE_pullback
+end
+
+function evalpoly_derivative(x, coeffs)
+    n = length(coeffs) - 1
+    derivative_coeffs = coeffs[2:end] .* (1:n)'
+    return evalpoly(x, derivative_coeffs)
 end
