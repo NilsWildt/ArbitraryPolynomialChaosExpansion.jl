@@ -150,6 +150,17 @@ function aPCE_PsiPolynomialMatrix_zygote(TrainingInput::AbstractArray{T}, Multiv
     return reshape(Psi, NumberOfTerms, NCpoints)
 end
 
+function aPCE_PsiPolynomialMatrix_zygote(TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis)
+    NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
+    NCpoints = size(TrainingInput, 1)
+
+    Psi = [
+        compute_Psi_element(i, j, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, InputDimensions)
+            for i in 1:NumberOfTerms, j in 1:NCpoints
+    ]
+    return reshape(Psi, NumberOfTerms, NCpoints)
+end
+
 function compute_Psi_element(i, j, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, InputDimensions)
     product = one(eltype(TrainingInput))
     for ii in 1:InputDimensions

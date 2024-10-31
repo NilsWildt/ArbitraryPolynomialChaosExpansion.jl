@@ -145,7 +145,7 @@ end
     # NumberOfTerms, InputDimensions = size(aPCE.MultivariatePolynomialDegrees)
     # NCpoints = size(TrainingInput, 1)
     # Psi = SMatrix{NumberOfTerms,NCpoints}(aPCE_PsiPolynomialMatrix(aPCE, TrainingInput)')
-    Psi = aPCE_PsiPolynomialMatrix_zygote(aPCE, TrainingInput)' |> Matrix{T}
+    Psi = aPCE_PsiPolynomialMatrix(aPCE, TrainingInput)' |> Matrix{T}
     # @warn "SPYING"
     # display(UnicodePlots.spy(sparse(Psi)))
     # @debug "" size(TrainingInput) size(TrainingOutput) size(Psi) typeof(Psi) typeof(TrainingOutput) typeof(TrainingInput) size(aPCE.ExpansionCoefficients) typeof(aPCE.ExpansionCoefficients)
