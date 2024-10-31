@@ -92,7 +92,7 @@ end
 
 function aPCE_PsiPolynomialMatrix(aPCE::aPCE{T}, TrainingInput::S)::S where {T <: Real, S <: AbstractArray}
     # @info "" aPCE typeof(TrainingInput) typeof(aPCE)
-    Psi = aPCE_PsiPolynomialMatrix_zygote(TrainingInput, aPCE.MultivariatePolynomialDegrees, aPCE.OrthonormalBasis)
+    Psi = aPCE_PsiPolynomialMatrix(TrainingInput, aPCE.MultivariatePolynomialDegrees, aPCE.OrthonormalBasis)
     return Psi
 end
 
@@ -175,7 +175,7 @@ end
 
 @stable function predict(aPCE::aPCE{T}, PredictionInput)::Matrix{T} where {T <: Real}
     # @info "=> aPCE Toolbox: Prediction using Arbitrary Polynomial Chaos ..."
-    Psi = aPCE_PsiPolynomialMatrix_zygote(aPCE, PredictionInput)
+    Psi = aPCE_PsiPolynomialMatrix(aPCE, PredictionInput)
     TensorOperations.@tensor PredictionOutput[k, j] := Psi[i, k] * aPCE.ExpansionCoefficients[i, j]
     # PredictionOutput = outer_product_kernel(cu(Psi), cu(aPCE.ExpansionCoefficients))
     return PredictionOutput
@@ -183,7 +183,7 @@ end
 
 
 @stable function predict_from_coeffs(aPCE::aPCE{T}, PredictionInput, θ) where {T <: ForwardDiff.Dual}
-    Psi = aPCE_PsiPolynomialMatrix_zygote(aPCE, PredictionInput)
+    Psi = aPCE_PsiPolynomialMatrix(aPCE, PredictionInput)
     @einsum PredictionOutput[k, j] := Psi[i, k] * θ[i, j]
     # PredictionOutput = outer_product_kernel(cu(Psi), cu(aPCE.ExpansionCoefficients))
     return PredictionOutput
