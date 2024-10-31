@@ -47,7 +47,7 @@ GLMakie.inline!(false)
 function u_true(x1, x2)
     p1 = @. pi * x1
     p2 = @. pi * x2
-    return@. sin(p1) * sin(p2) + 4 * sin(4 * p1) * sin(4 * p2)
+    return @. sin(p1) * sin(p2) + 4 * sin(4 * p1) * sin(4 * p2)
 end
 
 # ╔═╡ ae21e1e7-a750-4b04-a47a-9a022c8402bf
@@ -115,11 +115,11 @@ begin
     @doc doc""" 
     k_mq <: Kernel
     Multiquadratic kernel
-
+    
     ```math
     K(x,y) = \frac{1}{(\sigma^2 + \sqrt{|x-y|}^2)}
     ```
-
+    
     scaling factor ``\sigma``.
     """
     mutable struct Mq{T <: Real} <: Kernel

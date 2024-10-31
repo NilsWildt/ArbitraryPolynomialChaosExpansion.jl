@@ -37,7 +37,7 @@ module Runner
     # Returns
     - `X_train`: The training set features.
     - `X_test`: The testing set features.
-
+    
     The function randomly shuffles the dataset and splits it according to the specified training proportion (`at`).
     """
     function partitionTrainTest(data; at = 0.7, rng = Xoshiro())

@@ -37,7 +37,7 @@ GLMakie.inline!(false)
 function u_true(x1, x2)
     p1 = @. pi * x1
     p2 = @. pi * x2
-    return@. sin(p1) * sin(p2) + 4 * sin(4 * p1) * sin(4 * p2)
+    return @. sin(p1) * sin(p2) + 4 * sin(4 * p1) * sin(4 * p2)
 end
 
 # ╔═╡ ae21e1e7-a750-4b04-a47a-9a022c8402bf
@@ -64,7 +64,7 @@ md"""
 # ╔═╡ 5b4bc70a-d4f4-4464-a5f9-f30d86794653
 begin
     function k_gauss(r; ϵ = 0.1)
-        return  exp(-1 / (2 * ϵ^2) * r^2)
+        return exp(-1 / (2 * ϵ^2) * r^2)
     end
     ∇G = x -> ForwardDiff.derivative(k_gauss, x)
     ΔG = x -> ForwardDiff.derivative(∇G, x)

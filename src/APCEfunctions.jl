@@ -92,7 +92,7 @@ end
             num_to_keep = round(Int, percentage * n)
             return @views array[1:num_to_keep]
         catch
-            return  array[:]
+            return array[:]
         end
     end
 
@@ -142,9 +142,11 @@ end
 function aPCE_PsiPolynomialMatrix_zygote(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis) where {T <: Real}
     NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
     NCpoints = size(TrainingInput, 1)
-    
-    Psi = [compute_Psi_element(i, j, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, InputDimensions) 
-           for i in 1:NumberOfTerms, j in 1:NCpoints]
+
+    Psi = [
+        compute_Psi_element(i, j, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, InputDimensions)
+            for i in 1:NumberOfTerms, j in 1:NCpoints
+    ]
     return reshape(Psi, NumberOfTerms, NCpoints)
 end
 
@@ -514,7 +516,7 @@ end
 
 
 @stable function compose_Ψ(x::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis, degree) where {T}
-    Ψ = aPCE_PsiPolynomialMatrix(x, MultivariatePolynomialDegrees, OrthonormalBasis)' |> Matrix{T}
+    Ψ = aPCE_PsiPolynomialMatrix_zygote(x, MultivariatePolynomialDegrees, OrthonormalBasis)' |> Matrix{T}
     return Ψ
 end
 
@@ -619,7 +621,6 @@ end
 end
 
 
-
 function ChainRulesCore.frule((_, Δx), ::typeof(reverse_columns!), x)
     Δx_reversed = similar(Δx)
     for row in axes(Δx, 1)
@@ -629,41 +630,41 @@ function ChainRulesCore.frule((_, Δx), ::typeof(reverse_columns!), x)
     return y, Δx_reversed
 end
 
-function ChainRulesCore.rrule(::typeof(aPCE_PsiPolynomialMatrix), TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis)
-    x = ensure_matrix(TrainingInput)
-    Psi = aPCE_PsiPolynomialMatrix(x, MultivariatePolynomialDegrees, OrthonormalBasis)
-    NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
-    NCpoints = size(x, 1)
-    p_values = zeros(eltype(x), NumberOfTerms, InputDimensions, NCpoints)
-    dp_values = zeros(eltype(x), NumberOfTerms, InputDimensions, NCpoints)
+# function ChainRulesCore.rrule(::typeof(aPCE_PsiPolynomialMatrix_zygote), TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis)
+#     x = ensure_matrix(TrainingInput)
+#     Psi = aPCE_PsiPolynomialMatrix_zygote(x, MultivariatePolynomialDegrees, OrthonormalBasis)
+#     NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
+#     NCpoints = size(x, 1)
+#     p_values = zeros(eltype(x), NumberOfTerms, InputDimensions, NCpoints)
+#     dp_values = zeros(eltype(x), NumberOfTerms, InputDimensions, NCpoints)
 
-    for i in 1:NumberOfTerms
-        for ii in 1:InputDimensions
-            degree = MultivariatePolynomialDegrees[i, ii] + 1
-            coeffs = OrthonormalBasis[degree, 1:degree, ii]
-            x_ii = x[:, ii]
-            p_x = evalpoly.(x_ii, coeffs)
-            dp_x = evalpoly_derivative.(x_ii, coeffs)
-            p_values[i, ii, :] .= p_x
-            dp_values[i, ii, :] .= dp_x
-        end
-    end
+#     for i in 1:NumberOfTerms
+#         for ii in 1:InputDimensions
+#             degree = MultivariatePolynomialDegrees[i, ii] + 1
+#             coeffs = OrthonormalBasis[degree, 1:degree, ii]
+#             x_ii = x[:, ii]
+#             p_x = evalpoly.(x_ii, coeffs)
+#             dp_x = evalpoly_derivative.(x_ii, coeffs)
+#             p_values[i, ii, :] .= p_x
+#             dp_values[i, ii, :] .= dp_x
+#         end
+#     end
 
-    function aPCE_pullback(ΔPsi)
-        Δx = zeros(size(x))
-        for i in 1:NumberOfTerms
-            for j in 1:NCpoints
-                for k in 1:InputDimensions
-                    prod = prod(p_values[i, setdiff(1:InputDimensions, k), j])
-                    Δx[j, k] += ΔPsi[i, j] * prod * dp_values[i, k, j]
-                end
-            end
-        end
-        return (NoTangent(), Δx, NoTangent(), NoTangent())
-    end
+#     function aPCE_pullback(ΔPsi)
+#         Δx = zeros(size(x))
+#         for i in 1:NumberOfTerms
+#             for j in 1:NCpoints
+#                 for k in 1:InputDimensions
+#                     prod = prod(p_values[i, setdiff(1:InputDimensions, k), j])
+#                     Δx[j, k] += ΔPsi[i, j] * prod * dp_values[i, k, j]
+#                 end
+#             end
+#         end
+#         return (NoTangent(), Δx, NoTangent(), NoTangent())
+#     end
 
-    return Psi, aPCE_pullback
-end
+#     return Psi, aPCE_pullback
+# end
 
 function evalpoly_derivative(x, coeffs)
     n = length(coeffs) - 1

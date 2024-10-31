@@ -478,7 +478,7 @@ end
 function u_true(x1, x2)
     p1 = @. pi * x1
     p2 = @. pi * x2
-    return@. sin(p1) * sin(p2) + 4 * sin(4 * p1) * sin(4 * p2)
+    return @. sin(p1) * sin(p2) + 4 * sin(4 * p1) * sin(4 * p2)
 end
 
 # ╔═╡ e16ca2f6-b9c8-468f-99f4-9fda7dd0a27e
