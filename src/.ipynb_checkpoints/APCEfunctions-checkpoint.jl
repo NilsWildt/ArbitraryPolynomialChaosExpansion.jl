@@ -539,7 +539,6 @@ end
     return [i * coeffs[i + 1] for i in 1:(length(coeffs) - 1)]
 end
 
-
 function evalpoly_two(x, cs::AbstractArray)
     i = lastindex(cs)
     out = cs[i]
