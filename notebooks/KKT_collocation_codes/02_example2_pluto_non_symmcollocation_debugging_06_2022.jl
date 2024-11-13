@@ -6,64 +6,64 @@ using InteractiveUtils
 
 # ╔═╡ 2ab336b8-a937-11ec-2077-03c15fed8d4c
 begin
-	using Revise
-	using LinearAlgebra
-	using Makie
-	# using CairoMakie
-	using StaticArrays
-	# using GLMakie
-	# using JSServe
-	using GLMakie
-	using PlutoUI
-	using Colors
-	using ReverseDiff
-	using ForwardDiff
-	using Random
-	using ColorTypes
-	# using KernelFunctions
-	using Distributions
-	using ColorSchemes
-	using BenchmarkTools
-	using Base.Iterators: flatten
-	using BlockArrays
-	using KrylovKit
-	using Latexify
-	using Markdown
-	using LatexPrint
-	using NLsolve # For nonlinear LM algorithm
-	using LeastSquaresOptim
-	using NL2sol
-	using NLS_Solver
-	using SparseMatricesCSR
-	using SparseArrays
-	# using Einsum
-	# using OMEinsum
+    using Revise
+    using LinearAlgebra
+    using Makie
+    # using CairoMakie
+    using StaticArrays
+    # using GLMakie
+    # using JSServe
+    using GLMakie
+    using PlutoUI
+    using Colors
+    using ReverseDiff
+    using ForwardDiff
+    using Random
+    using ColorTypes
+    # using KernelFunctions
+    using Distributions
+    using ColorSchemes
+    using BenchmarkTools
+    using Base.Iterators: flatten
+    using BlockArrays
+    using KrylovKit
+    using Latexify
+    using Markdown
+    using LatexPrint
+    using NLsolve # For nonlinear LM algorithm
+    using LeastSquaresOptim
+    using NL2sol
+    using NLS_Solver
+    using SparseMatricesCSR
+    using SparseArrays
+    # using Einsum
+    # using OMEinsum
 end
 
 # ╔═╡ 61cfcfa4-06af-4ace-8b1a-d851bae6d287
 GLMakie.inline!(false)
 
 # ╔═╡ 98201945-6dae-40db-944f-7617b6e2904d
-function u_true(x1,x2)
-	p1 = @. pi*x1
-	p2 = @. pi*x2
-	return@. sin(p1)*sin(p2) + 4*sin(4*p1)*sin(4*p2)
+function u_true(x1, x2)
+    p1 = @. pi * x1
+    p2 = @. pi * x2
+    return @. sin(p1) * sin(p2) + 4 * sin(4 * p1) * sin(4 * p2)
 end
 
 # ╔═╡ ae21e1e7-a750-4b04-a47a-9a022c8402bf
 function u_true(X)
-	x1 = X[:,1]
-	x2 = X[:,2]
-	p1 = pi.*x1 
-	p2 = pi.*x2
-	return @. sin(p1)*sin(p2) + 4*sin(4*p1)*sin(4*p2)
+    x1 = X[:, 1]
+    x2 = X[:, 2]
+    p1 = pi .* x1
+    p2 = pi .* x2
+    return @. sin(p1) * sin(p2) + 4 * sin(4 * p1) * sin(4 * p2)
 end
 
 # ╔═╡ b587a479-cb72-4c16-a23c-e7165f8011c8
 function meshgrid(x, y)
-   xx = [x for _ in y, x in x]
-   yy = [y for y in y, _ in x]
-	return xx,yy
+    xx = [x for _ in y, x in x]
+    yy = [y for y in y, _ in x]
+    return xx, yy
 end
 
 # ╔═╡ 15447e39-d4a8-4e79-bb11-63c8196efc5d
@@ -76,118 +76,118 @@ abstract type Kernel end
 
 # ╔═╡ c65ab83d-d13f-4476-a0aa-5d4f75d5b9ac
 begin
-	# Define datatypes for kernels
-	""" 
-	k_imq <: Kernel
-	Inverse multiquadratic kernel
-	```math
-	K(x,y) = sqrt()
-	```
-	scaling factor ``sigma``.
-	"""
-	
-	mutable struct Imq{T <: Real} <: Kernel
-	    "Scaling"
-	    σ::T
-	end
-	
-	# Constructor of the struct above.
-	Imq(σ::T) where T = Imq{T}(σ, [])
-	_evalKmatrix(imq::Imq, xy_dist) = @fastmath (ones(size(xy_dist)) .+ imq.σ.^(-2) .* xy_dist).^(-0.5)
-	function evalKmatrix(imq::Imq, x::AbstractArray, y::AbstractArray)
-	    xy_dist = pDist2Squared(x, y)
-	    K = _evalKmatrix(imq, xy_dist) # Do the inner product and get the polynomial Kernel Matrix
-	end
-	
-	function evalKernel(imq::Imq, x)
-	    return @fastmath  @. (1.0 .+ imq.σ.^(-2) .* x.^2).^(-0.5)
-	end
-	
-	
-	Base.String(::Imq) = "k_imq"
-	
+    # Define datatypes for kernels
+    """ 
+    k_imq <: Kernel
+    Inverse multiquadratic kernel
+    ```math
+    K(x,y) = sqrt()
+    ```
+    scaling factor ``sigma``.
+    """
+
+    mutable struct Imq{T <: Real} <: Kernel
+        "Scaling"
+        σ::T
+    end
+
+    # Constructor of the struct above.
+    Imq(σ::T) where {T} = Imq{T}(σ, [])
+    _evalKmatrix(imq::Imq, xy_dist) = @fastmath (ones(size(xy_dist)) .+ imq.σ .^ (-2) .* xy_dist) .^ (-0.5)
+    function evalKmatrix(imq::Imq, x::AbstractArray, y::AbstractArray)
+        xy_dist = pDist2Squared(x, y)
+        return K = _evalKmatrix(imq, xy_dist) # Do the inner product and get the polynomial Kernel Matrix
+    end
+
+    function evalKernel(imq::Imq, x)
+        return @fastmath  @. (1.0 .+ imq.σ .^ (-2) .* x .^ 2) .^ (-0.5)
+    end
+
+
+    Base.String(::Imq) = "k_imq"
+
 end
 
 # ╔═╡ 65f24007-c089-45f8-9ab5-3990c4c4071d
 begin
-	
-# Define datatypes for kernels
-	@doc doc""" 
-	k_mq <: Kernel
-	Multiquadratic kernel
-	
-	```math
-	K(x,y) = \frac{1}{(\sigma^2 + \sqrt{|x-y|}^2)}
-	```
-	
-	scaling factor ``\sigma``.
-	"""
-	mutable struct Mq{T <: Real} <: Kernel
-	    "Scaling"
-	    σ::T
-	end
-	
-	# Constructor of the struct above.
-	Mq(σ::T) where T = Mq{T}(1 / σ, [])
-	_evalKmatrix(mq::Mq, xy_dist) = @fastmath (ones(size(xy_dist)) .+ mq.σ.^2 .* xy_dist).^(0.5)
-	function evalKmatrix(mq::Mq, x::AbstractArray, y::AbstractArray)
-	    xy_dist = pDist2Squared(x, y)
-	    K = _evalKmatrix(mq, xy_dist) # Do the inner product and get the polynomial Kernel Matrix
-	end
-	
-	function evalKernel(mq::Mq, x)
-	    return @fastmath  @.  (1.0 .+ mq.σ.^(-2) .* x.^2).^(0.5)
-	end
-	
-	Base.print(::Mq) = "k_Mq"
+
+    # Define datatypes for kernels
+    @doc doc""" 
+    k_mq <: Kernel
+    Multiquadratic kernel
+    
+    ```math
+    K(x,y) = \frac{1}{(\sigma^2 + \sqrt{|x-y|}^2)}
+    ```
+    
+    scaling factor ``\sigma``.
+    """
+    mutable struct Mq{T <: Real} <: Kernel
+        "Scaling"
+        σ::T
+    end
+
+    # Constructor of the struct above.
+    Mq(σ::T) where {T} = Mq{T}(1 / σ, [])
+    _evalKmatrix(mq::Mq, xy_dist) = @fastmath (ones(size(xy_dist)) .+ mq.σ .^ 2 .* xy_dist) .^ (0.5)
+    function evalKmatrix(mq::Mq, x::AbstractArray, y::AbstractArray)
+        xy_dist = pDist2Squared(x, y)
+        return K = _evalKmatrix(mq, xy_dist) # Do the inner product and get the polynomial Kernel Matrix
+    end
+
+    function evalKernel(mq::Mq, x)
+        return @fastmath  @.  (1.0 .+ mq.σ .^ (-2) .* x .^ 2) .^ (0.5)
+    end
+
+    Base.print(::Mq) = "k_Mq"
 end
 
 # ╔═╡ 92ccc9e1-ccdb-4d6a-ab14-cfafc53bdd33
 begin
-	
-	
-	# Define datatypes for kernels
-	""" 
-	k_Gaussian <: Kernel
-	Gaussian kernel
-	```math
-	K(x,y) = exp(-1/sigma^2 cdot ||x-y||^2)
-	```
-	scaling factor ``sigma``.
-	"""
-	
-	mutable struct Gaussian{T <: Real} <: Kernel
-	    "Scaling"
-	    σ::T
-	end
-	
-	# Constructor of the struct above.
-	Gaussian(σ::T) where T = Gaussian{T}(σ, [])
-	
-	_evalKmatrix(gaussian::Gaussian, xy_dist) = @fastmath @.  exp(-1. / (2. .* gaussian.σ^2 ) * xy_dist)
-	
-	function evalKmatrix(gaussian::Gaussian, x::AbstractArray, y::AbstractArray)
-	    xy_dist = pDist2Squared(x, y)
-	    K = _evalKmatrix(gaussian, xy_dist) # Do the inner product and get the polynomial Kernel Matrix
-	end
-	
-	function evalKernel(gaussian::Gaussian, x)
-	    return @fastmath  @.  exp.(- x^2 / (2. * gaussian.σ^2 )) # 1. ./ (sqrt(2.0 * pi) * gaussian.σ) .*
-	end
-	
-	Base.String(::Gaussian) = "k_gaussian"
-	
+
+
+    # Define datatypes for kernels
+    """ 
+    k_Gaussian <: Kernel
+    Gaussian kernel
+    ```math
+    K(x,y) = exp(-1/sigma^2 cdot ||x-y||^2)
+    ```
+    scaling factor ``sigma``.
+    """
+
+    mutable struct Gaussian{T <: Real} <: Kernel
+        "Scaling"
+        σ::T
+    end
+
+    # Constructor of the struct above.
+    Gaussian(σ::T) where {T} = Gaussian{T}(σ, [])
+
+    _evalKmatrix(gaussian::Gaussian, xy_dist) = @fastmath @.  exp(-1.0 / (2.0 .* gaussian.σ^2) * xy_dist)
+
+    function evalKmatrix(gaussian::Gaussian, x::AbstractArray, y::AbstractArray)
+        xy_dist = pDist2Squared(x, y)
+        return K = _evalKmatrix(gaussian, xy_dist) # Do the inner product and get the polynomial Kernel Matrix
+    end
+
+    function evalKernel(gaussian::Gaussian, x)
+        return @fastmath  @.  exp.(- x^2 / (2.0 * gaussian.σ^2)) # 1. ./ (sqrt(2.0 * pi) * gaussian.σ) .*
+    end
+
+    Base.String(::Gaussian) = "k_gaussian"
+
 end
 
 # ╔═╡ af9ea2bb-279d-46f2-8d3b-434a21d62dcc
 begin
-	function k_matern_quadratic(r;ϵ=1.0)
-		return exp(-ϵ*r)*(3+3*ϵ*r+(ϵ*r)^2)
-	end
-	
-	function k_matern_cubic(r;ϵ=0.1)
-		return exp(-ϵ*r)*(15+15*ϵ*r+6*(ϵ*r)^2 + (ϵ*r)^3)
-	end
+    function k_matern_quadratic(r; ϵ = 1.0)
+        return exp(-ϵ * r) * (3 + 3 * ϵ * r + (ϵ * r)^2)
+    end
+
+    function k_matern_cubic(r; ϵ = 0.1)
+        return exp(-ϵ * r) * (15 + 15 * ϵ * r + 6 * (ϵ * r)^2 + (ϵ * r)^3)
+    end
 end
 
 # ╔═╡ 1698a554-26f3-43ea-b660-14987f55b979
@@ -196,7 +196,7 @@ md"""
 """
 
 # ╔═╡ 2d70df8a-fcbb-4cf5-aca6-2faac00641bd
-	RNG = Xoshiro(42)
+RNG = Xoshiro(42)
 
 # ╔═╡ 3498e878-8e4e-4e84-82d0-369b0fd3ffca
 md"""
@@ -222,21 +222,21 @@ But for now, skipt the nonlinear part.
 """
 
 # ╔═╡ f7af06b6-89e1-4345-be4a-18adb7b53566
-f = X -> @. -pi^2.0 .* (sin(pi*X[:,1]).*sin(pi*X[:,2])+64.0 .*sin(4*pi*X[:,1]).*sin(4*pi*X[:,2]) + sin(pi*X[:,1]).*sin(pi*X[:,2])+64.0  .*sin(4*pi*X[:,1]).*sin(4*pi*X[:,2]));
+f = X -> @. -pi^2.0 .* (sin(pi * X[:, 1]) .* sin(pi * X[:, 2]) + 64.0 .* sin(4 * pi * X[:, 1]) .* sin(4 * pi * X[:, 2]) + sin(pi * X[:, 1]) .* sin(pi * X[:, 2]) + 64.0 .* sin(4 * pi * X[:, 1]) .* sin(4 * pi * X[:, 2]));
 
 # ╔═╡ 5b56ef07-4f3c-4bc6-b249-4e0ac91bf8b3
-function g(x) 
-	n,m = size(x)
+function g(x)
+    n, m = size(x)
 
-	return zeros(n,1)
+    return zeros(n, 1)
 end
 
 # ╔═╡ 8160fc4e-f95e-4f53-9499-5681ed999c84
 begin
-	K = x -> evalKernel(Mq(0.1),x)
-	# K = x-> k_matern_cubic(x)
-	∇K = x-> ForwardDiff.derivative(K,x)
-	ΔK = x-> ForwardDiff.derivative(∇K,x)
+    K = x -> evalKernel(Mq(0.1), x)
+    # K = x-> k_matern_cubic(x)
+    ∇K = x -> ForwardDiff.derivative(K, x)
+    ΔK = x -> ForwardDiff.derivative(∇K, x)
 end
 
 # ╔═╡ e19be3ca-be52-4322-a346-150aaeb4756b
@@ -246,223 +246,220 @@ N = 1800
 ε = 1.0
 
 # ╔═╡ 586a9412-19a3-47e5-a280-6598b6629583
-begin	
-	
-	function solve_PDE(Λ,ΛEv,rhs)
-		 # f(α) = sum(abs.(Λ*α-rhs)^2)
-		function f(α)
-			return Λ*α-rhs
-		end
+begin
 
-		# J = α -> ForwardDiff.jacobian(f,α)
-		
-		α0_cheat = fill(1.0,size(rhs))
-		res = LeastSquaresOptim.optimize(f, α0_cheat, LevenbergMarquardt())
-		# res = nlsolve(f!,α0_cheat, autodiff = :forward,show_trace=true)
-		α = res.minimizer
-		# @debug "Dbg" res
+    function solve_PDE(Λ, ΛEv, rhs)
+        # f(α) = sum(abs.(Λ*α-rhs)^2)
+        function f(α)
+            return Λ * α - rhs
+        end
 
-	    u = ΛEv * α |> vec 
-	end
-	
-	
+        # J = α -> ForwardDiff.jacobian(f,α)
 
-	function RHS(f,g,X∂Ω,XΩ)
-		rhs = vcat(f(XΩ),g(X∂Ω))
-		return rhs |> vec
-	end
-	
-	function evaluation_matrix(rbf,∇rbf,Δrbf,XΩ,X∂Ω,Xnew)
-		nin,_ = size(XΩ)
-		nbnd,_ = size(X∂Ω)
-		nnew,_ = size(Xnew)
-	
-		X = [XΩ;X∂Ω];
-		D = pwD(Xnew,X)
-		ΛEv  = zeros(nnew,nin+nbnd);
-		ΛEv .= rbf.(D[:,:])	
-		# @inbounds for i = 1:nnew
-		#     for j = 1:nin+nbnd
-		#        if j <= nin
-		#             ΛEv[i,j] = Δrbf.(D[i,j])
-		#         else
-		#             ΛEv[i,j] = rbf.(D[i,j])
-		#         end
-		#     end
-		# end
+        α0_cheat = fill(1.0, size(rhs))
+        res = LeastSquaresOptim.optimize(f, α0_cheat, LevenbergMarquardt())
+        # res = nlsolve(f!,α0_cheat, autodiff = :forward,show_trace=true)
+        α = res.minimizer
+        # @debug "Dbg" res
 
-		return ΛEv	
-	end
-
-	function collocation_points(M=1024,MΩ = 900)
-		x∂Ωt = LinRange(0,4,MΩ)#rand(RNG,Uniform(0,4),MΩ)
-		X∂Ω = zeros(MΩ,2)
-		for i in LinearIndices(x∂Ωt)
-			if 0.0 <= x∂Ωt[i] < 1.0 # Lower line
-				X∂Ω[i,:] = [x∂Ωt[i] 0.0]
-			elseif 1.0 <= x∂Ωt[i] < 2.0 # Right boarder
-				X∂Ω[i,:] = [1.0 x∂Ωt[i]-1.0]
-			elseif 2.0 <= x∂Ωt[i] < 3.0 # Top
-				X∂Ω[i,:] = [x∂Ωt[i]-2.0 1.0]
-			else 
-				X∂Ω[i,:] = [0.0 x∂Ωt[i]-3.0]
-			end
-		end
-		n = Int64(ceil(sqrt(M)))
-		# x = LinRange(0+1/n,1-1/n,n-2)
-		x = LinRange(0,1,n)
-		xx,yy=meshgrid(x,x)
-		XΩ  = [xx[:] yy[:]]
-		# XΩ  = xx#rand(RNG,Uniform(0,1),(M,2))
-		# unique!(X)
-		# unique!(x∂Ω)
-		return XΩ,X∂Ω
-	end
+        return u = ΛEv * α |> vec
+    end
 
 
+    function RHS(f, g, X∂Ω, XΩ)
+        rhs = vcat(f(XΩ), g(X∂Ω))
+        return rhs |> vec
+    end
 
-function collocation_matrix(rbf,∇rbf,Δrbf,XΩ,X∂Ω)
-			nin,_= size(XΩ)
-			nbnd,_= size(X∂Ω)
-			N = nin+nbnd
-			X = [XΩ;X∂Ω];
-			D = pwD(X,X)
-			Λ  = zeros(N,N);
-			# Could be speeded up, if matrix symmetric
-			@inbounds for i = 1:N
-			     @simd for j = 1:N
-				    if ((i <= nin) && (j <= nin))
-		            	Λ[i,j]  = @views Δrbf.(D[i,j])
-					elseif ((i > nin) && (j > nin))
-		            	Λ[i,j]  = @views rbf.(D[i,j]);
-			        end
-			    end
-			end
-			return Λ
-		end
-	
-	
-	function prepend_one(X::AbstractArray)
-	    X = cat(ones(size(X, 1)), X;dims = 2)
-	end
-	
-	""" 
-	pDist2 
-	pairwise euclidean distance
-	```math
-	(x - y) = sqrt(x ^ 2 + y ^ 2 - 2 * x * y)
-	```
-	""" 
+    function evaluation_matrix(rbf, ∇rbf, Δrbf, XΩ, X∂Ω, Xnew)
+        nin, _ = size(XΩ)
+        nbnd, _ = size(X∂Ω)
+        nnew, _ = size(Xnew)
 
-	function pairdist2(a::AbstractMatrix, b::AbstractMatrix)
-		return pairdist(a::AbstractMatrix, b::AbstractMatrix;doroot=false)
-	end
-	
-	function pairdist(a::AbstractMatrix, b::AbstractMatrix;doroot=true)
-		na,_=size(a)
-		nb,_=size(b)
-	    r = a*b'
-	    sa2 = sum(a.^2,dims=2)
-	    sb2 = sum(b.^2,dims=2)
-	    @inbounds for j = 1 : nb
-	        @simd for i = 1 : na
-	            r[i,j] = @views sa2[i] + sb2[j] - 2 * r[i,j]
-				if doroot
-	            	 r[i,j] = @views isnan(r[i,j]) ? NaN : sqrt(max(r[i,j], 0.0))
-				end
-	        end
-	    end
-	    return r
-	end
+        X = [XΩ;X∂Ω]
+        D = pwD(Xnew, X)
+        ΛEv = zeros(nnew, nin + nbnd)
+        ΛEv .= rbf.(D[:, :])
+        # @inbounds for i = 1:nnew
+        #     for j = 1:nin+nbnd
+        #        if j <= nin
+        #             ΛEv[i,j] = Δrbf.(D[i,j])
+        #         else
+        #             ΛEv[i,j] = rbf.(D[i,j])
+        #         end
+        #     end
+        # end
 
-	function pwD2(a::AbstractMatrix, b::AbstractMatrix)
-		pairdist(a, b;doroot=false)
-	end
-	
-		function pwD(a::AbstractMatrix, b::AbstractMatrix)
-		pairdist(a, b;doroot=true)
-	end
-		
-	
-	
-	# function pwDDD(X::AbstractArray, Y::AbstractArray)
-	#     D = sqrt.(pwD2(X, Y))
-	#     return D
-	# end
-	 
-	# function pwD2DDX::AbstractArray, Y::AbstractArray)
-	#     # This implementation uses
-	#     # (x - y) ^ 2 = x ^ 2 + y ^ 2 - 2 * x * y
-	#    		nx,mx = size(X)
-	# 		ny,my = size(Y)
-	# 	 	A = reshape(sum(X.^2;dims = 2),(nx,1)) * ones(1, ny)
-	# 	    B =  ones(nx, 1)*sum(Y.^2;dims = 2)'
-	# 	    D = A.+ B #.- 2.0.*X*Y
-	# 	return D
-	# end
-	
-	# @fastmath function kernel_dot(X::AbstractArray, Y::AbstractArray)
-	#     dimY = size(Y)
-	#     dimX = size(X)
-	#     Lx = Int64(dimX[1])
-	#     Ly = Int64(dimY[1])
-	#     A = zeros(Float64, (Lx, Ly))
-	#     @inbounds @simd for i in 1:Ly 
-	#         for j in 1:Lx
-	#             A[i,j] = @views X[i] * Y[j]
-	#         end
-	#     end
-	#     return A
-	# end
-	
+        return ΛEv
+    end
+
+    function collocation_points(M = 1024, MΩ = 900)
+        x∂Ωt = LinRange(0, 4, MΩ) #rand(RNG,Uniform(0,4),MΩ)
+        X∂Ω = zeros(MΩ, 2)
+        for i in LinearIndices(x∂Ωt)
+            if 0.0 <= x∂Ωt[i] < 1.0 # Lower line
+                X∂Ω[i, :] = [x∂Ωt[i] 0.0]
+            elseif 1.0 <= x∂Ωt[i] < 2.0 # Right boarder
+                X∂Ω[i, :] = [1.0 x∂Ωt[i] - 1.0]
+            elseif 2.0 <= x∂Ωt[i] < 3.0 # Top
+                X∂Ω[i, :] = [x∂Ωt[i] - 2.0 1.0]
+            else
+                X∂Ω[i, :] = [0.0 x∂Ωt[i] - 3.0]
+            end
+        end
+        n = Int64(ceil(sqrt(M)))
+        # x = LinRange(0+1/n,1-1/n,n-2)
+        x = LinRange(0, 1, n)
+        xx, yy = meshgrid(x, x)
+        XΩ = [xx[:] yy[:]]
+        # XΩ  = xx#rand(RNG,Uniform(0,1),(M,2))
+        # unique!(X)
+        # unique!(x∂Ω)
+        return XΩ, X∂Ω
+    end
+
+
+    function collocation_matrix(rbf, ∇rbf, Δrbf, XΩ, X∂Ω)
+        nin, _ = size(XΩ)
+        nbnd, _ = size(X∂Ω)
+        N = nin + nbnd
+        X = [XΩ;X∂Ω]
+        D = pwD(X, X)
+        Λ = zeros(N, N)
+        # Could be speeded up, if matrix symmetric
+        @inbounds for i in 1:N
+            @simd for j in 1:N
+                if ((i <= nin) && (j <= nin))
+                    Λ[i, j] = @views Δrbf.(D[i, j])
+                elseif ((i > nin) && (j > nin))
+                    Λ[i, j] = @views rbf.(D[i, j])
+                end
+            end
+        end
+        return Λ
+    end
+
+
+    function prepend_one(X::AbstractArray)
+        return X = cat(ones(size(X, 1)), X; dims = 2)
+    end
+
+    """ 
+    pDist2 
+    pairwise euclidean distance
+    ```math
+    (x - y) = sqrt(x ^ 2 + y ^ 2 - 2 * x * y)
+    ```
+    """
+
+    function pairdist2(a::AbstractMatrix, b::AbstractMatrix)
+        return pairdist(a::AbstractMatrix, b::AbstractMatrix; doroot = false)
+    end
+
+    function pairdist(a::AbstractMatrix, b::AbstractMatrix; doroot = true)
+        na, _ = size(a)
+        nb, _ = size(b)
+        r = a * b'
+        sa2 = sum(a .^ 2, dims = 2)
+        sb2 = sum(b .^ 2, dims = 2)
+        @inbounds for j in 1:nb
+            @simd for i in 1:na
+                r[i, j] = @views sa2[i] + sb2[j] - 2 * r[i, j]
+                if doroot
+                    r[i, j] = @views isnan(r[i, j]) ? NaN : sqrt(max(r[i, j], 0.0))
+                end
+            end
+        end
+        return r
+    end
+
+    function pwD2(a::AbstractMatrix, b::AbstractMatrix)
+        return pairdist(a, b; doroot = false)
+    end
+
+    function pwD(a::AbstractMatrix, b::AbstractMatrix)
+        return pairdist(a, b; doroot = true)
+    end
+
+
+    # function pwDDD(X::AbstractArray, Y::AbstractArray)
+    #     D = sqrt.(pwD2(X, Y))
+    #     return D
+    # end
+
+    # function pwD2DDX::AbstractArray, Y::AbstractArray)
+    #     # This implementation uses
+    #     # (x - y) ^ 2 = x ^ 2 + y ^ 2 - 2 * x * y
+    #    		nx,mx = size(X)
+    # 		ny,my = size(Y)
+    # 	 	A = reshape(sum(X.^2;dims = 2),(nx,1)) * ones(1, ny)
+    # 	    B =  ones(nx, 1)*sum(Y.^2;dims = 2)'
+    # 	    D = A.+ B #.- 2.0.*X*Y
+    # 	return D
+    # end
+
+    # @fastmath function kernel_dot(X::AbstractArray, Y::AbstractArray)
+    #     dimY = size(Y)
+    #     dimX = size(X)
+    #     Lx = Int64(dimX[1])
+    #     Ly = Int64(dimY[1])
+    #     A = zeros(Float64, (Lx, Ly))
+    #     @inbounds @simd for i in 1:Ly
+    #         for j in 1:Lx
+    #             A[i,j] = @views X[i] * Y[j]
+    #         end
+    #     end
+    #     return A
+    # end
+
 end
 
 # ╔═╡ 01ac88e8-563b-4481-8990-c15fae7b7eb9
-XΩ,X∂Ω = collocation_points(200,120);
+XΩ, X∂Ω = collocation_points(200, 120);
 
 # ╔═╡ e59ff35d-e5a1-4658-8a13-9013568ecc2e
 begin
-	# Just to double check ft
-	# operator to get the derivative of this function using AD
-	∇u = x -> ForwardDiff.jacobian(u_true, x)
-	Δu = x -> ForwardDiff.jacobian(∇u ,x)
-	ft = @. x-> tr(Δu(x))
-	fRHSX = ft([XΩ[i,:]' for i in 1:size(XΩ,1)])
+    # Just to double check ft
+    # operator to get the derivative of this function using AD
+    ∇u = x -> ForwardDiff.jacobian(u_true, x)
+    Δu = x -> ForwardDiff.jacobian(∇u, x)
+    ft = @. x -> tr(Δu(x))
+    fRHSX = ft([XΩ[i, :]' for i in 1:size(XΩ, 1)])
 end
 
 # ╔═╡ c43c3daa-c5a4-41bf-8e7b-5332e57407ab
-sum(f(XΩ).-fRHSX)
+sum(f(XΩ) .- fRHSX)
 
 # ╔═╡ 7205efc8-202a-41e3-a22a-fbedcf29fed4
 begin
-	fig1 = scatter(X∂Ω,color=:red,marker=:x,markersize=7)
-	scatter!(XΩ,color=:blue,marker=:x,markersize=10)
-	fig1
+    fig1 = scatter(X∂Ω, color = :red, marker = :x, markersize = 7)
+    scatter!(XΩ, color = :blue, marker = :x, markersize = 10)
+    fig1
 end
 
 # ╔═╡ 5d89d178-4f8b-4f9a-b9c5-a05f56e86bdd
-Λ = collocation_matrix(K,∇K,ΔK,XΩ,X∂Ω) + 1E-13I |> sparse
+Λ = collocation_matrix(K, ∇K, ΔK, XΩ, X∂Ω) + 1.0e-13I |> sparse
 
 # ╔═╡ 97f8c31f-fba1-444b-b688-3772a4c09c44
-Xnew,_ = collocation_points(N,128);
+Xnew, _ = collocation_points(N, 128);
 
 # ╔═╡ edd9aa59-2323-4a4d-a57f-e51ef5e4529b
-uref = u_true(Xnew[:,1],Xnew[:,2])
+uref = u_true(Xnew[:, 1], Xnew[:, 2])
 
 # ╔═╡ 898b95e7-13f4-41e9-8b64-4a2452913b0c
-ΛEv =	evaluation_matrix(K,∇K,ΔK,XΩ,X∂Ω,Xnew)
+ΛEv = evaluation_matrix(K, ∇K, ΔK, XΩ, X∂Ω, Xnew)
 
 # ╔═╡ a45d4b70-4f29-4113-83cb-a5f21424fb16
-rhs = RHS(f,g,X∂Ω,XΩ);
+rhs = RHS(f, g, X∂Ω, XΩ);
 
 # ╔═╡ 9c7ccbd5-49da-4093-917e-156a75c43ee1
- u = solve_PDE(Λ,ΛEv,rhs)
+u = solve_PDE(Λ, ΛEv, rhs)
 
 # ╔═╡ a8e5f55e-ef47-479f-aa57-4992bd401b76
 @info "Sizes:" size(Λ) size(ΛEv) size(rhs) size(u)
 
 # ╔═╡ 492e36e3-6f58-4efe-8b95-513a4dd28460
-# begin	
+# begin
 # 	set_window_config!(;
 # 	    renderloop = GLMakie.renderloop,
 # 	    vsync = true,
@@ -473,7 +470,7 @@ rhs = RHS(f,g,X∂Ω,XΩ);
 # 	    decorated = true,
 # 	    title = "U"
 # 	)
-	
+
 # 	fontsize_theme = Theme(fontsize = 30)
 # 	set_theme!(fontsize_theme)
 # 	set_theme!(theme_light())
@@ -487,31 +484,31 @@ rhs = RHS(f,g,X∂Ω,XΩ);
 
 # 	xx,yy =  meshgrid(XΩ[:,1],XΩ[:,2])
 # 	zz = u_true(xx,yy)
-	
+
 # 	surface!(ax,XΩ[:,1],XΩ[:,2],u_true(XΩ[:,1],XΩ[:,2]), colormap = (:Blues, 0.8),  transparency = false,shading=false)
-	
+
 # 	surface!(ax,Xnew[:,1],Xnew[:,2],vec(u), colormap = (:OrRd, 0.8), transparency = true,shading=false)
 
 # 	xmin, ymin, zmin = minimum(ax.finallimits[])
 #     xmax, ymax, zmax = maximum(ax.finallimits[])
-	
+
 # 	scatter!(ax,X∂Ω,color=:red,marker=:x,markersize=10,transformation = (:xy, zmin-2))
 # 	scatter!(ax, XΩ,color=:blue,marker=:x,markersize=10,transformation = (:xy, zmin-2))
 
-	
+
 #     contour!(ax, XΩ[:,1],XΩ[:,2],u_true(XΩ[:,1],XΩ[:,2]); levels = 20, colormap = :Blues, linewidth = 2, transformation = (:xy, zmin),
 #         transparency = true)
-	
+
 
 # 	 contour!(ax, Xnew[:,1],Xnew[:,2],vec(u); levels = 20, colormap = :OrRd, linewidth = 2, transformation = (:xy, zmin-1),transparency = true)
-	
+
 # 	gl_screen = display(current_figure())
 # 	wait(gl_screen)
 # 	fig
 # end
 
 # ╔═╡ f2aa7357-a0a6-4cd1-9f88-666e0d2ab291
-# begin	
+# begin
 # 	set_window_config!(;
 # 	    renderloop = GLMakie.renderloop,
 # 	    vsync = true,
@@ -522,7 +519,7 @@ rhs = RHS(f,g,X∂Ω,XΩ);
 # 	    decorated = true,
 # 	    title = "U"
 # 	)
-	
+
 # 	fontsize_theme = Theme(fontsize = 30)
 # 	set_theme!(fontsize_theme)
 # 	set_theme!(theme_light())
@@ -536,24 +533,24 @@ rhs = RHS(f,g,X∂Ω,XΩ);
 
 # 	xx,yy =  meshgrid(XΩ[:,1],XΩ[:,2])
 # 	zz = u_true(xx,yy)
-	
+
 # 	surface!(ax,XΩ[:,1],XΩ[:,2],u_true(XΩ[:,1],XΩ[:,2]), colormap = (:Blues, 0.8),  transparency = false,shading=false)
-	
+
 # 	surface!(ax,Xnew[:,1],Xnew[:,2],vec(u), colormap = (:OrRd, 0.2), transparency = true,shading=false)
 
 # 	xmin, ymin, zmin = minimum(ax.finallimits[])
 #     xmax, ymax, zmax = maximum(ax.finallimits[])
-	
+
 # 	scatter!(ax,X∂Ω,color=:red,marker=:x,markersize=10,transformation = (:xy, zmin-2))
 # 	scatter!(ax, XΩ,color=:blue,marker=:x,markersize=10,transformation = (:xy, zmin-2))
 
-	
+
 #     contour!(ax, XΩ[:,1],XΩ[:,2],u_true(XΩ[:,1],XΩ[:,2]); levels = 20, colormap = :Blues, linewidth = 2, transformation = (:xy, zmin),
 #         transparency = true)
-	
+
 
 # 	 contour!(ax, Xnew[:,1],Xnew[:,2],vec(u); levels = 20, colormap = :OrRd, linewidth = 2, transformation = (:xy, zmin-1),transparency = true)
-	
+
 # 	gl_screen = display(current_figure())
 # 	wait(gl_screen)
 # 	fig

@@ -6,11 +6,11 @@ using InteractiveUtils
 
 # ╔═╡ 8fb81c25-a9c5-4f13-8200-5d4eca597322
 begin
-	using DispatchDoctor
-	using Statistics
-	using ComponentArrays
-	using Chairmarks
-	using OnlineStats
+    using DispatchDoctor
+    using Statistics
+    using ComponentArrays
+    using Chairmarks
+    using OnlineStats
 end
 
 # ╔═╡ 62ae54e2-0f12-45bf-af58-23322a0c4cbe
@@ -18,199 +18,198 @@ end
 
 # ╔═╡ d6a97257-71be-4dd5-ac7a-ff5298620270
 begin
-	# Sort mean and variance at same time
-	struct CoSorterElement{T1,T2,T3}
-	    x::T1
-		z::T2
-	    y::T3
-	end
-	
-	struct CoSorter{T1,T2,T3,A <: AbstractVecOrMat{T1},B <: AbstractVecOrMat{T2},C <: AbstractVecOrMat{T3}} <: AbstractVector{CoSorterElement{T1,T2,T3}}
-	    sortarray::A
-	    otherarray::B
-	    coarray::C
-	end
-	
-	Base.size(c::CoSorter) = size(c.sortarray)
-	Base.getindex(c::CoSorter, i...) = 
-	    CoSorterElement(getindex(c.sortarray, i...), getindex(c.otherarray, i...),getindex(c.coarray, i...))
-	Base.setindex!(c::CoSorter, t::CoSorterElement, i...) = 
-	    (setindex!(c.sortarray, t.x, i...); setindex!(c.coarray, t.y, i...); c) 
+    # Sort mean and variance at same time
+    struct CoSorterElement{T1, T2, T3}
+        x::T1
+        z::T2
+        y::T3
+    end
 
- Base.isless(a::CoSorterElement, b::CoSorterElement) =isless(a.x, b.x) || (a.x == b.x && isless(a.z, b.z))
-		
-    
-	Base.Sort.defalg(v::C) where {T <: Union{Number,Missing},C <: CoSorter{T}} = 
-	    Base.DEFAULT_UNSTABLE
-	@stable function sort_two_arrays!(x::AbstractArray, y::AbstractArray)
-	    T = CoSorter(x[:,1],x[:,2], y)
-	    sort!(T)
-	    x = T.sortarray
-	    y = T.coarray
-	end
+    struct CoSorter{T1, T2, T3, A <: AbstractVecOrMat{T1}, B <: AbstractVecOrMat{T2}, C <: AbstractVecOrMat{T3}} <: AbstractVector{CoSorterElement{T1, T2, T3}}
+        sortarray::A
+        otherarray::B
+        coarray::C
+    end
 
-	@stable function aPCE_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T, s_marginals::F, s_interactions::F)::Matrix{T} where {T<:Integer,F<:Real}
-		# Initialize the indices for the first parameter
-		@stable function get_stats(r) # Returns sum, nzeros, mean, var, min,max
-			o = Series(Mean(),Variance(), Extrema())
-			n = length(r)
-			summe = 0
-			n_zeros = 0
-			@inbounds for e in 1:n
-				if iszero(r[e])
-					n_zeros += 1
-				else
-					summe += r[e]
-				end
-				fit!(o,r[e])
-			end
-			meanval = summe/n
-			meanval,varval,mm = value(o)
-			return [summe,n_zeros,meanval,varval,mm.min,mm.max]
-		end	
-		
-	@stable function filter_by_percentage(array::AbstractArray, percentage)
-	    # Ensure the percentage is within the valid range
-	    if percentage < 0.0 || percentage > 1.0
-	        throw(ArgumentError("Percentage must be between 0 and 1"))
-	    end
-	    n = length(array)
-	    num_to_keep = round(Int, percentage * n)
-	    return @views array[1:num_to_keep]
-	end
+    Base.size(c::CoSorter) = size(c.sortarray)
+    Base.getindex(c::CoSorter, i...) =
+        CoSorterElement(getindex(c.sortarray, i...), getindex(c.otherarray, i...), getindex(c.coarray, i...))
+    Base.setindex!(c::CoSorter, t::CoSorterElement, i...) =
+        (setindex!(c.sortarray, t.x, i...); setindex!(c.coarray, t.y, i...); c)
 
-	
-		range_ = 0:max_degree |> collect
-		indices = reshape(range_, :, 1)  # Make it a column vector
-		@inbounds for di in 1:num_dimensions-1
-			indices = repeat(indices, inner = (max_degree + 1, 1))
-			front = repeat(range_, outer = div(lastindex(indices), (max_degree + 1)) ÷ di)
-			indices = hcat(front,indices)
-			indices = indices[vec(sum(indices; dims = 2)).<=max_degree, :]
-		end
+    Base.isless(a::CoSorterElement, b::CoSorterElement) = isless(a.x, b.x) || (a.x == b.x && isless(a.z, b.z))
 
-		stats = reduce(hcat,map(x->get_stats(x),eachrow(indices)))'
-		d_marginal_indices = T[]
-		d_interactions_indices = T[]
-		@inbounds for r in axes(stats,1) # Go over columns
-			if stats[r,1] <= max_degree
-				if stats[r,2] == (num_dimensions - 1)
-						push!(d_marginal_indices,r)
-				elseif (num_dimensions - stats[r,2]) >= 1
-							push!(d_interactions_indices,r)
-					end
-				end
-		end
 
-		sorting_d_marginal = stats[d_marginal_indices,3:4] 
-		sorting_d_interactions = stats[d_interactions_indices,3:4]
+    Base.Sort.defalg(v::C) where {T <: Union{Number, Missing}, C <: CoSorter{T}} =
+        Base.DEFAULT_UNSTABLE
+    @stable function sort_two_arrays!(x::AbstractArray, y::AbstractArray)
+        T = CoSorter(x[:, 1], x[:, 2], y)
+        sort!(T)
+        x = T.sortarray
+        y = T.coarray
+    end
 
-		all_marginals= 1:length(d_marginal_indices) |> collect
-		all_interactions = 1:length(d_interactions_indices)|> collect
+    @stable function aPCE_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T, s_marginals::F, s_interactions::F)::Matrix{T} where {T <: Integer, F <: Real}
+        # Initialize the indices for the first parameter
+        @stable function get_stats(r) # Returns sum, nzeros, mean, var, min,max
+            o = Series(Mean(), Variance(), Extrema())
+            n = length(r)
+            summe = 0
+            n_zeros = 0
+            @inbounds for e in 1:n
+                if iszero(r[e])
+                    n_zeros += 1
+                else
+                    summe += r[e]
+                end
+                fit!(o, r[e])
+            end
+            meanval = summe / n
+            meanval, varval, mm = value(o)
+            return [summe, n_zeros, meanval, varval, mm.min, mm.max]
+        end
 
-		if length(all_marginals) > 1
-			sort_two_arrays!(sorting_d_marginal,all_marginals)
-		end
-		if length(all_interactions) > 1
-			sort_two_arrays!(sorting_d_interactions,all_interactions)
-		end
+        @stable function filter_by_percentage(array::AbstractArray, percentage)
+            # Ensure the percentage is within the valid range
+            if percentage < 0.0 || percentage > 1.0
+                throw(ArgumentError("Percentage must be between 0 and 1"))
+            end
+            n = length(array)
+            num_to_keep = round(Int, percentage * n)
+            return @views array[1:num_to_keep]
+        end
 
-		keeper_marginals = d_marginal_indices[filter_by_percentage(all_marginals,s_marginals)]
-		keeper_interactions = d_interactions_indices[filter_by_percentage(all_interactions,s_interactions)]
 
-		idxkeep = vcat(keeper_marginals,keeper_interactions)
-		indices = @views indices[idxkeep,:]
-		# indices = indices[[we_want_to_keep(i) for i in eachrow(indices)],:]
-		# keep_mask = map(we_want_to_keep, eachrow(indices))
-		# indices = indices[keep_mask, :]
-		indices = vcat(indices,zeros(T,num_dimensions)')
-		indices = sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
-		# idx_to_keep = vec(sum((indices ./ (max_degree + 1)) .^ qnorm, dims = 2) .^ (1.0 / qnorm) .<= 1.0)
-		# indices = indices[idx_to_keep, :]
-# 			# @info "Q-norm removed $(length(idx_to_keep)-sum(idx_to_keep)) terms"
-		# reverse_columns!(indices)
-		# @info "The multivariate polynomial degrees:" indices
-		# UnicodePlots.spy(sparse(indices)) |> display
-		return indices
-	end
+        range_ = 0:max_degree |> collect
+        indices = reshape(range_, :, 1)  # Make it a column vector
+        @inbounds for di in 1:(num_dimensions - 1)
+            indices = repeat(indices, inner = (max_degree + 1, 1))
+            front = repeat(range_, outer = div(lastindex(indices), (max_degree + 1)) ÷ di)
+            indices = hcat(front, indices)
+            indices = indices[vec(sum(indices; dims = 2)) .<= max_degree, :]
+        end
+
+        stats = reduce(hcat, map(x -> get_stats(x), eachrow(indices)))'
+        d_marginal_indices = T[]
+        d_interactions_indices = T[]
+        @inbounds for r in axes(stats, 1) # Go over columns
+            if stats[r, 1] <= max_degree
+                if stats[r, 2] == (num_dimensions - 1)
+                    push!(d_marginal_indices, r)
+                elseif (num_dimensions - stats[r, 2]) >= 1
+                    push!(d_interactions_indices, r)
+                end
+            end
+        end
+
+        sorting_d_marginal = stats[d_marginal_indices, 3:4]
+        sorting_d_interactions = stats[d_interactions_indices, 3:4]
+
+        all_marginals = 1:length(d_marginal_indices) |> collect
+        all_interactions = 1:length(d_interactions_indices) |> collect
+
+        if length(all_marginals) > 1
+            sort_two_arrays!(sorting_d_marginal, all_marginals)
+        end
+        if length(all_interactions) > 1
+            sort_two_arrays!(sorting_d_interactions, all_interactions)
+        end
+
+        keeper_marginals = d_marginal_indices[filter_by_percentage(all_marginals, s_marginals)]
+        keeper_interactions = d_interactions_indices[filter_by_percentage(all_interactions, s_interactions)]
+
+        idxkeep = vcat(keeper_marginals, keeper_interactions)
+        indices = @views indices[idxkeep, :]
+        # indices = indices[[we_want_to_keep(i) for i in eachrow(indices)],:]
+        # keep_mask = map(we_want_to_keep, eachrow(indices))
+        # indices = indices[keep_mask, :]
+        indices = vcat(indices, zeros(T, num_dimensions)')
+        indices = sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
+        # idx_to_keep = vec(sum((indices ./ (max_degree + 1)) .^ qnorm, dims = 2) .^ (1.0 / qnorm) .<= 1.0)
+        # indices = indices[idx_to_keep, :]
+        # 			# @info "Q-norm removed $(length(idx_to_keep)-sum(idx_to_keep)) terms"
+        # reverse_columns!(indices)
+        # @info "The multivariate polynomial degrees:" indices
+        # UnicodePlots.spy(sparse(indices)) |> display
+        return indices
+    end
 end
 
 # ╔═╡ edcd443a-40a0-4e78-98ef-1efe4ba1d7c6
 let
-	a = rand(4,2)
-	a[1] = 0.0
-	a[2] = 0.0
-	
-	a[1,2] = 0.5
-	a[2,2] = 0.1
-	
-	display(a)
-	b = 1:4 |> collect 
-	sort_two_arrays!(a,b)
-	@info b
+    a = rand(4, 2)
+    a[1] = 0.0
+    a[2] = 0.0
+
+    a[1, 2] = 0.5
+    a[2, 2] = 0.1
+
+    display(a)
+    b = 1:4 |> collect
+    sort_two_arrays!(a, b)
+    @info b
 end
 
 # ╔═╡ 107808b0-8493-46f8-9a0f-d7e08915cf47
-aPCE_MultivariatePolynomialDegrees(3,3,0.1,0.1)'
+aPCE_MultivariatePolynomialDegrees(3, 3, 0.1, 0.1)'
 
 # ╔═╡ dbc69d40-280c-11ef-3f1b-8bf398dd82fe
 
-@stable function aPCE_MultivariatePolynomialDegrees1(num_dimensions::T, max_degree::T, d_marginals::T, d_interactions::T)::Matrix{T} where {T<:Integer}
-		# Initialize the indices for the first parameter
+@stable function aPCE_MultivariatePolynomialDegrees1(num_dimensions::T, max_degree::T, d_marginals::T, d_interactions::T)::Matrix{T} where {T <: Integer}
+    # Initialize the indices for the first parameter
 
 
-	
-		@stable function we_want_to_keep(current_combination)::Bool
-			scc = sum(current_combination) 
-				if scc<= max_degree
-					zeroinds = iszero.(current_combination)
-					szeroinds = sum(zeroinds)
-					if szeroinds == (num_dimensions - 1)
-						if current_combination[.!zeroinds][1] <= d_marginals
-							return true
-						end
-					elseif (num_dimensions - szeroinds) >= 1
-						if scc <= d_interactions
-							return true
-						end
-					end
-				end
-			return false
-		end
-		range_ = 0:max_degree |> collect
-		indices = reshape(range_, :, 1)  # Make it a column vector
-		@inbounds for di in 1:num_dimensions-1
-			indices = repeat(indices, inner = (max_degree + 1, 1))
-			front = repeat(range_, outer = div(lastindex(indices), (max_degree + 1)) ÷ di)
-			indices = hcat(front,indices)
-			indices = indices[vec(sum(indices; dims = 2)).<=max_degree, :]
-		end
-		# NOw kill the ones we don't want:
-		# indices = indices[[we_want_to_keep(i) for i in eachrow(indices)],:]
-		# keep_mask = map(we_want_to_keep, eachrow(indices))
-		# indices = indices[keep_mask, :]
-		# indices = vcat(indices,zeros(T,num_dimensions)')
-		indices = sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
-		# idx_to_keep = vec(sum((indices ./ (max_degree + 1)) .^ qnorm, dims = 2) .^ (1.0 / qnorm) .<= 1.0)
-		# indices = indices[idx_to_keep, :]
-# 			# @info "Q-norm removed $(length(idx_to_keep)-sum(idx_to_keep)) terms"
-		# reverse_columns!(indices)
-		# @info "The multivariate polynomial degrees:" indices
-		# UnicodePlots.spy(sparse(indices)) |> display
-		return indices
-	end
-	
+    @stable function we_want_to_keep(current_combination)::Bool
+        scc = sum(current_combination)
+        if scc <= max_degree
+            zeroinds = iszero.(current_combination)
+            szeroinds = sum(zeroinds)
+            if szeroinds == (num_dimensions - 1)
+                if current_combination[.!zeroinds][1] <= d_marginals
+                    return true
+                end
+            elseif (num_dimensions - szeroinds) >= 1
+                if scc <= d_interactions
+                    return true
+                end
+            end
+        end
+        return false
+    end
+    range_ = 0:max_degree |> collect
+    indices = reshape(range_, :, 1)  # Make it a column vector
+    @inbounds for di in 1:(num_dimensions - 1)
+        indices = repeat(indices, inner = (max_degree + 1, 1))
+        front = repeat(range_, outer = div(lastindex(indices), (max_degree + 1)) ÷ di)
+        indices = hcat(front, indices)
+        indices = indices[vec(sum(indices; dims = 2)) .<= max_degree, :]
+    end
+    # NOw kill the ones we don't want:
+    # indices = indices[[we_want_to_keep(i) for i in eachrow(indices)],:]
+    # keep_mask = map(we_want_to_keep, eachrow(indices))
+    # indices = indices[keep_mask, :]
+    # indices = vcat(indices,zeros(T,num_dimensions)')
+    indices = sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
+    # idx_to_keep = vec(sum((indices ./ (max_degree + 1)) .^ qnorm, dims = 2) .^ (1.0 / qnorm) .<= 1.0)
+    # indices = indices[idx_to_keep, :]
+    # 			# @info "Q-norm removed $(length(idx_to_keep)-sum(idx_to_keep)) terms"
+    # reverse_columns!(indices)
+    # @info "The multivariate polynomial degrees:" indices
+    # UnicodePlots.spy(sparse(indices)) |> display
+    return indices
+end
+
 
 # ╔═╡ 997de16e-295c-41a1-87e7-0ccc57122894
-c = a[:,21]
+c = a[:, 21]
 
 # ╔═╡ af3a8d5f-8e63-4ad0-82e0-5d4dfa2482b6
-d = [1,1,1,1]
+d = [1, 1, 1, 1]
 
 # ╔═╡ 537ae22b-e1c3-4e28-b839-8324a6904549
 begin
-	@show get_stats(b)
-	@b get_stats(b)
+    @show get_stats(b)
+    @b get_stats(b)
 end
 
 # ╔═╡ fbb75e80-6c3e-4e5b-b554-7a7fc4626060
@@ -223,56 +222,56 @@ end
 
 # ╔═╡ a4fa955f-3cee-4371-9c43-f7a87e264c2d
 
-@stable function aPCE_MultivariatePolynomialDegrees2(num_dimensions::T, max_degree, d_marginals, d_interactions)::Matrix{T} where {T<:Int64}
-		# Initialize the indices for the first parameter
-		@stable function filter_by_percentage(array::AbstractArray, percentage::Float64)
-    # Ensure the percentage is within the valid range
-    if percentage < 0.0 || percentage > 1.0
-        throw(ArgumentError("Percentage must be between 0 and 1"))
+@stable function aPCE_MultivariatePolynomialDegrees2(num_dimensions::T, max_degree, d_marginals, d_interactions)::Matrix{T} where {T <: Int64}
+    # Initialize the indices for the first parameter
+    @stable function filter_by_percentage(array::AbstractArray, percentage::Float64)
+        # Ensure the percentage is within the valid range
+        if percentage < 0.0 || percentage > 1.0
+            throw(ArgumentError("Percentage must be between 0 and 1"))
+        end
+        n = length(array)
+        num_to_keep = round(Int, percentage * n)
+        return @views array[1:num_to_keep]
     end
-    n = length(array)
-    num_to_keep = round(Int, percentage * n)
-    return @views array[1:num_to_keep]
-end
 
-		@stable function we_want_to_keep(current_combination)::Bool
-				if sum(current_combination) <= max_degree
-					zeroinds = iszero.(current_combination)
-					szeroinds = sum(zeroinds)
-					if szeroinds == (num_dimensions - 1)
-						if current_combination[.!zeroinds][1] <= d_marginals
-							return true
-						end
-					elseif (num_dimensions - szeroinds) >= 1
-						if sum(current_combination[.!zeroinds]) <= d_interactions
-							return true
-						end
-					end
-				end
-			return false
-		end
-		range_ = 0:max_degree |> collect
-		indices = reshape(range_, :, 1)  # Make it a column vector
-		@inbounds for di in 1:num_dimensions-1
-			indices = repeat(indices, inner = (max_degree + 1, 1))
-			front = repeat(range_, outer = div(lastindex(indices), (max_degree + 1)) ÷ di)
-			indices = hcat(front,indices)
-			indices = indices[vec(sum(indices; dims = 2)).<=max_degree, :]
-		end
-		# NOw kill the ones we don't want:
-		# indices = indices[[we_want_to_keep(i) for i in eachrow(indices)],:]
-		keep_mask = map(we_want_to_keep, eachrow(indices))
-		indices = indices[keep_mask, :]
-		indices = vcat(indices,zeros(T,num_dimensions)')
-		indices = sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
-		# idx_to_keep = vec(sum((indices ./ (max_degree + 1)) .^ qnorm, dims = 2) .^ (1.0 / qnorm) .<= 1.0)
-		# indices = indices[idx_to_keep, :]
-# 			# @info "Q-norm removed $(length(idx_to_keep)-sum(idx_to_keep)) terms"
-		# reverse_columns!(indices)
-		# @info "The multivariate polynomial degrees:" indices
-		# UnicodePlots.spy(sparse(indices)) |> display
-		return indices
-	end
+    @stable function we_want_to_keep(current_combination)::Bool
+        if sum(current_combination) <= max_degree
+            zeroinds = iszero.(current_combination)
+            szeroinds = sum(zeroinds)
+            if szeroinds == (num_dimensions - 1)
+                if current_combination[.!zeroinds][1] <= d_marginals
+                    return true
+                end
+            elseif (num_dimensions - szeroinds) >= 1
+                if sum(current_combination[.!zeroinds]) <= d_interactions
+                    return true
+                end
+            end
+        end
+        return false
+    end
+    range_ = 0:max_degree |> collect
+    indices = reshape(range_, :, 1)  # Make it a column vector
+    @inbounds for di in 1:(num_dimensions - 1)
+        indices = repeat(indices, inner = (max_degree + 1, 1))
+        front = repeat(range_, outer = div(lastindex(indices), (max_degree + 1)) ÷ di)
+        indices = hcat(front, indices)
+        indices = indices[vec(sum(indices; dims = 2)) .<= max_degree, :]
+    end
+    # NOw kill the ones we don't want:
+    # indices = indices[[we_want_to_keep(i) for i in eachrow(indices)],:]
+    keep_mask = map(we_want_to_keep, eachrow(indices))
+    indices = indices[keep_mask, :]
+    indices = vcat(indices, zeros(T, num_dimensions)')
+    indices = sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
+    # idx_to_keep = vec(sum((indices ./ (max_degree + 1)) .^ qnorm, dims = 2) .^ (1.0 / qnorm) .<= 1.0)
+    # indices = indices[idx_to_keep, :]
+    # 			# @info "Q-norm removed $(length(idx_to_keep)-sum(idx_to_keep)) terms"
+    # reverse_columns!(indices)
+    # @info "The multivariate polynomial degrees:" indices
+    # UnicodePlots.spy(sparse(indices)) |> display
+    return indices
+end
 
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001

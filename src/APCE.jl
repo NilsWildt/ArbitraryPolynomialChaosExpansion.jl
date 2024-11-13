@@ -53,7 +53,7 @@ BLAS.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
 configdir(args...) = projectdir("configs", args...)
 outputdir(args...) = projectdir("output", args...)
 
-export run, create_basis!, aPCE_FullBasis, aPCE_MultivariatePolynomialDegrees, aPCE_PsiPolynomialMatrix, compose_Ψ, GaussianCollocation, partitionTrainTest, special_sort_two_arrays!, train!, evaluate_Ψ, aPCE, aPCE_MultivariatePolynomialDegrees, aPCE_OrthonormalBasis, create_basis, GaussianCollocation, normalization_functions, partitionTrainTest, predict,  train!, UQ
+export run, create_basis!, aPCE_FullBasis, aPCE_MultivariatePolynomialDegrees, aPCE_PsiPolynomialMatrix, compose_Ψ, GaussianCollocation, partitionTrainTest, special_sort_two_arrays!, train!, evaluate_Ψ, aPCE, aPCE_MultivariatePolynomialDegrees, aPCE_OrthonormalBasis, create_basis, GaussianCollocation, normalization_functions, partitionTrainTest, predict, train!, UQ
 
 include("APCEfunctions.jl")
 include("APCEhighlevel.jl")
@@ -65,8 +65,8 @@ include("utils.jl")
     TrainingOutput = rand(10, 2) |> Array{FT} |> Array{FT}
     @compile_workload begin
         degree = 2
-        apc_instance = aPCE(TrainingInput, degree; outdim=size(TrainingOutput, 2), OrthonormalRepresentation=true, normalize_data=true)
-        train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion=true, reg_order=3)
+        apc_instance = aPCE(TrainingInput, degree; outdim = size(TrainingOutput, 2), OrthonormalRepresentation = true, normalize_data = true)
+        train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion = true, reg_order = 3)
         predict(apc_instance, TrainingInput)
         UQ(apc_instance)
     end

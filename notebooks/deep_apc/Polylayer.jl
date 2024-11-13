@@ -10,16 +10,16 @@ struct Polylayer{F} <: Lux.AbstractExplicitLayer
 end
 
 function Base.show(io::IO, d::Polylayer)
-    println(io, "Polylayer(out_dims: $(d.out_dims)), degree: $(d.degree)")
+    return println(io, "Polylayer(out_dims: $(d.out_dims)), degree: $(d.degree)")
 end
 
-function Polylayer(out_dims::Int, degree::Int, init_weight=Lux.rand32)
+function Polylayer(out_dims::Int, degree::Int, init_weight = Lux.rand32)
     dtypes = (typeof(init_weight))
     return Polylayer{dtypes}(out_dims, degree, init_weight)
 end
 
 # Allow arbitrary order for arguments with default values
-function Polylayer(; out_dims::Int=2, degree::Int=2, init_weight=Lux.rand32)
+function Polylayer(; out_dims::Int = 2, degree::Int = 2, init_weight = Lux.rand32)
     dtypes = (typeof(init_weight))
     return Polylayer{dtypes}(out_dims, degree, init_weight)
 end
@@ -35,7 +35,7 @@ If I write T <: AbstractArray{Float64}, the function will not work with Float32.
 maintain flexibility. Put AbstractArray{Float64} would be useful if I am interested in working fully in 
 Float64. On the GPU, I would write AbstractArray{Float32} for efficiency reasons on the GPU.
 """
-function (l::Polylayer)(x::T, ps, st) where {T<:AbstractArray}
+function (l::Polylayer)(x::T, ps, st) where {T <: AbstractArray}
     if (l.out_dims == 1)
         poly = generate_polynomial_1D(l.degree)
         return poly(ps.coeffs, x), st
@@ -76,7 +76,7 @@ end
 # overload initialparameters in the Lux environment
 # coeffs[out_dims, degree+1]
 
-# Probably unique in my project. 
+# Probably unique in my project.
 # What happens if I do not prefix by Lux and I use the polylayer inside some other module. It is not clear this will work.
 function nb_coefs_per_poly(d::Polylayer)
     if d.out_dims == 1
@@ -92,9 +92,9 @@ function Lux.initialparameters(rng::AbstractRNG, d::Polylayer)
     nb = nb_coefs_per_poly(d)
     # why the final comma?
     if (d.out_dims == 1)
-        return (coeffs=d.init_weight(rng, nb),)
+        return (coeffs = d.init_weight(rng, nb),)
     else
-        return (coeffs=d.init_weight(rng, nb, d.out_dims),)
+        return (coeffs = d.init_weight(rng, nb, d.out_dims),)
     end
 end
 
@@ -107,7 +107,7 @@ function Lux.parameterlength(d::Polylayer)
     return nb_coefs_per_poly(d) * d.out_dims
 end
 # ================== END DEFINITION of Polynomial Layer =======================================
-# Simple standalone code to test the polynomial layer. Must be part of this file. 
+# Simple standalone code to test the polynomial layer. Must be part of this file.
 function test_polynomial_layer(dim)
     rng = Random.default_rng()
     Random.seed!(rng, 0)
@@ -118,7 +118,7 @@ function test_polynomial_layer(dim)
         out_dims = 1
         degree = 3
         # The weights are initialized to zero
-        model = Polylayer(; out_dims=out_dims, degree=degree, init_weight=Lux.zeros32)
+        model = Polylayer(; out_dims = out_dims, degree = degree, init_weight = Lux.zeros32)
 
         ps, st = Lux.setup(rng, model)
         ps = ComponentArray(ps)
@@ -135,7 +135,7 @@ function test_polynomial_layer(dim)
         # 2D layer
         out_dims = 2
         degree = 3
-        model = Polylayer(; out_dims=out_dims, degree=degree, init_weight=Lux.zeros32)
+        model = Polylayer(; out_dims = out_dims, degree = degree, init_weight = Lux.zeros32)
 
         ps, st = Lux.setup(rng, model)
         ps = ComponentArray(ps)

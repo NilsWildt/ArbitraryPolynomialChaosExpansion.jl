@@ -15,20 +15,20 @@ https://doi.org/10.3390/e21111081
 """
 mutable struct AnalyticalModel
     func::String
-    loc::Array{Float64,2}
-    observations::Array{Float64,2}
+    loc::Array{Float64, 2}
+    observations::Array{Float64, 2}
     n_obs::Int
     n_params::Int
     var::Float64
 
-    AnalyticalModel(func::String="non-linear", loc::Array{Float64,2}=Array{Float64,2}(undef, 0, 1), observations::Array{Float64,2}=Array{Float64,2}(undef, 0, 0)) = new(func, loc, observations)
+    AnalyticalModel(func::String = "non-linear", loc::Array{Float64, 2} = Array{Float64, 2}(undef, 0, 1), observations::Array{Float64, 2} = Array{Float64, 2}(undef, 0, 0)) = new(func, loc, observations)
 end
 
 function check_input(model::AnalyticalModel)
     # Placeholder for input checking logic
 end
 
-function nonlinear_model(params::Array{Float64,2}, loc::Array{Float64,1})
+function nonlinear_model(params::Array{Float64, 2}, loc::Array{Float64, 1})
     if ndims(params) == 1
         params = reshape(params, 1, size(params, 1))
     end
@@ -42,7 +42,7 @@ function nonlinear_model(params::Array{Float64,2}, loc::Array{Float64,1})
     term1 = (params[:, 1] .^ 2 .+ params[:, 2] .- 1) .^ 2
     term2 = params[:, 1] .^ 2
     term3 = 0.1 .* params[:, 1] .* exp.(params[:, 2])
-    
+
     term5 = zeros(param_sets)
     if n_params > 2
         for i in 3:n_params
@@ -60,8 +60,8 @@ function nonlinear_model(params::Array{Float64,2}, loc::Array{Float64,1})
     return output
 end
 
-function evaluate_model(model::AnalyticalModel, params::Array{Float64,2})
-    output = Array{Float64,2}(undef, 0, 0)
+function evaluate_model(model::AnalyticalModel, params::Array{Float64, 2})
+    output = Array{Float64, 2}(undef, 0, 0)
     if model.func == "non_linear"
         output = nonlinear_model(params, model.loc)
     end

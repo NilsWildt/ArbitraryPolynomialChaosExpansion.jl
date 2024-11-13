@@ -6,35 +6,35 @@ using InteractiveUtils
 
 # ╔═╡ fba3984a-8d33-41db-821b-0dc7d1154c3f
 begin
-	using Test
-	using LazyGrids
-	using Combinatorics
-	using PyCall
-	using StructArrays
-	using StaticArrays
-	using BenchmarkTools
-	using LinearAlgebra
-	using Random
-	using NonlinearSolve
-	using StaticArrays
-	using Diffractor: DiffractorForwardBackend
-	using AbstractDifferentiation: derivative, jacobian
-	using ChainRulesCore
-	using Zygote
-	import AbstractDifferentiation as AD
+    using Test
+    using LazyGrids
+    using Combinatorics
+    using PyCall
+    using StructArrays
+    using StaticArrays
+    using BenchmarkTools
+    using LinearAlgebra
+    using Random
+    using NonlinearSolve
+    using StaticArrays
+    using Diffractor: DiffractorForwardBackend
+    using AbstractDifferentiation: derivative, jacobian
+    using ChainRulesCore
+    using Zygote
+    import AbstractDifferentiation as AD
 end
 
 # ╔═╡ ea75b25d-d9d7-42c6-9473-e3cd9eb4234f
-function lexsort(A::AbstractArray{T}; axis=1) where {T<:Number}
-	sortslices(A;dims=1)
+function lexsort(A::AbstractArray{T}; axis = 1) where {T <: Number}
+    return sortslices(A; dims = 1)
 end
 
 
 # ╔═╡ 13f21b0d-f2d0-49a0-aec5-2881a10b1441
 begin
-	A = Float64[0 1 3; 3 4 3; 2 2 3 ; 2 3 3]
-	@info A
-	@info lexsort(A)
+    A = Float64[0 1 3; 3 4 3; 2 2 3 ; 2 3 3]
+    @info A
+    @info lexsort(A)
 end
 
 # ╔═╡ f54c3ec4-87f3-4b86-a927-f7856012c319
@@ -94,60 +94,61 @@ function reverse_columns!(x)
     for row in axes(x, 1)
         x[row, :] = reverse(x[row, :])
     end
+    return
 end
 
 # ╔═╡ 5199de26-b5b6-4d66-a37b-40efe98b3bcc
-function numberPolynomials(n::Int64,d::Int64)
+function numberPolynomials(n::Int64, d::Int64)
     x, y = max(d, n), min(d, n)
-    return UInt128(prod(UInt128(x + 1):UInt128(d + n)) ÷ factorial(UInt128(y))) |>Int
+    return UInt128(prod(UInt128(x + 1):UInt128(d + n)) ÷ factorial(UInt128(y))) |> Int
 end
 
 # ╔═╡ f4003dec-6382-49b8-8311-805f4b3816f0
-function aPC_MultivariatePolynomialDegrees(num_dims,max_degree)
-	# Input:
-	# num_dims- Number of uncertain parameters
-	# max_degree - Degree of polynomial expansion
-	# Output:
-	# PolynomialDegree - Multivariate Polynomial Degrees 
-	# Total number of terms
-	P = numberPolynomials(num_dims, max_degree)
-	# Possible Degrees
-	UniqueDegreeCombinations = zeros((max_degree + 1)^num_dims, max_degree)
-	PossibleDegrees = [collect(0:max_degree) for _ in num_dims:-1:1]
-	if num_dims == 1
-		UniqueDegreeCombinations = PossibleDegrees[1]
-	else
-		tmp = cat(collect(ndgrid_array(reverse(PossibleDegrees)...))...; dims = 3)
-		UniqueDegreeCombinations = reshape(tmp, :, num_dims)
-	end
-	# Possible degree computation
-	DegreeWeight = zeros(1, size(UniqueDegreeCombinations, 1))
-	for i ∈ 1:1:size(UniqueDegreeCombinations, 1)
-		DegreeWeight[i] = 0.0
-		for j ∈ 1:1:num_dims
-			DegreeWeight[i] = DegreeWeight[i] + UniqueDegreeCombinations[i, j]
-		end
-	end
-	# Sorting of possible degree
-	id = sortperm(DegreeWeight; dims = 2)[:]
-	SortDegreeCombinations = UniqueDegreeCombinations[id, :]
-	# Multivariate Polynomial Degrees  
-	# reverse_columns!(SortDegreeCombinations)
-	return SortDegreeCombinations[1:P, :]
+function aPC_MultivariatePolynomialDegrees(num_dims, max_degree)
+    # Input:
+    # num_dims- Number of uncertain parameters
+    # max_degree - Degree of polynomial expansion
+    # Output:
+    # PolynomialDegree - Multivariate Polynomial Degrees
+    # Total number of terms
+    P = numberPolynomials(num_dims, max_degree)
+    # Possible Degrees
+    UniqueDegreeCombinations = zeros((max_degree + 1)^num_dims, max_degree)
+    PossibleDegrees = [collect(0:max_degree) for _ in num_dims:-1:1]
+    if num_dims == 1
+        UniqueDegreeCombinations = PossibleDegrees[1]
+    else
+        tmp = cat(collect(ndgrid_array(reverse(PossibleDegrees)...))...; dims = 3)
+        UniqueDegreeCombinations = reshape(tmp, :, num_dims)
+    end
+    # Possible degree computation
+    DegreeWeight = zeros(1, size(UniqueDegreeCombinations, 1))
+    for i in 1:1:size(UniqueDegreeCombinations, 1)
+        DegreeWeight[i] = 0.0
+        for j in 1:1:num_dims
+            DegreeWeight[i] = DegreeWeight[i] + UniqueDegreeCombinations[i, j]
+        end
+    end
+    # Sorting of possible degree
+    id = sortperm(DegreeWeight; dims = 2)[:]
+    SortDegreeCombinations = UniqueDegreeCombinations[id, :]
+    # Multivariate Polynomial Degrees
+    # reverse_columns!(SortDegreeCombinations)
+    return SortDegreeCombinations[1:P, :]
 end
 
 # ╔═╡ be87bfb0-ea5c-4658-ae52-962eaebd52af
-function sort_basis_indices(keys; graded=false, reverse=false)
+function sort_basis_indices(keys; graded = false, reverse = false)
     if reverse
-        reverse!(keys, dims=1)
+        reverse!(keys, dims = 1)
     end
-    indices = sortperm(keys[:,1])
+    indices = sortperm(keys[:, 1])
     if graded
-        sums = sum(keys[indices, :], dims=2)
-        graded_indices = sortperm(sums,dims=1)
+        sums = sum(keys[indices, :], dims = 2)
+        graded_indices = sortperm(sums, dims = 1)
         indices = indices[graded_indices]
     end
-    return keys[indices,:]
+    return keys[indices, :]
 end
 
 # ╔═╡ c9603520-d2a0-4ddb-8edc-18d94ed7d70e
@@ -160,91 +161,91 @@ function flip_columns!(arr)
 end
 
 # ╔═╡ 29cbd1a5-c02f-4c87-ac4d-5c2877ba3dfb
-function aPC_MultivariatePolynomialDegrees_new(num_dimensions::T, max_degree::T; use_p = false, p::Float64 = 0.85) where {T<:Integer}
-	# Initialize the indices for the first parameter
-	range_ = 0:max_degree |> collect 
-	indices = reshape(range_, :, 1)  # Make it a column vector
+function aPC_MultivariatePolynomialDegrees_new(num_dimensions::T, max_degree::T; use_p = false, p::Float64 = 0.85) where {T <: Integer}
+    # Initialize the indices for the first parameter
+    range_ = 0:max_degree |> collect
+    indices = reshape(range_, :, 1)  # Make it a column vector
 
-	for di in 1:num_dimensions-1
-		indices = repeat(indices, inner = (max_degree+1,1))
-		front = repeat(range_, outer = div(lastindex(indices) ,(max_degree+1))÷di)
-		indices = hcat(front,indices)
-		if use_p
-			# Apply truncation using p-norm sparsity
-			idx_to_keep = vec(sum((indices ./ (num_dimensions + 1)) .^ p, dims = 2) .^ (1 / p) .<= 1)
-			indices = indices[idx_to_keep, :]
-		else
-			indices = indices[vec(sum(indices; dims = 2)).<=max_degree, :]
-		end
-	end
+    for di in 1:(num_dimensions - 1)
+        indices = repeat(indices, inner = (max_degree + 1, 1))
+        front = repeat(range_, outer = div(lastindex(indices), (max_degree + 1)) ÷ di)
+        indices = hcat(front, indices)
+        if use_p
+            # Apply truncation using p-norm sparsity
+            idx_to_keep = vec(sum((indices ./ (num_dimensions + 1)) .^ p, dims = 2) .^ (1 / p) .<= 1)
+            indices = indices[idx_to_keep, :]
+        else
+            indices = indices[vec(sum(indices; dims = 2)) .<= max_degree, :]
+        end
+    end
 
-	indices = hcat(vec(sum(indices; dims = 2)),indices)
-	indices = sortslices(indices;dims=1,rev=false)[:,2:end]
- 	reverse_columns!(indices)
-	return indices
+    indices = hcat(vec(sum(indices; dims = 2)), indices)
+    indices = sortslices(indices; dims = 1, rev = false)[:, 2:end]
+    reverse_columns!(indices)
+    return indices
 end
 
 # ╔═╡ 1575cd30-f787-43b6-86ba-d8df4095ac63
 let
-	py"""
-import numpy as np
-def sort_basis_indices(keys, graded=True, reverse=False):
-    keys_ = np.atleast_2d(keys)    # convert to a 2D array
-    if reverse:
-        keys_ = keys_[::-1]
-    # get indices from smallest to largest, giving the 1st row a higher importance
-    indices = np.array(np.lexsort(keys_))
-    if graded:
-        indices = indices[np.argsort(
-            np.sum(keys_[:, indices], axis=0))].T
-    return indices
+    py"""
+    import numpy as np
+    def sort_basis_indices(keys, graded=True, reverse=False):
+        keys_ = np.atleast_2d(keys)    # convert to a 2D array
+        if reverse:
+            keys_ = keys_[::-1]
+        # get indices from smallest to largest, giving the 1st row a higher importance
+        indices = np.array(np.lexsort(keys_))
+        if graded:
+            indices = indices[np.argsort(
+                np.sum(keys_[:, indices], axis=0))].T
+        return indices
+    
+    
+    def get_polynomial_basis(max_degree, ndim):
+        # Arrays with smallest order (0) to the max degree + 1
+        start = np.zeros(ndim, dtype=int)
+        stop = np.full(ndim, max_degree+1, dtype=int)   # Add +1 so np.arange(0, stop) fills up to degree "d"
+        bound = stop.max()
+    
+        # To control the size of the arrays:
+        dtype = np.uint8 if bound < 256 else np.uint16
+        range_ = np.arange(bound, dtype=dtype)           # vector with values of "d" to consider
+        # Initialize the indices for the first parameter (row-wise), based on the order range
+        indices = range_[:, np.newaxis]  # list of orders, in order
+    
+        # Fill the combinatorics array, one dimension at a time:
+        for idx in range(ndim - 1):
+    
+            # Repeats the current set of indices ndim times
+            # e.g. [0,1,2] -> [0,1,2,0,1,2,...,0,1,2]
+            indices = np.tile(indices, (bound, 1))
+    
+            # Stretches ranges over the new dimension.
+            # e.g. [0,1,2] -> [0,0,...,0,1,1,...,1,2,2,...,2]
+            front = range_.repeat(len(indices) // bound)[:, np.newaxis]
+    
+            # Put the array "front" in front of the previous "indices" array, to do the combinations of dimensions <= idx
+            indices = np.column_stack((front, indices))
+    
+            # Truncate at each step to keep memory usage low, dor idx > 0
+            idx_to_keep = np.sum(indices, axis=-1) <= max_degree
+            indices = indices[idx_to_keep]
+    
+        # Order in descending norm value (sum of all orders), giving priority to the first dimensions
+        new_order = sort_basis_indices(keys=indices.T, reverse=False, graded=True)
+        indices = indices[new_order]
+    
+        return indices
+    """
 
+    max_degree = 3 # Maximum degree
+    num_dims = 3
 
-def get_polynomial_basis(max_degree, ndim):
-    # Arrays with smallest order (0) to the max degree + 1
-    start = np.zeros(ndim, dtype=int)
-    stop = np.full(ndim, max_degree+1, dtype=int)   # Add +1 so np.arange(0, stop) fills up to degree "d"
-    bound = stop.max()
-
-    # To control the size of the arrays:
-    dtype = np.uint8 if bound < 256 else np.uint16
-    range_ = np.arange(bound, dtype=dtype)           # vector with values of "d" to consider
-    # Initialize the indices for the first parameter (row-wise), based on the order range
-    indices = range_[:, np.newaxis]  # list of orders, in order
-
-    # Fill the combinatorics array, one dimension at a time:
-    for idx in range(ndim - 1):
-
-        # Repeats the current set of indices ndim times
-        # e.g. [0,1,2] -> [0,1,2,0,1,2,...,0,1,2]
-        indices = np.tile(indices, (bound, 1))
-
-        # Stretches ranges over the new dimension.
-        # e.g. [0,1,2] -> [0,0,...,0,1,1,...,1,2,2,...,2]
-        front = range_.repeat(len(indices) // bound)[:, np.newaxis]
-
-        # Put the array "front" in front of the previous "indices" array, to do the combinations of dimensions <= idx
-        indices = np.column_stack((front, indices))
-
-        # Truncate at each step to keep memory usage low, dor idx > 0
-        idx_to_keep = np.sum(indices, axis=-1) <= max_degree
-        indices = indices[idx_to_keep]
-
-    # Order in descending norm value (sum of all orders), giving priority to the first dimensions
-    new_order = sort_basis_indices(keys=indices.T, reverse=False, graded=True)
-    indices = indices[new_order]
-
-    return indices
-"""
-	
-	max_degree = 3 # Maximum degree
-	num_dims = 3
-
-	@timev aPC_MultivariatePolynomialDegrees(num_dims,max_degree) 
-	@timev aPC_MultivariatePolynomialDegrees_new(num_dims,max_degree) 
-	@timev Array{Int64}(py"get_polynomial_basis($max_degree,$num_dims)")
+    @timev aPC_MultivariatePolynomialDegrees(num_dims, max_degree)
+    @timev aPC_MultivariatePolynomialDegrees_new(num_dims, max_degree)
+    @timev Array{Int64}(py"get_polynomial_basis($max_degree,$num_dims)")
 end
-	
+
 
 # ╔═╡ 70469375-3ada-4f12-8cbb-862ac5ae3296
 max_degree = 6 # Maximum degree
@@ -253,104 +254,104 @@ max_degree = 6 # Maximum degree
 num_dims = 4
 
 # ╔═╡ d794f287-afd4-4c11-bef8-0016196653e5
-@time aPC_MultivariatePolynomialDegrees_new(num_dims,max_degree) 
+@time aPC_MultivariatePolynomialDegrees_new(num_dims, max_degree)
 
 # ╔═╡ f76d6f0d-c523-46c0-bd4f-22f92544b6a0
-@benchmark aPC_MultivariatePolynomialDegrees(num_dims,max_degree) 
+@benchmark aPC_MultivariatePolynomialDegrees(num_dims, max_degree)
 
 # ╔═╡ 50425bfa-051a-49d1-b3c9-298e8786955d
-@benchmark aPC_MultivariatePolynomialDegrees_new(num_dims,max_degree) 
+@benchmark aPC_MultivariatePolynomialDegrees_new(num_dims, max_degree)
 
 # ╔═╡ e40b08f2-2681-423b-9691-bd0bc7ea5373
 begin
-	py"""
-	import numpy as np
-	def sort_basis_indices(keys, graded=True, reverse=False):
-	    keys_ = np.atleast_2d(keys)    # convert to a 2D array
-	    if reverse:
-	        keys_ = keys_[::-1]
-	    # get indices from smallest to largest, giving the 1st row a higher importance
-	    indices = np.array(np.lexsort(keys_))
-	    if graded:
-	        indices = indices[np.argsort(
-	            np.sum(keys_[:, indices], axis=0))].T
-	    return indices
-	
-	
-	def get_polynomial_basis(max_degree, ndim):
-	    # Arrays with smallest order (0) to the max degree + 1
-	    start = np.zeros(ndim, dtype=int)
-	    stop = np.full(ndim, max_degree+1, dtype=int)   # Add +1 so np.arange(0, stop) fills up to degree "d"
-	    bound = stop.max()
-	
-	    # To control the size of the arrays:
-	    dtype = np.uint8 if bound < 256 else np.uint16
-	    range_ = np.arange(bound, dtype=dtype)           # vector with values of "d" to consider
-	    # Initialize the indices for the first parameter (row-wise), based on the order range
-	    indices = range_[:, np.newaxis]  # list of orders, in order
-	
-	    # Fill the combinatorics array, one dimension at a time:
-	    for idx in range(ndim - 1):
-	
-	        # Repeats the current set of indices ndim times
-	        # e.g. [0,1,2] -> [0,1,2,0,1,2,...,0,1,2]
-	        indices = np.tile(indices, (bound, 1))
-	
-	        # Stretches ranges over the new dimension.
-	        # e.g. [0,1,2] -> [0,0,...,0,1,1,...,1,2,2,...,2]
-	        front = range_.repeat(len(indices) // bound)[:, np.newaxis]
-	
-	        # Put the array "front" in front of the previous "indices" array, to do the combinations of dimensions <= idx
-	        indices = np.column_stack((front, indices))
-	
-	        # Truncate at each step to keep memory usage low, dor idx > 0
-	        idx_to_keep = np.sum(indices, axis=-1) <= max_degree
-	        indices = indices[idx_to_keep]
-	
-	    # Order in descending norm value (sum of all orders), giving priority to the first dimensions
-	    new_order = sort_basis_indices(keys=indices.T, reverse=False, graded=True)
-	    indices = indices[new_order]
-	
-	    return indices
-	"""
-	@benchmark Array{Int64}(py"get_polynomial_basis($max_degree,$num_dims)")
+    py"""
+    import numpy as np
+    def sort_basis_indices(keys, graded=True, reverse=False):
+        keys_ = np.atleast_2d(keys)    # convert to a 2D array
+        if reverse:
+            keys_ = keys_[::-1]
+        # get indices from smallest to largest, giving the 1st row a higher importance
+        indices = np.array(np.lexsort(keys_))
+        if graded:
+            indices = indices[np.argsort(
+                np.sum(keys_[:, indices], axis=0))].T
+        return indices
+    
+    
+    def get_polynomial_basis(max_degree, ndim):
+        # Arrays with smallest order (0) to the max degree + 1
+        start = np.zeros(ndim, dtype=int)
+        stop = np.full(ndim, max_degree+1, dtype=int)   # Add +1 so np.arange(0, stop) fills up to degree "d"
+        bound = stop.max()
+    
+        # To control the size of the arrays:
+        dtype = np.uint8 if bound < 256 else np.uint16
+        range_ = np.arange(bound, dtype=dtype)           # vector with values of "d" to consider
+        # Initialize the indices for the first parameter (row-wise), based on the order range
+        indices = range_[:, np.newaxis]  # list of orders, in order
+    
+        # Fill the combinatorics array, one dimension at a time:
+        for idx in range(ndim - 1):
+    
+            # Repeats the current set of indices ndim times
+            # e.g. [0,1,2] -> [0,1,2,0,1,2,...,0,1,2]
+            indices = np.tile(indices, (bound, 1))
+    
+            # Stretches ranges over the new dimension.
+            # e.g. [0,1,2] -> [0,0,...,0,1,1,...,1,2,2,...,2]
+            front = range_.repeat(len(indices) // bound)[:, np.newaxis]
+    
+            # Put the array "front" in front of the previous "indices" array, to do the combinations of dimensions <= idx
+            indices = np.column_stack((front, indices))
+    
+            # Truncate at each step to keep memory usage low, dor idx > 0
+            idx_to_keep = np.sum(indices, axis=-1) <= max_degree
+            indices = indices[idx_to_keep]
+    
+        # Order in descending norm value (sum of all orders), giving priority to the first dimensions
+        new_order = sort_basis_indices(keys=indices.T, reverse=False, graded=True)
+        indices = indices[new_order]
+    
+        return indices
+    """
+    @benchmark Array{Int64}(py"get_polynomial_basis($max_degree,$num_dims)")
 end
 
 # ╔═╡ 6f84e971-2d48-476b-bf44-39cef1c45bac
 let
-	function ℓπ(u,A,y,λ₁=1e-8,λ₂=1e-8) 
-	        AQiA =  A'*(I./λ₁)*A
-	        P = AQiA+I./λ₁
-	        K = pinv(AQiA)*A'*I./λ₁
-	        [-1.0.*(-0.5*sum((u.-inv(P)*(AQiA*K*y+ I./λ₂*u)).^2))]
-	    end
-		rng = Xoshiro(123)
-		A = rand(rng,36,21)
-		x = rand(rng,21,1)
-	
-		y = A*x
-		u0 = rand(rng,21)
-		f_opti(x,p) = ℓπ(x,A,y)
+    function ℓπ(u, A, y, λ₁ = 1.0e-8, λ₂ = 1.0e-8)
+        AQiA = A' * (I ./ λ₁) * A
+        P = AQiA + I ./ λ₁
+        K = pinv(AQiA) * A' * I ./ λ₁
+        return [-1.0 .* (-0.5 * sum((u .- inv(P) * (AQiA * K * y + I ./ λ₂ * u)) .^ 2))]
+    end
+    rng = Xoshiro(123)
+    A = rand(rng, 36, 21)
+    x = rand(rng, 21, 1)
 
-	    prob = NonlinearProblem(NonlinearFunction(f_opti), u0, 0.0)
-	    sol = solve(prob, NonlinearSolve.LevenbergMarquardt())
-		@info sol
-		x_new = sol.u[:,:]
-		@info x
-		@info x_new
-		@info sum(A*x.-y)
-		@info sum(A*x_new.-y)
+    y = A * x
+    u0 = rand(rng, 21)
+    f_opti(x, p) = ℓπ(x, A, y)
+
+    prob = NonlinearProblem(NonlinearFunction(f_opti), u0, 0.0)
+    sol = solve(prob, NonlinearSolve.LevenbergMarquardt())
+    @info sol
+    x_new = sol.u[:, :]
+    @info x
+    @info x_new
+    @info sum(A * x .- y)
+    @info sum(A * x_new .- y)
 end
 
 # ╔═╡ edb6ae35-b26f-415a-baf9-d38328572875
 let
-A = rand(50,3)
+    A = rand(50, 3)
 
-Ai1 = inv(A'*A)
-Ai2 = pinv(A'*A)
-Ai3 = pinv(A)
+    Ai1 = inv(A' * A)
+    Ai2 = pinv(A' * A)
+    Ai3 = pinv(A)
 
-Ai1.-Ai2
+    Ai1 .- Ai2
 end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001

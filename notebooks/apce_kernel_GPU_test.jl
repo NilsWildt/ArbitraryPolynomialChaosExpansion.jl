@@ -6,87 +6,87 @@ using InteractiveUtils
 
 # ╔═╡ 6ddcc330-436f-11ef-28f8-b76e24aed2b4
 begin
-	using CUDA
-	using KernelAbstractions
-	using TensorOperations
-	using DispatchDoctor
-	using Tullio
-	using Zygote
-	using Chairmarks
-	using Random
-	using DifferentiationInterface
-	using Einsum
-	using TimerOutputs
-	using Statistics
-	using Enzyme
-	using ForwardDiff
-	using ReverseDiff
-	using ChainRulesCore
-	using cuTENSOR
-	using OMEinsum
-	using Bumper
-	using Atomix
-	import .EnzymeRules
-	using .EnzymeRules
+    using CUDA
+    using KernelAbstractions
+    using TensorOperations
+    using DispatchDoctor
+    using Tullio
+    using Zygote
+    using Chairmarks
+    using Random
+    using DifferentiationInterface
+    using Einsum
+    using TimerOutputs
+    using Statistics
+    using Enzyme
+    using ForwardDiff
+    using ReverseDiff
+    using ChainRulesCore
+    using cuTENSOR
+    using OMEinsum
+    using Bumper
+    using Atomix
+    import .EnzymeRules
+    using .EnzymeRules
 end
 
 # ╔═╡ 2cab2751-98e1-45cd-ba1f-be6dedf2aafd
 begin
-	
-	KernelAbstractions.@kernel function outer_product_kernel!(output, Ψ, expansion_coefficients)
-	    i, j = KernelAbstractions.@index(Global, NTuple)
-	    @inbounds begin
-	        @simd for k in axes(output, 1)
-	            Atomix.@atomic output[k, j] += Ψ[i, k] * expansion_coefficients[i, j] # got race condition apparently.
-	        end
-	    end
-	end
-	
-	# Creating a wrapper kernel for launching with error checks
-	@inline function outer_product!(output, Ψ, expansion_coefficients)
-	    backend = KernelAbstractions.get_backend(Ψ)
-	    kernel! = outer_product_kernel!(backend)
-	    kernel!(output, Ψ, expansion_coefficients, ndrange=size(expansion_coefficients))
-	end
-	
-	@inline function outer_product_kernel(Ψ::AbstractArray{T}, α::AbstractArray{S}) where {T<:Real,S<:Real}
-	    (i_dim, k_dim) = size(Ψ)
-	    (i_dim_exp, j_dim) = size(α)
-	    backend = get_backend(Ψ) # or KernelAbstractions.CUDA() for GPU
-	    # KernelAbstractions.synchronize(backend)
-	    out = KernelAbstractions.zeros(backend, S, k_dim, j_dim)
-	    outer_product!(out, Ψ, α)
-	    KernelAbstractions.synchronize(backend)
-	    return out
-	end
-	
-	# function ChainRulesCore.rrule(::typeof(outer_product_kernel), Ψ, α::AbstractArray{T}) where {T<:Real}
-	#     Ψ = Array(Ψ)
-	#     α = Array(α)
-	#     result = my_outer_product(Ψ, α)
-	#     function pullback(Δresult)
-	#         (i_dim, k_dim) = size(Ψ)
-	#         (_, j_dim) = size(α)
-	#         ΔΨ = zeros(T, i_dim, k_dim)
-	#         Δα = zeros(T, i_dim, j_dim)
-	#         @inbounds for i in 1:i_dim
-	#             for k in 1:k_dim
-	#                 @simd for j in 1:j_dim
-	#                     ΔΨ[i, k] += Δresult[k, j] * α[i, j]
-	#                     Δα[i, j] += Δresult[k, j] * Ψ[i, k]
-	#                 end
-	#             end
-	#         end
-	#         return (NoTangent(), ΔΨ, Δα)
-	#     end
-	#     return result, pullback
-	# end
-	
+
+    KernelAbstractions.@kernel function outer_product_kernel!(output, Ψ, expansion_coefficients)
+        i, j = KernelAbstractions.@index(Global, NTuple)
+        @inbounds begin
+            @simd for k in axes(output, 1)
+                Atomix.@atomic output[k, j] += Ψ[i, k] * expansion_coefficients[i, j] # got race condition apparently.
+            end
+        end
+    end
+
+    # Creating a wrapper kernel for launching with error checks
+    @inline function outer_product!(output, Ψ, expansion_coefficients)
+        backend = KernelAbstractions.get_backend(Ψ)
+        kernel! = outer_product_kernel!(backend)
+        return kernel!(output, Ψ, expansion_coefficients, ndrange = size(expansion_coefficients))
+    end
+
+    @inline function outer_product_kernel(Ψ::AbstractArray{T}, α::AbstractArray{S}) where {T <: Real, S <: Real}
+        (i_dim, k_dim) = size(Ψ)
+        (i_dim_exp, j_dim) = size(α)
+        backend = get_backend(Ψ) # or KernelAbstractions.CUDA() for GPU
+        # KernelAbstractions.synchronize(backend)
+        out = KernelAbstractions.zeros(backend, S, k_dim, j_dim)
+        outer_product!(out, Ψ, α)
+        KernelAbstractions.synchronize(backend)
+        return out
+    end
+
+    # function ChainRulesCore.rrule(::typeof(outer_product_kernel), Ψ, α::AbstractArray{T}) where {T<:Real}
+    #     Ψ = Array(Ψ)
+    #     α = Array(α)
+    #     result = my_outer_product(Ψ, α)
+    #     function pullback(Δresult)
+    #         (i_dim, k_dim) = size(Ψ)
+    #         (_, j_dim) = size(α)
+    #         ΔΨ = zeros(T, i_dim, k_dim)
+    #         Δα = zeros(T, i_dim, j_dim)
+    #         @inbounds for i in 1:i_dim
+    #             for k in 1:k_dim
+    #                 @simd for j in 1:j_dim
+    #                     ΔΨ[i, k] += Δresult[k, j] * α[i, j]
+    #                     Δα[i, j] += Δresult[k, j] * Ψ[i, k]
+    #                 end
+    #             end
+    #         end
+    #         return (NoTangent(), ΔΨ, Δα)
+    #     end
+    #     return result, pullback
+    # end
+
 end
 
 # ╔═╡ 277bf495-88e0-4970-ae3f-0e9dd488beff
 # begin
-	
+
 # @kernel function outer_product_kernel!(output, Ψ, expansion_coefficients)
 #     i, j = @index(Global, NTuple)
 #         for k in 1:size(output, 1)
@@ -111,7 +111,7 @@ end
 # 	return out
 # end
 
-	
+
 # function ChainRulesCore.rrule(::typeof(outer_product_kernel), Ψ, α::AbstractArray{T}) where {T<:Real}
 # 	Ψ = Array(Ψ)
 # 	α = Array( α)
@@ -133,14 +133,14 @@ end
 # 	end
 # 	return result, pullback
 #     end
-	
+
 # # @inline function outer_product_derivatives!(ΔΨ,Δα, Ψ, α,Δresult )
 # #     backend = KernelAbstractions.get_backend(Ψ)
 # # 	KernelAbstractions.synchronize(backend)
-	
+
 # #     kernel! = outer_product_kernel_derivatives!(backend)
 # # 	KernelAbstractions.synchronize(backend)
-	
+
 # #     kernel!(ΔΨ, Δα, Ψ, α,cu(Δresult),ndrange=size(α))
 # # end
 
@@ -152,7 +152,7 @@ end
 # #                Δα[i, j] += Δresult[k, j] * Ψ[i, k]
 # #        end
 # # 	end
-	
+
 # # function ChainRulesCore.rrule(::typeof(outer_product_kernel), Ψ, α)
 # # 	backend = get_backend(Ψ)
 # #     result = outer_product_kernel(Ψ, α)
@@ -168,7 +168,7 @@ end
 # # 	end
 # # 	return result, pullback
 # #     end
- 
+
 
 # end
 
@@ -198,7 +198,7 @@ ChainRulesCore.debug_mode() = true
 #     y .= x.^2
 #     return sum(y)
 # 	end
-	
+
 # 	function EnzymeRules.forward(func::Const{typeof(f)}, ::Type{<:Duplicated}, y::Duplicated, x::Duplicated)
 #     println("Using custom rule!")
 #     ret = func.val(y.val, x.val)
@@ -237,24 +237,24 @@ ChainRulesCore.debug_mode() = true
 
 # ╔═╡ 2ba00792-7be0-4dd1-ba76-cec8796e6d47
 begin
-@stable my_outer_product(Ψ, expansion_coefficients) = my_outer_product(Base.promote_op(*, eltype(Ψ), eltype(expansion_coefficients)), Ψ, expansion_coefficients)
-@stable function my_outer_product(::Type{T}, Ψ, expansion_coefficients) where {T}
-    # Get the dimensions of the input matrices
-    (i_dim, k_dim) = size(Ψ)
-    (i_dim_exp, j_dim) = size(expansion_coefficients)
-    # if i_dim != i_dim_exp
-    #     throw(DimensionMismatch("The dimensions of Ψ and expansion_coefficients are not compatible"))
-    # end
-    result = zeros(T, k_dim, j_dim)
-    @inbounds for i in 1:i_dim
-        for k in 1:k_dim
-            @simd for j in 1:j_dim
-                result[k, j] += Ψ[i, k] * expansion_coefficients[i, j]
+    @stable my_outer_product(Ψ, expansion_coefficients) = my_outer_product(Base.promote_op(*, eltype(Ψ), eltype(expansion_coefficients)), Ψ, expansion_coefficients)
+    @stable function my_outer_product(::Type{T}, Ψ, expansion_coefficients) where {T}
+        # Get the dimensions of the input matrices
+        (i_dim, k_dim) = size(Ψ)
+        (i_dim_exp, j_dim) = size(expansion_coefficients)
+        # if i_dim != i_dim_exp
+        #     throw(DimensionMismatch("The dimensions of Ψ and expansion_coefficients are not compatible"))
+        # end
+        result = zeros(T, k_dim, j_dim)
+        @inbounds for i in 1:i_dim
+            for k in 1:k_dim
+                @simd for j in 1:j_dim
+                    result[k, j] += Ψ[i, k] * expansion_coefficients[i, j]
+                end
             end
         end
+        return result
     end
-    return result
-end
 
 end
 
@@ -263,101 +263,101 @@ rng = Xoshiro(123)
 
 # ╔═╡ 623cd8e8-bf2e-4a96-95ff-2ce5ee928737
 @be let
-	to = TimerOutput()
-	i = 100
-	j = 8
-	k = 3
-	Ψ = cu(rand(rng,Float32,i,j))
-	α = cu(rand(rng,Float32,i,k))
-	function obj(x)
-		value = outer_product_kernel(Ψ,x)
-		return mean(value)
-	end
-	backend = DifferentiationInterface.AutoZygote()
-	# @be DifferentiationInterface.gradient(x->obj(x),backend,α)
-	A = DifferentiationInterface.gradient(obj,backend,α)
+    to = TimerOutput()
+    i = 100
+    j = 8
+    k = 3
+    Ψ = cu(rand(rng, Float32, i, j))
+    α = cu(rand(rng, Float32, i, k))
+    function obj(x)
+        value = outer_product_kernel(Ψ, x)
+        return mean(value)
+    end
+    backend = DifferentiationInterface.AutoZygote()
+    # @be DifferentiationInterface.gradient(x->obj(x),backend,α)
+    A = DifferentiationInterface.gradient(obj, backend, α)
 end
 
 # ╔═╡ b23aa282-2c59-43ae-96f9-61a268388747
 let
-	to = TimerOutput()
-	i = 1000
-	j = 5
-	k = 20
-	Ψ = rand(rng,i,j)
-	α = rand(rng,i,k)
-	for _ in 1:50
-	
-	@timeit to "my_outer_cpu" my_outer_product(Ψ,α)
-	@timeit to "tensoropt_cpu"  let
-		@tensoropt value[k, j] := Ψ[i, k] * α[i, j]
-	end
+    to = TimerOutput()
+    i = 1000
+    j = 5
+    k = 20
+    Ψ = rand(rng, i, j)
+    α = rand(rng, i, k)
+    for _ in 1:50
 
-		@timeit to "butensort_cpu"  let
-		@butensor value[k, j] := Ψ[i, k] * α[i, j]
-	end
-		
-	@timeit to "tensor_cpu"  let
-		@tensor value[k, j] := Ψ[i, k] * α[i, j]
-	end
-			@timeit to "tullio_cpu"  let
-		@tullio value[k, j] := Ψ[i, k] * α[i, j]
-		value
-	end
+        @timeit to "my_outer_cpu" my_outer_product(Ψ, α)
+        @timeit to "tensoropt_cpu"  let
+            @tensoropt value[k, j] := Ψ[i, k] * α[i, j]
+        end
 
-			@timeit to "ein_cpu"  let
-		@ein value[k, j] := Ψ[i, k] * α[i, j]
-	end
-	
-			@timeit to "einsum_cpu"  let
-	@einsum value[k, j] := Ψ[i, k] * α[i, j]
-	end
-		Ψ2 = cu(Ψ)
-	α2 = cu(α)
-	@timeit to "GPU own"  let
-	 		outer_product_kernel(Ψ2,α2)
-	end
+        @timeit to "butensort_cpu"  let
+            @butensor value[k, j] := Ψ[i, k] * α[i, j]
+        end
 
-	@timeit to "tensor_gpu"  let
-			@ein  value[k, j] := Ψ2[i, k] * α2[i, j]
-		end
-	end
-	display(to)
+        @timeit to "tensor_cpu"  let
+            @tensor value[k, j] := Ψ[i, k] * α[i, j]
+        end
+        @timeit to "tullio_cpu"  let
+            @tullio value[k, j] := Ψ[i, k] * α[i, j]
+            value
+        end
+
+        @timeit to "ein_cpu"  let
+            @ein value[k, j] := Ψ[i, k] * α[i, j]
+        end
+
+        @timeit to "einsum_cpu"  let
+            @einsum value[k, j] := Ψ[i, k] * α[i, j]
+        end
+        Ψ2 = cu(Ψ)
+        α2 = cu(α)
+        @timeit to "GPU own"  let
+            outer_product_kernel(Ψ2, α2)
+        end
+
+        @timeit to "tensor_gpu"  let
+            @ein  value[k, j] := Ψ2[i, k] * α2[i, j]
+        end
+    end
+    display(to)
 end
 
 # ╔═╡ 5aeac385-f1a1-4a0f-8f50-5f1fc8fdddbd
 let
-	
-	to = TimerOutput()
-	i = 10000
-	j = 8
-	k = 3
-	Ψ = rand(rng,i,j)
-	α = rand(rng,i,k)
-	Ψ2 = cu(Ψ)
-	α2 = cu(α)
-	for _ in 1:1000
-		@timeit to "my_outer_cpu" my_outer_product(Ψ,α)
-		Ψ2 = cu(Ψ)
-		α2 = cu(α)
-		@timeit to "outer_gpu_product"  let
-			output = outer_product_kernel(Ψ2,α2)
-		end
-			@timeit to "tensor_gpu"  let
-			@ein  value[k, j] := Ψ2[i, k] * α2[i, j]
-		end
-		
-		@timeit to "ein_gpu"  let
-			@ein value[k, j] := Ψ2[i, k] * α2[i, j]
-		end
-		# 	try
-		# @timeit to "tullio_gpu"  let
-		# 	@tullio value[k, j] := Ψ2[i, k] * α2[i, j]
-		# end
-		# 	catch
-		# 	end
-	end
-	display(to)
+
+    to = TimerOutput()
+    i = 10000
+    j = 8
+    k = 3
+    Ψ = rand(rng, i, j)
+    α = rand(rng, i, k)
+    Ψ2 = cu(Ψ)
+    α2 = cu(α)
+    for _ in 1:1000
+        @timeit to "my_outer_cpu" my_outer_product(Ψ, α)
+        Ψ2 = cu(Ψ)
+        α2 = cu(α)
+        @timeit to "outer_gpu_product"  let
+            output = outer_product_kernel(Ψ2, α2)
+        end
+        @timeit to "tensor_gpu"  let
+            @ein  value[k, j] := Ψ2[i, k] * α2[i, j]
+        end
+
+        @timeit to "ein_gpu"  let
+            @ein value[k, j] := Ψ2[i, k] * α2[i, j]
+        end
+        # 	try
+        # @timeit to "tullio_gpu"  let
+        # 	@tullio value[k, j] := Ψ2[i, k] * α2[i, j]
+        # end
+        # 	catch
+        # 	end
+    end
+    display(to)
 end
 
 # ╔═╡ 4abbcdff-2d44-4a93-beba-6bc89ca20454
@@ -377,69 +377,68 @@ end
 # 		i = 5000
 # 		j = 5
 # 		k = 3
-		
+
 # 		Ψ = rand(rng,i,j) |>cu
 # 		α = rand(rng,i,k) |>cu
-	
-	
-	
+
+
 # 	display(Array(output) )
 
 # 	# display(@tullio value[k, j] := Ψ[i, k] * α[i, j])
-		
+
 # end
 
 # ╔═╡ 5ec804ae-9e8e-4cae-9f71-cb9347405d5b
 # 	my_outer_product_kernel(Ψ,α)
-	# 		# @timeit to "my_outer_cpu" my_outer_product(Ψ,α)
-		
-	# 	# @timeit to "tensoropt_cpu"  let
-	# 	# 	@tensoropt value[k, j] := Ψ[i, k] * α[i, j]
-	# 	# end
-		
-	# 	# 		@timeit to "tullio_cpu"  let
-	# 	# 	@tullio value[k, j] := Ψ[i, k] * α[i, j]
-	# 	# 	value
-	# 	# end
-		
-	# 	# 		@timeit to "einsum_cpu"  let
-	# 	# @einsum value[k, j] := Ψ[i, k] * α[i, j]
-	# 	# end
-	# 	display(to)
-	# end
+# 		# @timeit to "my_outer_cpu" my_outer_product(Ψ,α)
+
+# 	# @timeit to "tensoropt_cpu"  let
+# 	# 	@tensoropt value[k, j] := Ψ[i, k] * α[i, j]
+# 	# end
+
+# 	# 		@timeit to "tullio_cpu"  let
+# 	# 	@tullio value[k, j] := Ψ[i, k] * α[i, j]
+# 	# 	value
+# 	# end
+
+# 	# 		@timeit to "einsum_cpu"  let
+# 	# @einsum value[k, j] := Ψ[i, k] * α[i, j]
+# 	# end
+# 	display(to)
+# end
 
 # ╔═╡ a472ad1f-122e-4b5c-990a-23330721e21f
 let
-	to = TimerOutput()
-	i = 100
-	j = 8
-	k = 3
-	Ψ = cu(rand(rng,Float32,i,j))
-	α = cu(rand(rng,Float32,i,k))
-	outer_product_kernel(Ψ,α)
+    to = TimerOutput()
+    i = 100
+    j = 8
+    k = 3
+    Ψ = cu(rand(rng, Float32, i, j))
+    α = cu(rand(rng, Float32, i, k))
+    outer_product_kernel(Ψ, α)
 end
 
 # ╔═╡ 69554245-386a-4c9d-9e48-53115b58f34f
-function obj(Ψ,x)
-out = outer_product_kernel(Ψ,x)
-	return mean(Array(out)[:])
+function obj(Ψ, x)
+    out = outer_product_kernel(Ψ, x)
+    return mean(Array(out)[:])
 end
 
 # ╔═╡ ced5c143-1227-49c8-9cea-3ad680745cb6
 let
-	to = TimerOutput()
-	i = 100
-	j = 8
-	k = 3
-	Ψ = rand(rng,Float32,i,j)
-	α = rand(rng,Float32,i,k)
-	function obj(x)
-		@tensor value[k, j] := Ψ[i, k] * x[i, j]
-	return mean(Array(value)[:])
-	end
-	backend = DifferentiationInterface.AutoZygote()
-	@be DifferentiationInterface.gradient(x->obj(x),backend,α)
-	DifferentiationInterface.gradient(x->obj(x),backend,α)
+    to = TimerOutput()
+    i = 100
+    j = 8
+    k = 3
+    Ψ = rand(rng, Float32, i, j)
+    α = rand(rng, Float32, i, k)
+    function obj(x)
+        @tensor value[k, j] := Ψ[i, k] * x[i, j]
+        return mean(Array(value)[:])
+    end
+    backend = DifferentiationInterface.AutoZygote()
+    @be DifferentiationInterface.gradient(x -> obj(x), backend, α)
+    DifferentiationInterface.gradient(x -> obj(x), backend, α)
 end
 
 # ╔═╡ 72cef223-ef79-4f21-b5c0-d3d3eb097ace
@@ -449,7 +448,7 @@ end
 #         dB = A' * ȳ
 #         return NoTangent(), dA, dB
 #     end
-#     return A * B, times_pullback 
+#     return A * B, times_pullback
 # end
 
 # ╔═╡ 638b7fa7-be3b-4c41-abf6-19d26035d47a
@@ -458,80 +457,79 @@ function ChainRulesCore.rrule(::typeof(my_outer_product), Ψ, α)
     function pullback(Δresult)
         (i_dim, k_dim) = size(Ψ)
         (_, j_dim) = size(α)
-		ΔΨ = zeros(i_dim,k_dim)
-		Δα = zeros(i_dim,j_dim)
+        ΔΨ = zeros(i_dim, k_dim)
+        Δα = zeros(i_dim, j_dim)
         @inbounds for i in 1:i_dim
             for k in 1:k_dim
-         		@simd for j in 1:j_dim
+                @simd for j in 1:j_dim
                     ΔΨ[i, k] += Δresult[k, j] * α[i, j]
                     Δα[i, j] += Δresult[k, j] * Ψ[i, k]
                 end
             end
         end
         return (NoTangent(), ΔΨ, Δα)
-	end
-	return result, pullback
     end
+    return result, pullback
+end
 
 # ╔═╡ 08d56edc-827a-4429-8e64-7eee13c36479
 let
-	to = TimerOutput()
-	i = 4
-	j = 2
-	k = 3
-	Ψ = rand(rng,Float32,i,j)
-	α = rand(rng,Float32,i,k)
+    to = TimerOutput()
+    i = 4
+    j = 2
+    k = 3
+    Ψ = rand(rng, Float32, i, j)
+    α = rand(rng, Float32, i, k)
 
-	# 	Ψ = ones(Float32,i,j)
-	# α = ones(Float32,i,k)
-	function obj(x)
-		value = my_outer_product(Ψ,x)
-	return sum(Array(value)[:])
-	end
-	backend = DifferentiationInterface.AutoZygote()
-	@be DifferentiationInterface.gradient(x->obj(x),backend,α)
-	A = DifferentiationInterface.gradient(x->obj(x),backend,α)
-	display(A)
+    # 	Ψ = ones(Float32,i,j)
+    # α = ones(Float32,i,k)
+    function obj(x)
+        value = my_outer_product(Ψ, x)
+        return sum(Array(value)[:])
+    end
+    backend = DifferentiationInterface.AutoZygote()
+    @be DifferentiationInterface.gradient(x -> obj(x), backend, α)
+    A = DifferentiationInterface.gradient(x -> obj(x), backend, α)
+    display(A)
 
-	backend = DifferentiationInterface.AutoForwardDiff()
-	@be DifferentiationInterface.gradient(x->obj(x),backend,α)
-	A = DifferentiationInterface.gradient(x->obj(x),backend,α)
-	display(A)
+    backend = DifferentiationInterface.AutoForwardDiff()
+    @be DifferentiationInterface.gradient(x -> obj(x), backend, α)
+    A = DifferentiationInterface.gradient(x -> obj(x), backend, α)
+    display(A)
 
 
-	
 end
 
 # ╔═╡ 90971bd3-07ef-4239-b879-3260f0a9bb48
 let
-	to = TimerOutput()
-	i = 4
-	j = 2
-	k = 3
-	Ψ = rand(rng,Float32,i,j)
-	α = rand(rng,Float32,i,k)
+    to = TimerOutput()
+    i = 4
+    j = 2
+    k = 3
+    Ψ = rand(rng, Float32, i, j)
+    α = rand(rng, Float32, i, k)
 
-	# 	Ψ = ones(Float32,i,j)
-	# α = ones(Float32,i,k)
-	function obj(x)
-		@tensor value[k, j] := Ψ[i, k] * x[i, j]
-	return sum(Array(value)[:])
-	end
-	backend = DifferentiationInterface.AutoZygote()
-	@be DifferentiationInterface.gradient(x->obj(x),backend,α)
-	A = DifferentiationInterface.gradient(x->obj(x),backend,α)
-	display(A)
+    # 	Ψ = ones(Float32,i,j)
+    # α = ones(Float32,i,k)
+    function obj(x)
+        @tensor value[k, j] := Ψ[i, k] * x[i, j]
+        return sum(Array(value)[:])
+    end
+    backend = DifferentiationInterface.AutoZygote()
+    @be DifferentiationInterface.gradient(x -> obj(x), backend, α)
+    A = DifferentiationInterface.gradient(x -> obj(x), backend, α)
+    display(A)
 
-	cus_dev = zeros(i,k)
-	for ii in 1:i
-		for kk in 1:k
-			for jj in 1:j
-				cus_dev[ii,kk] +=Ψ[ii,jj]
-			end
-		end
-	end
-	display(cus_dev)
-	# display(α)
+    cus_dev = zeros(i, k)
+    for ii in 1:i
+        for kk in 1:k
+            for jj in 1:j
+                cus_dev[ii, kk] += Ψ[ii, jj]
+            end
+        end
+    end
+    display(cus_dev)
+    # display(α)
 end
 
 # ╔═╡ ca2d043c-5045-49e2-9c2a-736e8fbf8742
@@ -553,19 +551,19 @@ end
 
 # ╔═╡ c8dfa598-cc5c-43d0-a448-d1421264f8a0
 let
-	to = TimerOutput()
-	i = 100
-	j = 8
-	k = 3
-	Ψ = cu(rand(rng,Float32,i,j))
-	α = cu(rand(rng,Float32,i,k))
-	function obj(x)
-		@ein value[k, j] := Ψ[i, k] * x[i, j]
-	return mean(Array(value)[:])
-	end
-	backend = DifferentiationInterface.AutoZygote()
-	@be DifferentiationInterface.gradient(x->obj(x),backend,α)
-	DifferentiationInterface.gradient(x->obj(x),backend,α)
+    to = TimerOutput()
+    i = 100
+    j = 8
+    k = 3
+    Ψ = cu(rand(rng, Float32, i, j))
+    α = cu(rand(rng, Float32, i, k))
+    function obj(x)
+        @ein value[k, j] := Ψ[i, k] * x[i, j]
+        return mean(Array(value)[:])
+    end
+    backend = DifferentiationInterface.AutoZygote()
+    @be DifferentiationInterface.gradient(x -> obj(x), backend, α)
+    DifferentiationInterface.gradient(x -> obj(x), backend, α)
 end
 
 # ╔═╡ 1496e7a9-4230-4fcb-9cb4-40dbba7addf0

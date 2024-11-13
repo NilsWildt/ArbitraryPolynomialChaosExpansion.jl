@@ -1,5 +1,5 @@
 # Copyright (c) 2024 wildt
-# 
+#
 # This software is released under the MIT License.
 # https://opensource.org/licenses/MIT
 # using Zygote
@@ -107,18 +107,15 @@ end
 # end
 
 
-
-
 # function ChainRulesCore.rrule(::typeof(aPCE_OrthonormalBasis), Data::AbstractArray{T}, Degree::S, normalize_data::Val{false}) where {T<:Real,S<:Integer}
 #     NCpoints, inpDim = size(Data)
 #     function aPCE_pullback(dy)
-#         ∂Data =  ForwardDiff.gradient(x -> sum(aPCE_OrthonormalBasis(x, Degree, Val(false))), Data) 
+#         ∂Data =  ForwardDiff.gradient(x -> sum(aPCE_OrthonormalBasis(x, Degree, Val(false))), Data)
 #         ∂∂ = @thunk reduce(hcat, [dy * ∂Data[:, i] for i in 1:inpDim])
 #         return ChainRulesCore.NoTangent(), ∂∂
 #     end
 #     return aPCE_OrthonormalBasis(Data, Degree, Val(false)), aPCE_pullback
 # end
-
 
 
 # function ChainRulesCore.rrule(::Type{ComponentArray}, nt::NamedTuple)

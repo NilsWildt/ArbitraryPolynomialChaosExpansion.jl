@@ -6,24 +6,24 @@ using InteractiveUtils
 
 # ╔═╡ ee638bc9-ada0-4406-9bba-ef14658d6c9c
 begin
-	using DispatchDoctor
-	using UnicodePlots
-	using StatsBase
-	using LazyArrays
-	using SparseArrays
-	using DataFrames
-	using PrettyTables
-	using AlgebraOfGraphics
-	using CairoMakie
-	using Combinatorics
-	using StaticArrays
+    using DispatchDoctor
+    using UnicodePlots
+    using StatsBase
+    using LazyArrays
+    using SparseArrays
+    using DataFrames
+    using PrettyTables
+    using AlgebraOfGraphics
+    using CairoMakie
+    using Combinatorics
+    using StaticArrays
 end
 
 
 # ╔═╡ d0c6cc89-3f25-417b-bab2-3239466472be
-function filter_indices_sparsity(indices, max_degree, qnorm) 
+function filter_indices_sparsity(indices, max_degree, qnorm)
     normalized_indices = indices ./ (max_degree + 1)
-    summed_indices = sum((normalized_indices).^qnorm, dims = 2)
+    summed_indices = sum((normalized_indices) .^ qnorm, dims = 2)
     rooted_indices = summed_indices .^ (1.0 / qnorm)
     mask = rooted_indices .<= 1.0
     idx_to_keep = vec(mask)
@@ -56,7 +56,7 @@ end
 
 
 # ╔═╡ 18169379-1ca3-4dff-af95-283e23b3aac0
-@stable function aPCE_MultivariatePolynomialDegrees2(num_dimensions::Int64=3, max_degree::Int64=3, d_marginals::Int64=3, d_interactions::Int64=2)::Matrix{Int64}
+@stable function aPCE_MultivariatePolynomialDegrees2(num_dimensions::Int64 = 3, max_degree::Int64 = 3, d_marginals::Int64 = 3, d_interactions::Int64 = 2)::Matrix{Int64}
     valid_rows = []
 
     # Recursive function to generate combinations
@@ -69,8 +69,8 @@ end
                 if all(x -> x <= d_marginals, current_combination)
                     # Check interaction constraint (sum of any two non-zero elements)
                     valid = true
-                    for i in 1:num_dimensions-1
-                        for j in i+1:num_dimensions
+                    for i in 1:(num_dimensions - 1)
+                        for j in (i + 1):num_dimensions
                             if current_combination[i] != 0 && current_combination[j] != 0
                                 if current_combination[i] + current_combination[j] > d_interactions
                                     valid = false
@@ -104,85 +104,85 @@ end
 
 # ╔═╡ d4cbe83e-6b8a-4192-9ac8-a906904709d8
 @stable function reverse_columns!(x)
-	@inbounds for row in axes(x, 1)
-		x[row, :] = reverse(@views x[row, :])
-	end
-	return x
+    @inbounds for row in axes(x, 1)
+        x[row, :] = reverse(@views x[row, :])
+    end
+    return x
 end
 
 # ╔═╡ 393c8e70-23fe-11ef-1321-3d8ad40e425c
 @stable function aPCE_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T; qnorm = 1.0)::Matrix{T} where {T <: Integer}
-	# Initialize the indices for the first parameter
-	range_ = 0:max_degree |> collect
-	indices = reshape(range_, :, 1)  # Make it a column vector
-	@inbounds for di in 1:num_dimensions-1
-		indices = repeat(indices, inner = (max_degree + 1, 1))
-		front = repeat(range_, outer = div(lastindex(indices), (max_degree + 1)) ÷ di)
-		indices = ApplyArray(hcat, front, indices)
-		if qnorm != 1.0
-			idx_to_keep = vec(sum((indices ./ (max_degree + 1)) .^ qnorm, dims = 2) .^ (1.0 / qnorm) .<= 1.0)
-			indices = indices[idx_to_keep, :]
-			# @info "Q-norm removed $(length(idx_to_keep)-sum(idx_to_keep)) terms"
-		else
-			indices = indices[vec(sum(indices; dims = 2)).<=max_degree, :]
-		end
-	end
-	indices = sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
-	reverse_columns!(indices)
-	return indices
+    # Initialize the indices for the first parameter
+    range_ = 0:max_degree |> collect
+    indices = reshape(range_, :, 1)  # Make it a column vector
+    @inbounds for di in 1:(num_dimensions - 1)
+        indices = repeat(indices, inner = (max_degree + 1, 1))
+        front = repeat(range_, outer = div(lastindex(indices), (max_degree + 1)) ÷ di)
+        indices = ApplyArray(hcat, front, indices)
+        if qnorm != 1.0
+            idx_to_keep = vec(sum((indices ./ (max_degree + 1)) .^ qnorm, dims = 2) .^ (1.0 / qnorm) .<= 1.0)
+            indices = indices[idx_to_keep, :]
+            # @info "Q-norm removed $(length(idx_to_keep)-sum(idx_to_keep)) terms"
+        else
+            indices = indices[vec(sum(indices; dims = 2)) .<= max_degree, :]
+        end
+    end
+    indices = sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
+    reverse_columns!(indices)
+    return indices
 end
 
 
 # ╔═╡ 6042fe2e-9d5b-4a15-a5b5-e0ca9ba9b644
 function count_same_order(A)
-	s = 0
-	for r in eachrow(A)
-			if all(r[1].==r)
-				s+=1
-			end
-	end
-	return s
+    s = 0
+    for r in eachrow(A)
+        if all(r[1] .== r)
+            s += 1
+        end
+    end
+    return s
 end
 
 # ╔═╡ 8fa0aa85-1b70-425e-bbf0-5399ea1b7ab0
 function count_cross_order(A)
-	s = 0
-	for r in eachrow(A)
-			if any(r[1]!=r)
-				s+=1
-			end
-	end
-	return s
+    s = 0
+    for r in eachrow(A)
+        if any(r[1] != r)
+            s += 1
+        end
+    end
+    return s
 end
 
 # ╔═╡ f28930f8-9ae7-426b-bf7e-263500d276d9
 function mean_orders(A)
-	return [mean(s) for s in eachrow(A)]
+    return [mean(s) for s in eachrow(A)]
 end
 
 # ╔═╡ 0f5a0d38-4d3a-4830-aa95-02c1476a6fd5
 function var_orders(A)
-	return [var(s) for s in eachrow(A)]
+    return [var(s) for s in eachrow(A)]
 end
 
 # ╔═╡ 44551183-65c5-4ab6-a536-475023aec17c
 function count_and_sort_elements_by_value(arr::AbstractArray)
     # Create a dictionary to count occurrences
     count_dict = Dict{Any, Int}()
-    
+
     # Count occurrences of each element
-	try
-	arr = reduce(vcat,arr)
-    for elem in arr;
-        count_dict[elem] = get(count_dict, elem, 0) + 1
+    try
+        arr = reduce(vcat, arr)
+        for elem in arr
+            count_dict[elem] = get(count_dict, elem, 0) + 1
+        end
+
+        # Sort the dictionary by values
+        sorted_by_value = sort(collect(count_dict), by = x -> x[2], rev = true)
+
+        return Dict(sorted_by_value)
+    catch
     end
-    
-    # Sort the dictionary by values
-    sorted_by_value = sort(collect(count_dict), by = x -> x[2], rev = true)
-    
-    return Dict(sorted_by_value)
-	catch
-	end
 end
 
 # ╔═╡ 64f53d9b-3187-41e0-89be-cc27ba7b716c
@@ -198,7 +198,7 @@ function ex_info(MVPD)
     mean_of_vars = mean(var_order)
     var_of_vars = var(var_order)
     @info "ALL:" MVPD
-    
+
     # Log the metrics
     @info "Same order:" same_order_count
     @info "Cross order:" cross_order_count
@@ -209,27 +209,27 @@ function ex_info(MVPD)
     @info "Var order:" var_order
     @info "Mean var:" mean_of_vars
     @info "Var var:" var_of_vars
-    
+
     # Display the matrices
     display(MVPD')
     display(sum(MVPD; dims = 2)')
-    
+
     # Create a DataFrame to store the results
     metrics = ["Sameorder", "Crossorder", "Doubleorder", "Meanmean", "Varmean", "Meanvar", "Varvar"]
     values = [same_order_count, cross_order_count, double_order_count, mean_of_means, var_of_means, mean_of_vars, var_of_vars]
-    
+
     # Create DataFrame with metrics as columns
     df = DataFrame(reshape(values, 1, :), Symbol.(metrics))
-    
+
     return df
 end
 
 # ╔═╡ 2c8c87e0-030a-47f6-ae8f-65544af7cdc3
-function compare(f, qnorm1=0.1, dim=3, maxorder=6)
+function compare(f, qnorm1 = 0.1, dim = 3, maxorder = 6)
     @info "Comparison between qnorm=1 and " qnorm1
-    MVPD1 = f(dim, maxorder,3,3)
+    MVPD1 = f(dim, maxorder, 3, 3)
     display("---------------------------------------------------")
-    MVPD2 = f(dim, maxorder,3,3)
+    MVPD2 = f(dim, maxorder, 3, 3)
     display("----------Intersect-------------------------------")
     s1 = Set([eachrow(MVPD1)]...)
     s2 = Set([eachrow(MVPD2)]...)
@@ -252,18 +252,18 @@ function compare(f, qnorm1=0.1, dim=3, maxorder=6)
 end
 
 # ╔═╡ 24cd850c-ea50-4e5d-80ec-2adbd2846c49
-compare(aPCE_MultivariatePolynomialDegrees,0.5)
+compare(aPCE_MultivariatePolynomialDegrees, 0.5)
 
 # ╔═╡ a20023e7-0b37-4796-9e05-3a84d0e5a232
-compare(aPCE_MultivariatePolynomialDegrees,0.1)
+compare(aPCE_MultivariatePolynomialDegrees, 0.1)
 
 # ╔═╡ 15cf7946-e7f6-478e-8e27-8bb7646c4096
-compare(aPCE_MultivariatePolynomialDegrees,1.0)
+compare(aPCE_MultivariatePolynomialDegrees, 1.0)
 
 # ╔═╡ 1b31eb61-dba0-4c0e-a69e-c4dfe049c5f1
 function compare_multiple(f, qnorm_values, dims, maxorders)
     results = DataFrame()
-    
+
     for qnorm1 in qnorm_values
         for dim in dims
             for maxorder in maxorders
@@ -272,28 +272,28 @@ function compare_multiple(f, qnorm_values, dims, maxorders)
             end
         end
     end
-    
+
     return results
 end
 
 
 # ╔═╡ 230b3e37-fac3-44c1-8e24-ad5c4be86da1
 begin
-	
-# Example usage
-# Define your function `f` which generates MVPD based on dimension, maxorder, and qnorm
-# f(dim, maxorder; qnorm) = ... (your function definition here)
 
-# Define the parameters for multiple runs
-qnorm_values = LinRange(0.0001,1.0,100) # Example qnorm values
-dims = [4]  # Example dimensions
-maxorders = [8]  # Example maxorders
+    # Example usage
+    # Define your function `f` which generates MVPD based on dimension, maxorder, and qnorm
+    # f(dim, maxorder; qnorm) = ... (your function definition here)
 
-# Run the comparisons and get the large DataFrame
-large_df = compare_multiple(aPCE_MultivariatePolynomialDegrees2, qnorm_values, dims, maxorders)
+    # Define the parameters for multiple runs
+    qnorm_values = LinRange(0.0001, 1.0, 100) # Example qnorm values
+    dims = [4]  # Example dimensions
+    maxorders = [8]  # Example maxorders
 
-# Display the large DataFrame
-display(large_df)
+    # Run the comparisons and get the large DataFrame
+    large_df = compare_multiple(aPCE_MultivariatePolynomialDegrees2, qnorm_values, dims, maxorders)
+
+    # Display the large DataFrame
+    display(large_df)
 end
 
 # ╔═╡ 5556e606-835c-44b0-ae07-b49e6a6e106a
@@ -301,96 +301,96 @@ names(large_df)
 
 # ╔═╡ 5b439f3d-8920-48a4-a7b2-39d6a3af4523
 let
-	# Plot example: Value by qnorm
-	plt1 = data(large_df) * 
-	       mapping(:qnorm,"Varmean", color=:Meanmean) * 
-	       visual(Scatter)
-	
-	# Display the plot
-	draw(plt1, axis=(title="Varmean",))
+    # Plot example: Value by qnorm
+    plt1 = data(large_df) *
+        mapping(:qnorm, "Varmean", color = :Meanmean) *
+        visual(Scatter)
+
+    # Display the plot
+    draw(plt1, axis = (title = "Varmean",))
 end
 
 # ╔═╡ 60e2ea48-394f-4627-9d93-d91926a46d96
 let
-	# Plot example: Value by qnorm
-	plt1 = data(large_df) * 
-	       mapping(:qnorm,"Varvar", color=:Meanmean) * 
-	       visual(Scatter)
-	
-	# Display the plot
-	draw(plt1, axis=(title="Same Order Values by qnorm",))
-	
-	
+    # Plot example: Value by qnorm
+    plt1 = data(large_df) *
+        mapping(:qnorm, "Varvar", color = :Meanmean) *
+        visual(Scatter)
+
+    # Display the plot
+    draw(plt1, axis = (title = "Same Order Values by qnorm",))
+
+
 end
 
 # ╔═╡ 46e2329f-08e0-453b-935e-39ee9b72a494
 let
-	# Plot example: Value by qnorm
-	plt1 = data(large_df) * 
-	       mapping(:qnorm,"Meanmean", color=:Meanmean) * 
-	       visual(Scatter)
-	
-	# Display the plot
-	draw(plt1, axis=(title="Same Order Values by qnorm",))
-	
-	
+    # Plot example: Value by qnorm
+    plt1 = data(large_df) *
+        mapping(:qnorm, "Meanmean", color = :Meanmean) *
+        visual(Scatter)
+
+    # Display the plot
+    draw(plt1, axis = (title = "Same Order Values by qnorm",))
+
+
 end
 
 # ╔═╡ 93b0c931-107f-4328-81b5-8f7466908853
 let
-	# Plot example: Value by qnorm
-	plt1 = data(large_df) * 
-	       mapping(:qnorm,"Sameorder", color=:Sameorder) * 
-	       visual(Scatter)
-	
-	# Display the plot
-	draw(plt1, axis=(title="Same Order Values by qnorm",))
-	
-	
+    # Plot example: Value by qnorm
+    plt1 = data(large_df) *
+        mapping(:qnorm, "Sameorder", color = :Sameorder) *
+        visual(Scatter)
+
+    # Display the plot
+    draw(plt1, axis = (title = "Same Order Values by qnorm",))
+
+
 end
 
 # ╔═╡ 6869b874-732f-43cf-a546-2922303709da
 let
-	# Plot example: Value by qnorm
-	plt1 = data(large_df) * 
-	       mapping(:qnorm,"Crossorder", color=:Crossorder) * 
-	       visual(Scatter)
-	
-	# Display the plot
-	draw(plt1, axis=(title="Crossorder Values by qnorm",))
-	
-	
+    # Plot example: Value by qnorm
+    plt1 = data(large_df) *
+        mapping(:qnorm, "Crossorder", color = :Crossorder) *
+        visual(Scatter)
+
+    # Display the plot
+    draw(plt1, axis = (title = "Crossorder Values by qnorm",))
+
+
 end
 
 # ╔═╡ ff2031e8-c818-48d1-8f63-768766e7b1bc
 begin
-	n=4
-	A = zeros(n,n)
-	for i in axes(A,1)
-		for j in axes(A,2)
-			A[i,j] = (i-1)*(j-1)
-		end
-	end
-	A
+    n = 4
+    A = zeros(n, n)
+    for i in axes(A, 1)
+        for j in axes(A, 2)
+            A[i, j] = (i - 1) * (j - 1)
+        end
+    end
+    A
 end
 
 # ╔═╡ fb944e30-8d43-4b39-aa86-78afe4b2395c
-compare(aPCE_MultivariatePolynomialDegrees,0.10,3,3)
+compare(aPCE_MultivariatePolynomialDegrees, 0.1, 3, 3)
 
 # ╔═╡ 4c335605-04ca-48f6-8f65-8b9e923ab50f
-@stable function degrees_by_construction(num_dimensions::Int64=3, max_degree=3, d_marginals=3, d_interactions=2)::Matrix{Int64}
-	# Initialize the indices for the first parameter
-	range_ = 0:max_degree |> collect
-	indices = reshape(range_, :, 1)  # Make it a column vector
-	@inbounds for di in 1:num_dimensions-1
-		indices = repeat(indices, inner = (max_degree + 1, 1))
-		front = repeat(range_, outer = div(lastindex(indices), (max_degree + 1)) ÷ di)
-		indices = hcat(front,indices)#ApplyArray(hcat, front, indices)
-		indices = indices[vec(sum(indices; dims = 2)).<=max_degree, :]
-	end
-	indices = sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
-	reverse_columns!(indices)
-	return indices' 
+@stable function degrees_by_construction(num_dimensions::Int64 = 3, max_degree = 3, d_marginals = 3, d_interactions = 2)::Matrix{Int64}
+    # Initialize the indices for the first parameter
+    range_ = 0:max_degree |> collect
+    indices = reshape(range_, :, 1)  # Make it a column vector
+    @inbounds for di in 1:(num_dimensions - 1)
+        indices = repeat(indices, inner = (max_degree + 1, 1))
+        front = repeat(range_, outer = div(lastindex(indices), (max_degree + 1)) ÷ di)
+        indices = hcat(front, indices) #ApplyArray(hcat, front, indices)
+        indices = indices[vec(sum(indices; dims = 2)) .<= max_degree, :]
+    end
+    indices = sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
+    reverse_columns!(indices)
+    return indices'
 end
 
 
@@ -401,7 +401,7 @@ degrees_by_construction()
 # degrees_by_construction2(3,3,3,2) # num_dim, max_deg, d_m, d_i
 
 # ╔═╡ 63302d47-6d4d-4ae4-84e0-925327344aaa
-@stable function degrees_by_construction3(num_dimensions::Int64=3, max_degree::Int64=3, d_marginals::Int64=3, d_interactions::Int64=2)::Matrix{Int64}
+@stable function degrees_by_construction3(num_dimensions::Int64 = 3, max_degree::Int64 = 3, d_marginals::Int64 = 3, d_interactions::Int64 = 2)::Matrix{Int64}
     valid_rows = []
 
     # Inline function to check if the sum of the current combination is within max_degree
@@ -411,12 +411,12 @@ degrees_by_construction()
     elements_within_marginals(combination) = all(x -> x <= d_marginals, combination)
 
     # Inline function to check the interaction constraint
-     function interactions_within_limit(combination)
+    function interactions_within_limit(combination)
         non_zero_indices = findall(x -> x != 0, combination)
-        for i in 1:length(non_zero_indices)-1
-            for j in i+1:length(non_zero_indices)
+        for i in 1:(length(non_zero_indices) - 1)
+            for j in (i + 1):length(non_zero_indices)
                 @views if (combination[non_zero_indices[i]] + combination[non_zero_indices[j]] > d_interactions) ||
-                   (sum(combination[:,i]) >  d_interactions)
+                        (sum(combination[:, i]) > d_interactions)
                     return false
                 end
             end
@@ -425,11 +425,11 @@ degrees_by_construction()
     end
 
     # Recursive function to generate combinations
-      function generate_combinations!(valid_rows, current_combination::Vector{Int}, current_index::Int)
+    function generate_combinations!(valid_rows, current_combination::Vector{Int}, current_index::Int)
         if current_index > num_dimensions
-            if sum_within_limit(current_combination) && 
-               elements_within_marginals(current_combination) &&
-               interactions_within_limit(current_combination)
+            if sum_within_limit(current_combination) &&
+                    elements_within_marginals(current_combination) &&
+                    interactions_within_limit(current_combination)
                 push!(valid_rows, copy(current_combination))
             end
         else
@@ -445,117 +445,119 @@ degrees_by_construction()
     # Convert the collected valid rows to a matrix
     indices = hcat(valid_rows...)'
     indices = sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
-    
+
     return indices
 end
 
 # ╔═╡ 42cc9d2e-a897-4eb6-88f2-db0b4c215870
-@timev degrees_by_construction3(3,3,3,2)
+@timev degrees_by_construction3(3, 3, 3, 2)
 
 # ╔═╡ 18319398-cb37-483b-826b-64e3e977af6c
-@stable function degrees_by_construction6(num_dimensions::T=3, max_degree::T=3, d_marginals::T=3, d_interactions::T=2)::Matrix{T} where {T<:Integer}
-	# Initialize the indices for the first parameter
-	function we_want_to_keep(current_combination)
-            if sum(current_combination) <= max_degree
-                zeroinds = iszero.(current_combination)
-                szeroinds = sum(zeroinds)
-                if szeroinds == (num_dimensions - 1)
-                    if current_combination[.!zeroinds][1] <= d_marginals
-                        return true
-                    end
-                elseif (num_dimensions - szeroinds) >= 1
-                    if sum(current_combination[.!zeroinds]) <= d_interactions
-                        return true
-                    end
+@stable function degrees_by_construction6(num_dimensions::T = 3, max_degree::T = 3, d_marginals::T = 3, d_interactions::T = 2)::Matrix{T} where {T <: Integer}
+    # Initialize the indices for the first parameter
+    function we_want_to_keep(current_combination)
+        if sum(current_combination) <= max_degree
+            zeroinds = iszero.(current_combination)
+            szeroinds = sum(zeroinds)
+            if szeroinds == (num_dimensions - 1)
+                if current_combination[.!zeroinds][1] <= d_marginals
+                    return true
+                end
+            elseif (num_dimensions - szeroinds) >= 1
+                if sum(current_combination[.!zeroinds]) <= d_interactions
+                    return true
                 end
             end
-		return false
-	end
-	range_ = 0:max_degree |> collect
-	indices = reshape(range_, :, 1)  # Make it a column vector
-	@inbounds for di in 1:num_dimensions-1
-		indices = repeat(indices, inner = (max_degree + 1, 1))
-		front = repeat(range_, outer = div(lastindex(indices), (max_degree + 1)) ÷ di)
-		indices = ApplyArray(hcat, front, indices)
-		indices = indices[vec(sum(indices; dims = 2)).<=max_degree, :]
-	end
-	# NOw kill the ones we don't want:
-	# indices = indices[[we_want_to_keep(i) for i in eachrow(indices)],:]
-	keep_mask = map(we_want_to_keep, eachrow(indices))
+        end
+        return false
+    end
+    range_ = 0:max_degree |> collect
+    indices = reshape(range_, :, 1)  # Make it a column vector
+    @inbounds for di in 1:(num_dimensions - 1)
+        indices = repeat(indices, inner = (max_degree + 1, 1))
+        front = repeat(range_, outer = div(lastindex(indices), (max_degree + 1)) ÷ di)
+        indices = ApplyArray(hcat, front, indices)
+        indices = indices[vec(sum(indices; dims = 2)) .<= max_degree, :]
+    end
+    # NOw kill the ones we don't want:
+    # indices = indices[[we_want_to_keep(i) for i in eachrow(indices)],:]
+    keep_mask = map(we_want_to_keep, eachrow(indices))
     indices = indices[keep_mask, :]
-	indices = vcat(indices,zeros(T,num_dimensions)')
-	indices = sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
-	# reverse_columns!(indices)
-	return indices
+    indices = vcat(indices, zeros(T, num_dimensions)')
+    indices = sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
+    # reverse_columns!(indices)
+    return indices
 end
 
 
 # ╔═╡ a070f9a8-5230-4621-8bb4-477030bca0bc
-@timev degrees_by_construction6(23,3,2,2)
+@timev degrees_by_construction6(23, 3, 2, 2)
 
 # ╔═╡ 16b8be50-de5d-4187-bcfc-b1843850cbed
-2600*23
+2600 * 23
 
 # ╔═╡ 152b39b8-fd5e-4d66-836b-6355353e307f
-@stable function degrees_by_construction4(num_dimensions::Int64=3, max_degree::Int64=3, d_marginals::Int64=3, d_interactions::Int64=2)::Matrix{Int64}
-   range_ = 0:max_degree |> collect
-	indices = reshape(range_, :, 1)  # Make it a column vector
-	for di in 1:num_dimensions-1
-		indices = repeat(indices, inner = (max_degree + 1, 1))
-		front = repeat(range_, outer = div(lastindex(indices), (max_degree + 1)) ÷ di)
-		indices = ApplyArray(hcat, front, indices)
+@stable function degrees_by_construction4(num_dimensions::Int64 = 3, max_degree::Int64 = 3, d_marginals::Int64 = 3, d_interactions::Int64 = 2)::Matrix{Int64}
+    range_ = 0:max_degree |> collect
+    indices = reshape(range_, :, 1)  # Make it a column vector
+    for di in 1:(num_dimensions - 1)
+        indices = repeat(indices, inner = (max_degree + 1, 1))
+        front = repeat(range_, outer = div(lastindex(indices), (max_degree + 1)) ÷ di)
+        indices = ApplyArray(hcat, front, indices)
         # First throw out too big combinations
-		dimsum = vec(sum(indices; dims = 2))
-		throw_out = dimsum_smaller_max = dimsum .<= max_degree
-		indices = indices[throw_out,:]
+        dimsum = vec(sum(indices; dims = 2))
+        throw_out = dimsum_smaller_max = dimsum .<= max_degree
+        indices = indices[throw_out, :]
     end
-	keeplist = ones(Bool,size(indices,1))
-	for i in axes(indices,1) # Iterate rows
-		## Remove marginals -- all except for one dimension is zero
-		zeroinds = iszero.(@views indices[i,:])
-		szeroinds = sum(zeroinds)
-		# Kick the ones where we have only one dimension but are greater than the d_marginal..
-		if szeroinds == (num_dimensions-1)
-			if @views indices[i,.!zeroinds][1] > d_marginals
-				keeplist[i] = false
-			end
-		elseif (num_dimensions-szeroinds) >=1 
-			if sum(@views indices[i,:]) > d_interactions
-				keeplist[i] = false
-			end
-		end
-	end
-	@info keeplist
-	indices = indices[keeplist,:]
+    keeplist = ones(Bool, size(indices, 1))
+    for i in axes(indices, 1) # Iterate rows
+        ## Remove marginals -- all except for one dimension is zero
+        zeroinds = iszero.(@views indices[i, :])
+        szeroinds = sum(zeroinds)
+        # Kick the ones where we have only one dimension but are greater than the d_marginal..
+        if szeroinds == (num_dimensions - 1)
+            if @views indices[i, .!zeroinds][1] > d_marginals
+                keeplist[i] = false
+            end
+        elseif (num_dimensions - szeroinds) >= 1
+            if sum(@views indices[i, :]) > d_interactions
+                keeplist[i] = false
+            end
+        end
+    end
+    @info keeplist
+    indices = indices[keeplist, :]
     indices = Matrix{Int64}(sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end])
     # reverse_columns!(indices)
     return indices
 end
 
 # ╔═╡ c8e69472-aa78-42b3-89c2-7954cdb255ab
-@timev degrees_by_construction4(23,3,3,2)
+@timev degrees_by_construction4(23, 3, 3, 2)
 
 # ╔═╡ eb274067-4989-4ca8-bffd-ac068a07add1
 # @timev degrees_by_construction5(23,3,3,2)
 
 # ╔═╡ 0302d1c1-9c1a-4ed7-9599-73bfa8f51d35
-@timev aPCE_MultivariatePolynomialDegrees(23,3)
+@timev aPCE_MultivariatePolynomialDegrees(23, 3)
 
 # ╔═╡ 14d33e34-0126-4fee-ab0d-b96138a7200c
-function degrees_by_construction5(num_dimensions::T=3, max_degree::T=3, d_marginals::T=3, d_interactions::T=2)::SparseMatrixCSC{T, T} where {T<:Integer}
-    indices = [@SVector zeros(T,num_dimensions)]
+function degrees_by_construction5(num_dimensions::T = 3, max_degree::T = 3, d_marginals::T = 3, d_interactions::T = 2)::SparseMatrixCSC{T, T} where {T <: Integer}
+    indices = [@SVector zeros(T, num_dimensions)]
     # Define a recursive function to generate combinations
 
-	# zeroinds = zeros(Bool,num_dimensions)
-	
-    @polly @inline function generate_combinations!(indices, 
-                                    current_combination, 
-                                    current_dim::T, 
-                                    num_dimensions::T, 
-                                    max_degree::T, 
-                                    d_marginals::T, 
-                                    d_interactions::T) where {T<:Integer}
-      if current_dim > num_dimensions
+    # zeroinds = zeros(Bool,num_dimensions)
+
+    @polly @inline function generate_combinations!(
+            indices,
+            current_combination,
+            current_dim::T,
+            num_dimensions::T,
+            max_degree::T,
+            d_marginals::T,
+            d_interactions::T
+        ) where {T <: Integer}
+        if current_dim > num_dimensions
             if sum(current_combination) <= max_degree
                 zeroinds = iszero.(current_combination)
                 szeroinds = sum(zeroinds)
@@ -579,12 +581,12 @@ function degrees_by_construction5(num_dimensions::T=3, max_degree::T=3, d_margin
     # Initialize the first combination and start recursion
     initial_combination = sparse(zeros(Int64, num_dimensions))
     generate_combinations!(indices, initial_combination, 1, num_dimensions, max_degree, d_marginals, d_interactions)
-    return reduce(hcat,indices)'
+    return reduce(hcat, indices)'
 end
 
 
 # ╔═╡ 8f502bc1-ff7c-412b-917c-dc8fadf29249
-@timev degrees_by_construction5(12,3,3,2)
+@timev degrees_by_construction5(12, 3, 3, 2)
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
