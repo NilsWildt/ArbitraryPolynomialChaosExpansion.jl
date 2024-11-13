@@ -92,7 +92,7 @@ md"""
 # ╔═╡ 5b4bc70a-d4f4-4464-a5f9-f30d86794653
 begin
     function k_gauss(r; ϵ = 0.1)
-        return  exp(-1 / (2 * ϵ^2) * r^2)
+        return exp(-1 / (2 * ϵ^2) * r^2)
     end
     ∇G = x -> ForwardDiff.derivative(k_gauss, x)
     ΔG = x -> ForwardDiff.derivative(∇G, x)

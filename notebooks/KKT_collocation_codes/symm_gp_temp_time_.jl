@@ -411,7 +411,7 @@ function marginal_negloglikelihod(y, t_u, x_u, t_f, x_f, θ, ϕ, reg)
         tmp = 0.5 * y' * inv(Kfull) * y + N / 2 * log(2 * π) + 0.5 * log(dK)
         return tmp
     else
-        return  Inf
+        return Inf
     end
 end
 

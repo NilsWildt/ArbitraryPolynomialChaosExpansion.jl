@@ -92,7 +92,7 @@ end
             num_to_keep = round(Int, percentage * n)
             return @views array[1:num_to_keep]
         catch
-            return  array[:]
+            return array[:]
         end
     end
 
@@ -142,9 +142,11 @@ end
 function aPCE_PsiPolynomialMatrix_zygote(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis) where {T <: Real}
     NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
     NCpoints = size(TrainingInput, 1)
-    
-    Psi = [compute_Psi_element(i, j, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, InputDimensions) 
-           for i in 1:NumberOfTerms, j in 1:NCpoints]
+
+    Psi = [
+        compute_Psi_element(i, j, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, InputDimensions)
+            for i in 1:NumberOfTerms, j in 1:NCpoints
+    ]
     return reshape(Psi, NumberOfTerms, NCpoints)
 end
 
@@ -616,7 +618,6 @@ end
     end
     return coeffs
 end
-
 
 
 function ChainRulesCore.frule((_, Δx), ::typeof(reverse_columns!), x)
