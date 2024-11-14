@@ -199,42 +199,42 @@ let
             indices = indices[np.argsort(
                 np.sum(keys_[:, indices], axis=0))].T
         return indices
-    
-    
+
+
     def get_polynomial_basis(max_degree, ndim):
         # Arrays with smallest order (0) to the max degree + 1
         start = np.zeros(ndim, dtype=int)
         stop = np.full(ndim, max_degree+1, dtype=int)   # Add +1 so np.arange(0, stop) fills up to degree "d"
         bound = stop.max()
-    
+
         # To control the size of the arrays:
         dtype = np.uint8 if bound < 256 else np.uint16
         range_ = np.arange(bound, dtype=dtype)           # vector with values of "d" to consider
         # Initialize the indices for the first parameter (row-wise), based on the order range
         indices = range_[:, np.newaxis]  # list of orders, in order
-    
+
         # Fill the combinatorics array, one dimension at a time:
         for idx in range(ndim - 1):
-    
+
             # Repeats the current set of indices ndim times
             # e.g. [0,1,2] -> [0,1,2,0,1,2,...,0,1,2]
             indices = np.tile(indices, (bound, 1))
-    
+
             # Stretches ranges over the new dimension.
             # e.g. [0,1,2] -> [0,0,...,0,1,1,...,1,2,2,...,2]
             front = range_.repeat(len(indices) // bound)[:, np.newaxis]
-    
+
             # Put the array "front" in front of the previous "indices" array, to do the combinations of dimensions <= idx
             indices = np.column_stack((front, indices))
-    
+
             # Truncate at each step to keep memory usage low, dor idx > 0
             idx_to_keep = np.sum(indices, axis=-1) <= max_degree
             indices = indices[idx_to_keep]
-    
+
         # Order in descending norm value (sum of all orders), giving priority to the first dimensions
         new_order = sort_basis_indices(keys=indices.T, reverse=False, graded=True)
         indices = indices[new_order]
-    
+
         return indices
     """
 
@@ -276,42 +276,42 @@ begin
             indices = indices[np.argsort(
                 np.sum(keys_[:, indices], axis=0))].T
         return indices
-    
-    
+
+
     def get_polynomial_basis(max_degree, ndim):
         # Arrays with smallest order (0) to the max degree + 1
         start = np.zeros(ndim, dtype=int)
         stop = np.full(ndim, max_degree+1, dtype=int)   # Add +1 so np.arange(0, stop) fills up to degree "d"
         bound = stop.max()
-    
+
         # To control the size of the arrays:
         dtype = np.uint8 if bound < 256 else np.uint16
         range_ = np.arange(bound, dtype=dtype)           # vector with values of "d" to consider
         # Initialize the indices for the first parameter (row-wise), based on the order range
         indices = range_[:, np.newaxis]  # list of orders, in order
-    
+
         # Fill the combinatorics array, one dimension at a time:
         for idx in range(ndim - 1):
-    
+
             # Repeats the current set of indices ndim times
             # e.g. [0,1,2] -> [0,1,2,0,1,2,...,0,1,2]
             indices = np.tile(indices, (bound, 1))
-    
+
             # Stretches ranges over the new dimension.
             # e.g. [0,1,2] -> [0,0,...,0,1,1,...,1,2,2,...,2]
             front = range_.repeat(len(indices) // bound)[:, np.newaxis]
-    
+
             # Put the array "front" in front of the previous "indices" array, to do the combinations of dimensions <= idx
             indices = np.column_stack((front, indices))
-    
+
             # Truncate at each step to keep memory usage low, dor idx > 0
             idx_to_keep = np.sum(indices, axis=-1) <= max_degree
             indices = indices[idx_to_keep]
-    
+
         # Order in descending norm value (sum of all orders), giving priority to the first dimensions
         new_order = sort_basis_indices(keys=indices.T, reverse=False, graded=True)
         indices = indices[new_order]
-    
+
         return indices
     """
     @benchmark Array{Int64}(py"get_polynomial_basis($max_degree,$num_dims)")

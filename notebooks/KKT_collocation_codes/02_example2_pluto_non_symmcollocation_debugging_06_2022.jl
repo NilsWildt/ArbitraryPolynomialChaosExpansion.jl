@@ -115,11 +115,11 @@ begin
     @doc doc""" 
     k_mq <: Kernel
     Multiquadratic kernel
-    
+
     ```math
     K(x,y) = \frac{1}{(\sigma^2 + \sqrt{|x-y|}^2)}
     ```
-    
+
     scaling factor ``\sigma``.
     """
     mutable struct Mq{T <: Real} <: Kernel
