@@ -228,14 +228,14 @@ end
 end
 
 
-@stable @inbounds function aPCE_OrthonormalBasis(Data, Degree::S, normalize_data::Val{true}) where {S <: Integer}
+@stable @inbounds function aPCE_OrthonormalBasis(Data, Degree::S, center_data::Val{true}) where {S <: Integer}
     T = eltype(Data)
     d = Degree #Degree of polynomial expansion
     dd = d #Degree of polinomial for roots definitions
     # @warn "Weird, is that properly normalized? Not /std and minus mean?"
     NumberOfDataPoints = length(Data)
     MeanOfData = mean(Data)
-    Data = Data ./ MeanOfData
+    Data = (Data .- MeanOfData)  # center_data
     m = zeros(T, 2 * dd + 2)
     @batch for col in axes(Data, 2)
         compute_moments!(m, view(Data, :, col), NumberOfDataPoints, dd)
@@ -268,12 +268,11 @@ end
         Vc[degree + 1] = one(T)
 
 
-        # PolyCoeff_NonNorm[degree+1, 1:degree+1] .= LinearAlgebra.factorize(Hankel) \ Vc
-
+        PolyCoeff_NonNorm[degree + 1, 1:(degree + 1)] .= LinearAlgebra.factorize(Hankel) \ Vc
         # PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Krylov.usymlq(Hankel,Vc) |> first
         # catch
         #     @warn "Hankel matrix singular, trying pseudo inverse." #  Vp Hankel Vc
-        PolyCoeff_NonNorm[degree + 1, 1:(degree + 1)] .= pinv(Hankel) * Vc # more robust?
+        # PolyCoeff_NonNorm[degree + 1, 1:(degree + 1)] .= pinv(Hankel) * Vc # more robust?
         # end
         # Vp = Hankel \ Vc
         # PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Vp
@@ -289,22 +288,24 @@ end
         for i in 1:NumberOfDataPoints
             Poly = 0
             for k in 0:degree
-                @fastmath Poly += @views PolyCoeff_NonNorm[degree + 1, k + 1] * Data[i]^k
+                Poly += @views PolyCoeff_NonNorm[degree + 1, k + 1] * Data[i]^k
             end
             P_norm += Poly^2 / NumberOfDataPoints
         end
         for k in 0:degree
-            @fastmath OrthonormalBasis[degree + 1, k + 1] = @views PolyCoeff_NonNorm[degree + 1, k + 1] / sqrt(P_norm)
+            OrthonormalBasis[degree + 1, k + 1] = @views PolyCoeff_NonNorm[degree + 1, k + 1] / sqrt(P_norm)
         end
     end
+
     for k in 1:lastindex(OrthonormalBasis, 2)
-        @fastmath OrthonormalBasis[:, k] = @views OrthonormalBasis[:, k] ./ (MeanOfData^(k - 1))
+        OrthonormalBasis[:, k] = @views OrthonormalBasis[:, k] ./ (MeanOfData^(k - 1))
     end
+
     return OrthonormalBasis
 end
 
 
-@stable @inbounds function aPCE_OrthonormalBasis(Data, Degree::S, normalize_data::Val{false}) where {S <: Integer}
+@stable @inbounds function aPCE_OrthonormalBasis(Data, Degree::S, center_data::Val{false}) where {S <: Integer}
     T = eltype(Data)
     d = Degree #Degree of polinomial expansion
     dd = d #Degree of polynomial for roots definition
@@ -360,7 +361,7 @@ end
 end
 
 
-@stable @inbounds function aPCE_OrthonormalBasis_zygote(Data, Degree::S, normalize_data::Val{false}) where {S <: Integer}
+@stable @inbounds function aPCE_OrthonormalBasis_zygote(Data, Degree::S, center_data::Val{false}) where {S <: Integer}
     T = eltype(Data)
     d = Degree #Degree of polynomial expansion
     dd = d #Degree of polynomial for roots definition
@@ -487,21 +488,21 @@ end
     return x
 end
 
-function create_basis(x, degree; normalize_data = true)
-    return create_basis(x, degree, Val(true); normalize_data = normalize_data)
+function create_basis(x, degree; center_data = true)
+    return create_basis(x, degree, Val(true); center_data = center_data)
 end
 
 # Univartiate BASIS creation
-@stable function create_basis(x, degree, is_orthonormal::Val{true}; normalize_data = true)
+@stable function create_basis(x, degree, is_orthonormal::Val{true}; center_data = true)
     input_dimensions = size(x, 2)
     OrthonormalBasis = Array{eltype(x), 3}(undef, degree + 1, degree + 1, input_dimensions)
     for i in 1:input_dimensions
-        OrthonormalBasis[:, :, i] .= aPCE_OrthonormalBasis(view(x, :, i), degree, Val(normalize_data))
+        OrthonormalBasis[:, :, i] .= aPCE_OrthonormalBasis(view(x, :, i), degree, Val(center_data))
     end # x[:,i]
     return OrthonormalBasis
 end
 
-@stable function create_basis(x, degree, is_orthonormal::Val{false}; normalize_data = true)
+@stable function create_basis(x, degree, is_orthonormal::Val{false}; center_data = true)
     input_dimensions = size(x, 2)
     OrthonormalBasis = Array{eltype(x), 3}(undef, degree + 1, degree + 1, input_dimensions)
     for i in 1:input_dimensions
@@ -510,7 +511,7 @@ end
     return OrthonormalBasis
 end
 
-@stable function create_basis!(OrthonormalBasis, x, degree; normalize_data = false)
+@stable function create_basis!(OrthonormalBasis, x, degree; center_data = false)
     # @ignore_derivatives begin
     input_dimensions = size(x, 2)
     # OrthonormalBasis = eltype(x).(OrthonormalBasis)
@@ -519,7 +520,7 @@ end
     end
     # OrthonormalBasis = zeros(eltype(x), degree + 1, degree + 1, input_dimensions)
     for i in 1:input_dimensions
-        OrthonormalBasis[:, :, i] .= aPCE_OrthonormalBasis(view(x, :, i), degree, Val(normalize_data))
+        OrthonormalBasis[:, :, i] .= aPCE_OrthonormalBasis(view(x, :, i), degree, Val(center_data))
     end
     # return OrthonormalBasis
     # end

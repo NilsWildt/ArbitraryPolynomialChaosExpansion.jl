@@ -25,7 +25,7 @@ mutable struct aPCE{T <: Real}
             is_orthonormal::Bool = true,
             s_marginals = 1.0,
             s_interactions = 1.0,
-            normalize_data = true,
+            center_data = true,
             do_gauss = false,
             kwargs...
         ) where {T}
@@ -36,7 +36,7 @@ mutable struct aPCE{T <: Real}
         end
         MultivariatePolynomialDegrees = aPCE_MultivariatePolynomialDegrees(input_dimensions, ExpansionDegree + gauss_one_order_more, s_marginals, s_interactions)
         NumberOfTerms = min(size(MultivariatePolynomialDegrees, 1), numberPolynomials(ExpansionDegree + gauss_one_order_more, input_dimensions))
-        OrthonormalBasis = create_basis(InputDistribution, ExpansionDegree + gauss_one_order_more, Val(is_orthonormal); normalize_data = normalize_data)
+        OrthonormalBasis = create_basis(InputDistribution, ExpansionDegree + gauss_one_order_more, Val(is_orthonormal); center_data = center_data)
         ExpansionCoefficients = zeros(T, NumberOfTerms, outdim)
         return new{T}(
             InputDistribution,

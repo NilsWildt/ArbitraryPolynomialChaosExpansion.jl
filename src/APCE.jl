@@ -43,6 +43,7 @@ using Tracker: Tracker
 using UnicodePlots: UnicodePlots
 using UnrolledUtilities: UnrolledUtilities
 using Zygote: Zygote, bufferfrom
+using Suppressor: @suppress
 # using CUDA
 using KernelAbstractions
 # using cuTENSOR
@@ -61,15 +62,17 @@ include("APCEhighlevel.jl")
 include("utils.jl")
 
 @setup_workload begin
-    FT = Float64
-    TrainingInput = rand(10, 2) |> Array{FT}
-    TrainingOutput = rand(10, 2) |> Array{FT} |> Array{FT}
-    @compile_workload begin
-        degree = 2
-        apc_instance = aPCE(TrainingInput, degree; outdim = size(TrainingOutput, 2), OrthonormalRepresentation = true, normalize_data = true)
-        train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion = true, reg_order = 3)
-        predict(apc_instance, TrainingInput)
-        UQ(apc_instance)
+    @suppress begin
+        FT = Float64
+        TrainingInput = rand(10, 2) |> Array{FT}
+        TrainingOutput = rand(10, 2) |> Array{FT} |> Array{FT}
+        @compile_workload begin
+            degree = 1
+            apc_instance = aPCE(TrainingInput, degree; outdim = size(TrainingOutput, 2), OrthonormalRepresentation = true, center_data = true)
+            train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion = true, reg_order = 2)
+            predict(apc_instance, TrainingInput)
+            UQ(apc_instance)
+        end
     end
 end
 
