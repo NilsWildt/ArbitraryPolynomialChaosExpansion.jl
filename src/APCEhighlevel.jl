@@ -96,38 +96,47 @@ function aPCE_PsiPolynomialMatrix(aPCE::aPCE{T}, TrainingInput::S)::S where {T <
     return Psi
 end
 
+
 function GaussianCollocation(aPCE::aPCE{T}; strategy = :PCM) where {T <: Real}
     @assert aPCE.do_gauss "Gaussian collocation requires the do_gauss flag to be set to true"
-    # @info aPCE
+    
     PointsVector = 1:(aPCE.ExpansionDegree + 1) |> collect
     UniqueCombinations = stack(reduce(vcat, (Iterators.product([PointsVector for _ in 1:aPCE.input_dimensions]...))))'
     sort_indices = sortperm(sum(UniqueCombinations; dims = 2); dims = 1)
     SortUniqueCombinations = UniqueCombinations[sort_indices[:], :]
+    
     if strategy == :FT
         TrainingInput = SortUniqueCombinations
         return Array(view(TrainingInput, :, (1:size(TrainingInput, 2))))
     elseif strategy == :PCM
-        polynomial_roots = zeros(aPCE.input_dimensions, aPCE.ExpansionDegree + 1)
+        # Transpose polynomial_roots to match expected dimensions
+        polynomial_roots = zeros(aPCE.ExpansionDegree + 1, aPCE.input_dimensions)
         @inbounds for d in Base.oneto(Int64(aPCE.input_dimensions))
             polynomial_basis = @views aPCE.OrthonormalBasis[:, :, d]
-            @debug "" polynomial_basis
-            polynomial_roots[d, :] = @view reinterpret(T, PolynomialRoots.roots(@views polynomial_basis[aPCE.ExpansionDegree + 2, :]))[1:2:(end - 1)]
+            polynomial_roots[:, d] = @view reinterpret(T, PolynomialRoots.roots(@views polynomial_basis[aPCE.ExpansionDegree + 2, :]))[1:2:(end - 1)]
         end
+        
         temp = abs.(polynomial_roots .- StatsBase.mean(aPCE.InputDistribution; dims = 1)[:, :][1])
-        temp_sort = mapslices(sortperm, temp, dims = 2)
-        @inbounds for i in axes(polynomial_roots, 1)
-            polynomial_roots[i, :] = @views polynomial_roots[i, temp_sort[i, :]]
+        temp_sort = mapslices(sortperm, temp, dims = 1)
+        @inbounds for i in axes(polynomial_roots, 2)
+            polynomial_roots[:, i] = @views polynomial_roots[temp_sort[:, i], i]
         end
-        collocation_points = zeros(aPCE.NumberOfTerms, aPCE.input_dimensions)
-        @inbounds for i in 1:aPCE.NumberOfTerms
-            for j in axes(SortUniqueCombinations, 2)
-                collocation_points[i, j] = @views polynomial_roots[j, Int(SortUniqueCombinations[i, j])]
+        
+        # Ensure collocation_points matches SortUniqueCombinations size
+        collocation_points = zeros(size(SortUniqueCombinations, 1), aPCE.input_dimensions)
+        
+        @inbounds for i in axes(collocation_points, 1)
+            for j in axes(collocation_points, 2)
+                idx = Int(SortUniqueCombinations[i, j])
+                collocation_points[i, j] = polynomial_roots[idx, j]
             end
         end
+        
         collocation_points = sortslices(collocation_points, dims = 1, by = x -> x[1])
         return Array(view(collocation_points, :, (1:size(collocation_points, 2))))
     end
 end
+
 
 @stable function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion = :true, reg_order = 3)
     @info "=> aPCE Toolbox: Training Arbitrary Polynomial Chaos ..."

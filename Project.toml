@@ -14,6 +14,7 @@ ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
 Chairmarks = "0ca39b1e-fe0b-4e98-acfc-b1656634c4de"
 Combinatorics = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
 ComponentArrays = "b0b7db55-cfe3-40fc-9ded-d10e2dbeff66"
+CpuId = "adafc99b-e345-5852-983c-f28acb93d879"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 DispatchDoctor = "8d63f2c5-f18a-4cf2-ba9d-b3f60fc568c8"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
@@ -75,4 +76,5 @@ UnrolledUtilities = "0fe1646c-419e-43be-ac14-22321958931b"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [compat]
+CpuId = "0.3.1"
 REPL = "1.11.0"
