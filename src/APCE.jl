@@ -8,7 +8,7 @@ using Combinatorics: Combinatorics, factorial
 using ComponentArrays: ComponentArrays
 # using DifferentiationInterface: DifferentiationInterface
 using DispatchDoctor: @stable
-using SparseArrays
+# using SparseArrays
 using DrWatson: DrWatson, projectdir
 using Einsum: Einsum, @einsum
 using Estrin: Estrin
@@ -34,7 +34,7 @@ using PrettyTables: PrettyTables
 using Random: Random, Xoshiro, shuffle
 using RegularizationTools: RegularizationTools
 using ReverseDiff: ReverseDiff
-using StaticArrays: StaticArrays
+# using StaticArrays: StaticArrays
 using StatsBase: StatsBase, fit!, mean, sum
 using Bumper
 using TensorOperations: TensorOperations, @tensoropt, @tensor

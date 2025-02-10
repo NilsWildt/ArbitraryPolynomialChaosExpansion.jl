@@ -101,7 +101,7 @@ end
     indices = reshape(range_, :, 1)
     for di in 1:(num_dimensions - 1)
         indices = repeat(indices, inner = (max_degree + 1, 1))
-        front = repeat(range_, outer = div(lastindex(indices), (max_degree + 1)) ÷ di) |> sparse
+        front = repeat(range_, outer = div(lastindex(indices), (max_degree + 1)) ÷ di) #|> sparse
         indices = ApplyArray(hcat, front, indices)
         indices = @~ indices[vec(sum(indices; dims = 2)) .<= max_degree, :]
     end
