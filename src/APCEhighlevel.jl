@@ -99,12 +99,12 @@ end
 
 function GaussianCollocation(aPCE::aPCE{T}; strategy = :PCM) where {T <: Real}
     @assert aPCE.do_gauss "Gaussian collocation requires the do_gauss flag to be set to true"
-    
+
     PointsVector = 1:(aPCE.ExpansionDegree + 1) |> collect
     UniqueCombinations = stack(reduce(vcat, (Iterators.product([PointsVector for _ in 1:aPCE.input_dimensions]...))))'
     sort_indices = sortperm(sum(UniqueCombinations; dims = 2); dims = 1)
     SortUniqueCombinations = UniqueCombinations[sort_indices[:], :]
-    
+
     if strategy == :FT
         TrainingInput = SortUniqueCombinations
         return Array(view(TrainingInput, :, (1:size(TrainingInput, 2))))
@@ -115,23 +115,23 @@ function GaussianCollocation(aPCE::aPCE{T}; strategy = :PCM) where {T <: Real}
             polynomial_basis = @views aPCE.OrthonormalBasis[:, :, d]
             polynomial_roots[:, d] = @view reinterpret(T, PolynomialRoots.roots(@views polynomial_basis[aPCE.ExpansionDegree + 2, :]))[1:2:(end - 1)]
         end
-        
+
         temp = abs.(polynomial_roots .- StatsBase.mean(aPCE.InputDistribution; dims = 1)[:, :][1])
         temp_sort = mapslices(sortperm, temp, dims = 1)
         @inbounds for i in axes(polynomial_roots, 2)
             polynomial_roots[:, i] = @views polynomial_roots[temp_sort[:, i], i]
         end
-        
+
         # Ensure collocation_points matches SortUniqueCombinations size
         collocation_points = zeros(size(SortUniqueCombinations, 1), aPCE.input_dimensions)
-        
+
         @inbounds for i in axes(collocation_points, 1)
             for j in axes(collocation_points, 2)
                 idx = Int(SortUniqueCombinations[i, j])
                 collocation_points[i, j] = polynomial_roots[idx, j]
             end
         end
-        
+
         collocation_points = sortslices(collocation_points, dims = 1, by = x -> x[1])
         return Array(view(collocation_points, :, (1:size(collocation_points, 2))))
     end
