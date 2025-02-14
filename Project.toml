@@ -1,7 +1,7 @@
 name = "APCE"
 uuid = "e0c64dd9-0151-4106-bdf9-1cf426dd9187"
 authors = ["NilsWildt"]
-version = "0.2.3"
+version = "0.2.4"
 
 [deps]
 AlgebraOfGraphics = "cbdf2221-f076-402e-a563-3d30da359d67"
