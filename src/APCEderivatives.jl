@@ -259,3 +259,35 @@ end
 # 	end
 # 	return Ψforward, compose_Ψ_pullback
 # end
+
+function ChainRulesCore.rrule(
+        ::typeof(compute_Psi_element),
+        i, j, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, InputDimensions
+    )
+    # Forward computation
+    product = one(eltype(TrainingInput))
+    derivatives = zeros(size(TrainingInput, 2))
+
+    for ii in 1:InputDimensions
+        degree = MultivariatePolynomialDegrees[i, ii] + 1
+        coeffs = OrthonormalBasis[degree, 1:degree, ii]
+        x = TrainingInput[j, ii]
+        p_x = evalpoly(x, coeffs)
+
+        # Compute derivative for this dimension
+        other_products = prod(
+            ii == jj ? evalpoly_derivative(x, coeffs) : evalpoly(x, coeffs)
+                for jj in 1:InputDimensions
+        )
+        derivatives[ii] = other_products
+
+        product *= p_x
+    end
+
+    function compute_Psi_element_pullback(dy)
+        ∂TrainingInput = @thunk(dy * derivatives)
+        return (NoTangent(), NoTangent(), NoTangent(), ∂TrainingInput, NoTangent(), NoTangent(), NoTangent())
+    end
+
+    return product, compute_Psi_element_pullback
+end

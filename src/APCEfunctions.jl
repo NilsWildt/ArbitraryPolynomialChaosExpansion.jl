@@ -161,13 +161,26 @@ function aPCE_PsiPolynomialMatrix_zygote(TrainingInput, MultivariatePolynomialDe
     return reshape(Psi, NumberOfTerms, NCpoints)
 end
 
+# function compute_Psi_element(i, j, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, InputDimensions)
+#     product = one(eltype(TrainingInput))
+#     for ii in 1:InputDimensions
+#         degree = MultivariatePolynomialDegrees[i, ii] + 1
+#         coeffs = OrthonormalBasis[degree, 1:degree, ii]
+#         x = TrainingInput[j, ii]
+#         p_x = evalpoly(x, coeffs)
+#         product *= p_x
+#     end
+#     return product
+# end
+
+# FAST VERSION, NON ZYGOTE
 function compute_Psi_element(i, j, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, InputDimensions)
     product = one(eltype(TrainingInput))
-    for ii in 1:InputDimensions
+    @inbounds for ii in 1:InputDimensions
         degree = MultivariatePolynomialDegrees[i, ii] + 1
-        coeffs = OrthonormalBasis[degree, 1:degree, ii]
+        coeffs = @views OrthonormalBasis[degree, 1:degree, ii]
         x = TrainingInput[j, ii]
-        p_x = evalpoly(x, coeffs)
+        p_x = evalpoly_two(x, coeffs)  # Use evalpoly_two instead of evalpoly
         product *= p_x
     end
     return product
@@ -680,5 +693,5 @@ end
 function evalpoly_derivative(x, coeffs)
     n = length(coeffs) - 1
     derivative_coeffs = coeffs[2:end] .* (1:n)'
-    return evalpoly(x, derivative_coeffs)
+    return evalpoly_two(x, derivative_coeffs)
 end
