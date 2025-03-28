@@ -33,13 +33,13 @@ using PrecompileTools: @setup_workload, @compile_workload    # this is a small d
 using PrettyTables: PrettyTables
 using Random: Random, Xoshiro, shuffle
 using RegularizationTools: RegularizationTools
-using ReverseDiff: ReverseDiff
+# using ReverseDiff: ReverseDiff
 # using StaticArrays: StaticArrays
 using StatsBase: StatsBase, fit!, mean, sum
 using Bumper
 using TensorOperations: TensorOperations, @tensoropt, @tensor
 using TimerOutputs: TimerOutputs
-using Tracker: Tracker
+# using Tracker: Tracker
 using UnicodePlots: UnicodePlots
 using UnrolledUtilities: UnrolledUtilities
 using Zygote: Zygote, bufferfrom
