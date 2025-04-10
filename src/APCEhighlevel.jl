@@ -4,6 +4,7 @@
 # https://opensource.org/licenses/MIT
 using Einsum
 using DispatchDoctor: @stable
+using LinearAlgebra: qr, svd, pinv, I
 export aPCE, predict_from_coeffs
 mutable struct aPCE{T <: Real}
     const InputDistribution::AbstractArray{T} # in [ d x N-samples]
@@ -138,42 +139,119 @@ function GaussianCollocation(aPCE::aPCE{T}; strategy = :PCM) where {T <: Real}
 end
 
 
-@stable function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion = :true, reg_order = 3)
+# @stable function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion = :true, reg_order = 1)
+#     @info "=> aPCE Toolbox: Training Arbitrary Polynomial Chaos ..."
+#     T = eltype(TrainingInput)
+#     # @info aPCE
+#     if size(y_rhs, 2) == 1
+#         y_rhs = reshape(y_rhs, :, 1)
+#     end
+#     # y_rhs = reduce(hcat, TrainingOutput)'
+#     if aPCE.output_dimensions != size(y_rhs, 2)
+#         # @warn "Output dimensions of the aPCE model and the training output do not match"
+#         aPCE.output_dimensions = size(y_rhs, 2)
+#         aPCE.ExpansionCoefficients = zeros(T, aPCE.NumberOfTerms, aPCE.output_dimensions)
+#     end
+#     # NumberOfTerms, InputDimensions = size(aPCE.MultivariatePolynomialDegrees)
+#     # NCpoints = size(TrainingInput, 1)
+#     # Psi = SMatrix{NumberOfTerms,NCpoints}(aPCE_PsiPolynomialMatrix(aPCE, TrainingInput)')
+#     Psi = aPCE_PsiPolynomialMatrix(aPCE, TrainingInput)' |> Matrix{T}
+#     # @warn "SPYING"
+#     # display(UnicodePlots.spy(sparse(Psi)))
+#     # @debug "" size(TrainingInput) size(TrainingOutput) size(Psi) typeof(Psi) typeof(TrainingOutput) typeof(TrainingInput) size(aPCE.ExpansionCoefficients) typeof(aPCE.ExpansionCoefficients)
+#     # Psi_inv = pinv(Psi;rtol= sqrt(eps(real(float(oneunit(eltype(Psi)))))) )
+
+
+#     Psi_inv = pinv(Psi, rtol = sqrt(eps(real(float(oneunit(eltype(Psi)))))))
+#     @tensor aPCE.ExpansionCoefficients[i, k] = Psi_inv[i, j] * y_rhs[j, k]
+#     # aPCE.ExpansionCoefficients = outer_product_kernel(cu(Psi_inv), cu(y_rhs))
+
+#     if bayesian_inversion
+#         @info "Using bayesian regularization y_rhs find the expansion coefficients"
+#         x₀ = aPCE.ExpansionCoefficients # Quite a good first guess :) And pinv is quite stable.
+
+#         for i in axes(y_rhs, 2)
+#             @info "Bayesian regularization for axis $i"
+#             aPCE.ExpansionCoefficients[:, i] .= invert(Psi, y_rhs[:, i], Lₖx₀(reg_order, view(x₀, :, i)); alg = :gcv_svd, method = LBFGS(linesearch = LineSearches.BackTracking()))
+#         end
+#     end
+#     for k in axes(aPCE.ExpansionCoefficients, 2)
+#         res = (@views sqrt(mean((Psi * aPCE.ExpansionCoefficients[:, k] .- y_rhs[:, k]) .^ 2)))
+#         @info "Error for axis $k" res
+#     end
+#     return nothing
+# end
+
+function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion = :true, reg_order = 1)
     @info "=> aPCE Toolbox: Training Arbitrary Polynomial Chaos ..."
     T = eltype(TrainingInput)
-    # @info aPCE
+    
+    # Format the output data
     if size(y_rhs, 2) == 1
         y_rhs = reshape(y_rhs, :, 1)
     end
-    # y_rhs = reduce(hcat, TrainingOutput)'
+    
+    # Update dimensions if needed
     if aPCE.output_dimensions != size(y_rhs, 2)
-        # @warn "Output dimensions of the aPCE model and the training output do not match"
         aPCE.output_dimensions = size(y_rhs, 2)
         aPCE.ExpansionCoefficients = zeros(T, aPCE.NumberOfTerms, aPCE.output_dimensions)
     end
-    # NumberOfTerms, InputDimensions = size(aPCE.MultivariatePolynomialDegrees)
-    # NCpoints = size(TrainingInput, 1)
-    # Psi = SMatrix{NumberOfTerms,NCpoints}(aPCE_PsiPolynomialMatrix(aPCE, TrainingInput)')
+    
+    # Compute the polynomial matrix
     Psi = aPCE_PsiPolynomialMatrix(aPCE, TrainingInput)' |> Matrix{T}
-    # @warn "SPYING"
-    # display(UnicodePlots.spy(sparse(Psi)))
-    # @debug "" size(TrainingInput) size(TrainingOutput) size(Psi) typeof(Psi) typeof(TrainingOutput) typeof(TrainingInput) size(aPCE.ExpansionCoefficients) typeof(aPCE.ExpansionCoefficients)
-    # Psi_inv = pinv(Psi;rtol= sqrt(eps(real(float(oneunit(eltype(Psi)))))) )
-
-
-    Psi_inv = pinv(Psi; rtol = sqrt(eps(real(float(oneunit(eltype(Psi)))))))
-    @tensor aPCE.ExpansionCoefficients[i, k] = Psi_inv[i, j] * y_rhs[j, k]
-    # aPCE.ExpansionCoefficients = outer_product_kernel(cu(Psi_inv), cu(y_rhs))
-
-    if bayesian_inversion
-        @info "Using bayesian regularization y_rhs find the expansion coefficients"
-        x₀ = aPCE.ExpansionCoefficients # Quite a good first guess :) And pinv is quite stable.
-
-        for i in axes(y_rhs, 2)
-            @info "Bayesian regularization for axis $i"
-            aPCE.ExpansionCoefficients[:, i] .= invert(Psi, y_rhs[:, i], Lₖx₀(reg_order, view(x₀, :, i)); alg = :gcv_svd, method = LBFGS(linesearch = LineSearches.BackTracking()))
+    
+    # More robust pseudoinverse calculation
+    try
+        # Try the standard pinv with the specified tolerance
+        Psi_inv = pinv(Psi, rtol = sqrt(eps(real(float(oneunit(eltype(Psi)))))))
+        @tensor aPCE.ExpansionCoefficients[i, k] = Psi_inv[i, j] * y_rhs[j, k]
+    catch e
+        @warn "Standard pinv failed, trying alternative approach" exception=e
+        
+        # Try direct solving with Tikhonov regularization
+        λ = 1e-6  # Regularization parameter
+        num_terms = size(aPCE.ExpansionCoefficients, 1)
+        
+        # Solve directly (Psi'*Psi + λ*I)*c = Psi'*y for each output dimension
+        for k in axes(y_rhs, 2)
+            try
+                aPCE.ExpansionCoefficients[:, k] = (Psi'*Psi + λ*I(num_terms)) \ (Psi' * y_rhs[:, k])
+            catch e2
+                @warn "Tikhonov regularization failed for output $k, trying SVD approach" exception=e2
+                # Use SVD with more careful handling
+                try
+                    U, S, V = svd(Psi)
+                    # Threshold small singular values
+                    tol = maximum(size(Psi)) * maximum(S) * eps(T)
+                    S_inv = map(s -> s > tol ? 1/s : zero(T), S)
+                    
+                    # Compute pseudoinverse via SVD
+                    Psi_inv_svd = V * Diagonal(S_inv) * U'
+                    aPCE.ExpansionCoefficients[:, k] = Psi_inv_svd * y_rhs[:, k]
+                catch e3
+                    @error "All numerical approaches failed for output $k" exception=e3
+                    # Last resort - try QR factorization for this output
+                    F = qr(Psi)
+                    aPCE.ExpansionCoefficients[:, k] = F \ y_rhs[:, k]
+                end
+            end
         end
     end
+    
+    # Continue with bayesian inversion if enabled
+    if bayesian_inversion
+        @info "Using bayesian regularization to find the expansion coefficients"
+        x₀ = copy(aPCE.ExpansionCoefficients)
+        
+        for i in axes(y_rhs, 2)
+            @info "Bayesian regularization for axis $i"
+            aPCE.ExpansionCoefficients[:, i] .= invert(Psi, y_rhs[:, i], Lₖx₀(reg_order, view(x₀, :, i)); 
+                                                      alg = :gcv_svd, 
+                                                      method = LBFGS(linesearch = LineSearches.BackTracking()))
+        end
+    end
+    
+    # Compute and report errors
     for k in axes(aPCE.ExpansionCoefficients, 2)
         res = (@views sqrt(mean((Psi * aPCE.ExpansionCoefficients[:, k] .- y_rhs[:, k]) .^ 2)))
         @info "Error for axis $k" res
