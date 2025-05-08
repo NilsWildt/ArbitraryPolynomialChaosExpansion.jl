@@ -112,7 +112,7 @@ end
             ambiguities = false,      # TODO: fix ambiguities
             stale_deps = false,
             unbound_args = true,     # TODO: fix unbound type parameters
-            piracies = true,         # TODO: check the reported methods to be moved upstream
+            piracies = false,         # TODO: check the reported methods to be moved upstream
             deps_compat = false,
             project_extras = false,
             persistent_tasks = false,

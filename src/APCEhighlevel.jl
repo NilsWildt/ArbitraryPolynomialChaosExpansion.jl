@@ -185,51 +185,51 @@ end
 function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion = :true, reg_order = 1)
     @info "=> aPCE Toolbox: Training Arbitrary Polynomial Chaos ..."
     T = eltype(TrainingInput)
-    
+
     # Format the output data
     if size(y_rhs, 2) == 1
         y_rhs = reshape(y_rhs, :, 1)
     end
-    
+
     # Update dimensions if needed
     if aPCE.output_dimensions != size(y_rhs, 2)
         aPCE.output_dimensions = size(y_rhs, 2)
         aPCE.ExpansionCoefficients = zeros(T, aPCE.NumberOfTerms, aPCE.output_dimensions)
     end
-    
+
     # Compute the polynomial matrix
     Psi = aPCE_PsiPolynomialMatrix(aPCE, TrainingInput)' |> Matrix{T}
-    
+
     # More robust pseudoinverse calculation
     try
         # Try the standard pinv with the specified tolerance
         Psi_inv = pinv(Psi, rtol = sqrt(eps(real(float(oneunit(eltype(Psi)))))))
         @tensor aPCE.ExpansionCoefficients[i, k] = Psi_inv[i, j] * y_rhs[j, k]
     catch e
-        @warn "Standard pinv failed, trying alternative approach" exception=e
-        
+        @warn "Standard pinv failed, trying alternative approach" exception = e
+
         # Try direct solving with Tikhonov regularization
-        λ = 1e-6  # Regularization parameter
+        λ = 1.0e-6  # Regularization parameter
         num_terms = size(aPCE.ExpansionCoefficients, 1)
-        
+
         # Solve directly (Psi'*Psi + λ*I)*c = Psi'*y for each output dimension
         for k in axes(y_rhs, 2)
             try
-                aPCE.ExpansionCoefficients[:, k] = (Psi'*Psi + λ*I(num_terms)) \ (Psi' * y_rhs[:, k])
+                aPCE.ExpansionCoefficients[:, k] = (Psi' * Psi + λ * I(num_terms)) \ (Psi' * y_rhs[:, k])
             catch e2
-                @warn "Tikhonov regularization failed for output $k, trying SVD approach" exception=e2
+                @warn "Tikhonov regularization failed for output $k, trying SVD approach" exception = e2
                 # Use SVD with more careful handling
                 try
                     U, S, V = svd(Psi)
                     # Threshold small singular values
                     tol = maximum(size(Psi)) * maximum(S) * eps(T)
-                    S_inv = map(s -> s > tol ? 1/s : zero(T), S)
-                    
+                    S_inv = map(s -> s > tol ? 1 / s : zero(T), S)
+
                     # Compute pseudoinverse via SVD
                     Psi_inv_svd = V * Diagonal(S_inv) * U'
                     aPCE.ExpansionCoefficients[:, k] = Psi_inv_svd * y_rhs[:, k]
                 catch e3
-                    @error "All numerical approaches failed for output $k" exception=e3
+                    @error "All numerical approaches failed for output $k" exception = e3
                     # Last resort - try QR factorization for this output
                     F = qr(Psi)
                     aPCE.ExpansionCoefficients[:, k] = F \ y_rhs[:, k]
@@ -237,20 +237,22 @@ function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion = :true, reg_orde
             end
         end
     end
-    
+
     # Continue with bayesian inversion if enabled
     if bayesian_inversion
         @info "Using bayesian regularization to find the expansion coefficients"
         x₀ = copy(aPCE.ExpansionCoefficients)
-        
+
         for i in axes(y_rhs, 2)
             @info "Bayesian regularization for axis $i"
-            aPCE.ExpansionCoefficients[:, i] .= invert(Psi, y_rhs[:, i], Lₖx₀(reg_order, view(x₀, :, i)); 
-                                                      alg = :gcv_svd, 
-                                                      method = LBFGS(linesearch = LineSearches.BackTracking()))
+            aPCE.ExpansionCoefficients[:, i] .= invert(
+                Psi, y_rhs[:, i], Lₖx₀(reg_order, view(x₀, :, i));
+                alg = :gcv_svd,
+                method = LBFGS(linesearch = LineSearches.BackTracking())
+            )
         end
     end
-    
+
     # Compute and report errors
     for k in axes(aPCE.ExpansionCoefficients, 2)
         res = (@views sqrt(mean((Psi * aPCE.ExpansionCoefficients[:, k] .- y_rhs[:, k]) .^ 2)))

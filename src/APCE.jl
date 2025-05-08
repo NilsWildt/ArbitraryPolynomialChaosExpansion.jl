@@ -1,4 +1,5 @@
 module APCE
+using AppleAccelerate
 import Optim: NewtonTrustRegion, Options, optimize, minimizer, minimum, LBFGS
 import RegularizationTools: Lₖx₀, solve, RegularizationProblem, setupRegularizationProblem, to_general_form, to_standard_form, gcv_tr, gcv_svd, invert, Lₖ, NelderMead, LₖB, Lₖx₀B, LₖDₓ, Lₖx₀Dₓ, LₖDₓB, Lₖx₀DₓB
 using CPUSummary: CPUSummary
@@ -50,6 +51,18 @@ using KernelAbstractions
 # CPUSummary.use_hwloc(true)
 
 BLAS.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
+
+# Main transcendental and math functions - these are the most commonly replaced
+AppleAccelerate.@replaceBase sin cos tan
+AppleAccelerate.@replaceBase asin acos atan
+AppleAccelerate.@replaceBase sinh cosh tanh
+AppleAccelerate.@replaceBase asinh acosh atanh
+AppleAccelerate.@replaceBase exp exp2 expm1
+AppleAccelerate.@replaceBase log log10 log2 log1p
+AppleAccelerate.@replaceBase sqrt
+AppleAccelerate.@replaceBase ceil floor trunc round
+AppleAccelerate.@replaceBase abs
+
 
 configdir(args...) = projectdir("configs", args...)
 outputdir(args...) = projectdir("output", args...)
