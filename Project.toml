@@ -5,6 +5,7 @@ version = "0.2.4"
 
 [deps]
 AlgebraOfGraphics = "cbdf2221-f076-402e-a563-3d30da359d67"
+AppleAccelerate = "13e28ba4-7ad8-5781-acae-3021b1ed3924"
 Bumper = "8ce10254-0962-460f-a3d8-1f77fea1446e"
 CPUSummary = "2a0fbf3d-bb9c-48f3-b0a9-814d99fd7ab9"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
@@ -65,3 +66,4 @@ UnrolledUtilities = "0fe1646c-419e-43be-ac14-22321958931b"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [compat]
+AppleAccelerate = "0.4.0"
