@@ -98,43 +98,67 @@ function aPCE_PsiPolynomialMatrix(aPCE::aPCE{T}, TrainingInput::S)::S where {T <
 end
 
 
-function GaussianCollocation(aPCE::aPCE{T}; strategy = :PCM) where {T <: Real}
+function GaussianCollocation(aPCE::aPCE{T},len=0; strategy = :PCM) where {T <: Real}
     @assert aPCE.do_gauss "Gaussian collocation requires the do_gauss flag to be set to true"
 
-    PointsVector = 1:(aPCE.ExpansionDegree + 1) |> collect
-    UniqueCombinations = stack(reduce(vcat, (Iterators.product([PointsVector for _ in 1:aPCE.input_dimensions]...))))'
-    sort_indices = sortperm(sum(UniqueCombinations; dims = 2); dims = 1)
-    SortUniqueCombinations = UniqueCombinations[sort_indices[:], :]
+    # Generate all possible combinations of polynomial points
+    degree = aPCE.ExpansionDegree
+    num_dims = aPCE.input_dimensions
+    point_indices = collect(1:(degree + 1))
+    
+    # Create all combinations of point indices across dimensions
+    point_combinations = stack(reduce(vcat, Iterators.product([point_indices for _ in 1:num_dims]...)))'
+    
+    # Sort combinations by sum of indices (lower total degree first)
+    sorted_indices = sortperm(sum(point_combinations; dims = 2); dims = 1)
+    sorted_combinations = point_combinations[sorted_indices[:], :]
 
+    # Handle different collocation strategies
     if strategy == :FT
-        TrainingInput = SortUniqueCombinations
-        return Array(view(TrainingInput, :, (1:size(TrainingInput, 2))))
+        # Full Tensor strategy - just return the index combinations
+        result = sorted_combinations
     elseif strategy == :PCM
-        # Transpose polynomial_roots to match expected dimensions
-        polynomial_roots = zeros(aPCE.ExpansionDegree + 1, aPCE.input_dimensions)
-        @inbounds for d in Base.oneto(Int64(aPCE.input_dimensions))
-            polynomial_basis = @views aPCE.OrthonormalBasis[:, :, d]
-            polynomial_roots[:, d] = @view reinterpret(T, PolynomialRoots.roots(@views polynomial_basis[aPCE.ExpansionDegree + 2, :]))[1:2:(end - 1)]
+        # Probabilistic Collocation Method - map indices to actual polynomial roots
+        
+        # Calculate polynomial roots for each dimension
+        polynomial_roots = zeros(degree + 1, num_dims)
+        @inbounds for dim in 1:num_dims
+            polynomial_basis = @views aPCE.OrthonormalBasis[:, :, dim]
+            # Extract roots of the polynomial (every other entry from real part)
+            polynomial_roots[:, dim] = reinterpret(T, 
+                PolynomialRoots.roots(polynomial_basis[degree + 2, :]))[1:2:(end - 1)]
         end
 
-        temp = abs.(polynomial_roots .- StatsBase.mean(aPCE.InputDistribution; dims = 1)[:, :][1])
-        temp_sort = mapslices(sortperm, temp, dims = 1)
-        @inbounds for i in axes(polynomial_roots, 2)
-            polynomial_roots[:, i] = @views polynomial_roots[temp_sort[:, i], i]
+        # Sort roots by distance to distribution mean in each dimension
+        mean_distances = abs.(polynomial_roots .- StatsBase.mean(aPCE.InputDistribution; dims = 1)[:, :][1])
+        sort_indices_by_dim = mapslices(sortperm, mean_distances, dims = 1)
+        
+        @inbounds for dim in 1:num_dims
+            polynomial_roots[:, dim] = polynomial_roots[sort_indices_by_dim[:, dim], dim]
         end
 
-        # Ensure collocation_points matches SortUniqueCombinations size
-        collocation_points = zeros(size(SortUniqueCombinations, 1), aPCE.input_dimensions)
-
-        @inbounds for i in axes(collocation_points, 1)
-            for j in axes(collocation_points, 2)
-                idx = Int(SortUniqueCombinations[i, j])
-                collocation_points[i, j] = polynomial_roots[idx, j]
+        # Map the sorted index combinations to actual collocation points
+        collocation_points = zeros(size(sorted_combinations, 1), num_dims)
+        
+        @inbounds for row in axes(collocation_points, 1)
+            for dim in axes(collocation_points, 2)
+                idx = Int(sorted_combinations[row, dim])
+                collocation_points[row, dim] = polynomial_roots[idx, dim]
             end
         end
 
+        # Sort points by first dimension value
         collocation_points = sortslices(collocation_points, dims = 1, by = x -> x[1])
-        return Array(view(collocation_points, :, (1:size(collocation_points, 2))))
+        result = collocation_points
+    else
+        error("Unknown strategy: $strategy. Use :FT or :PCM.")
+    end
+    
+    # Apply length constraint if provided
+    if len != 0
+        return result[1:min(len, size(result, 1)), :]
+    else
+        return result
     end
 end
 
