@@ -139,6 +139,35 @@ end
 end
 
 
+
+# Wrapper function to maintain compatibility
+
+# function aPCE_PsiPolynomialMatrix_zygote(
+#     TrainingInput::AbstractArray{T}, 
+#     MultivariatePolynomialDegrees, 
+#     OrthonormalBasis) where {T <: Real}
+    
+#     NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
+#     NCpoints = size(TrainingInput, 1)
+    
+#     # Use a list comprehension instead of in-place operations
+#     # This creates the matrix without mutation
+#     Psi = [
+#         let product = one(T)
+#             for d in 1:InputDimensions
+#                 degree = MultivariatePolynomialDegrees[i, d] + 1
+#                 coeffs = @view OrthonormalBasis[degree, 1:degree, d]
+#                 x_val = TrainingInput[j, d]
+#                 product *= evalpoly_two(x_val, coeffs)
+#             end
+#             product
+#         end
+#         for i in 1:NumberOfTerms, j in 1:NCpoints
+#     ]
+#     return Psi
+# end
+
+
 function aPCE_PsiPolynomialMatrix_zygote(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis) where {T <: Real}
     NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
     NCpoints = size(TrainingInput, 1)
@@ -149,6 +178,7 @@ function aPCE_PsiPolynomialMatrix_zygote(TrainingInput::AbstractArray{T}, Multiv
     ]
     return reshape(Psi, NumberOfTerms, NCpoints)
 end
+
 
 function aPCE_PsiPolynomialMatrix_zygote(TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis)
     NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
@@ -161,27 +191,27 @@ function aPCE_PsiPolynomialMatrix_zygote(TrainingInput, MultivariatePolynomialDe
     return reshape(Psi, NumberOfTerms, NCpoints)
 end
 
-function aPCE_PsiPolynomialMatrix_zygote!(
-        Psi::AbstractMatrix{T},
-        TrainingInput::AbstractArray{T},
-        MultivariatePolynomialDegrees,
-        OrthonormalBasis
-    ) where {T <: Real}
-    NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
-    NCpoints = size(TrainingInput, 1)
+# function aPCE_PsiPolynomialMatrix_zygote!(
+#         Psi::AbstractMatrix{T},
+#         TrainingInput::AbstractArray{T},
+#         MultivariatePolynomialDegrees,
+#         OrthonormalBasis
+#     ) where {T <: Real}
+#     NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
+#     NCpoints = size(TrainingInput, 1)
 
-    # Ensure Psi has the correct dimensions
-    @assert size(Psi) == (NumberOfTerms, NCpoints) "Psi must have dimensions ($NumberOfTerms, $NCpoints)"
+#     # Ensure Psi has the correct dimensions
+#     @assert size(Psi) == (NumberOfTerms, NCpoints) "Psi must have dimensions ($NumberOfTerms, $NCpoints)"
 
-    # Fill Psi in-place
-    for i in 1:NumberOfTerms
-        for j in 1:NCpoints
-            Psi[i, j] = compute_Psi_element(i, j, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, InputDimensions)
-        end
-    end
+#     # Fill Psi in-place
+#     for i in 1:NumberOfTerms
+#         for j in 1:NCpoints
+#             Psi[i, j] = compute_Psi_element(i, j, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, InputDimensions)
+#         end
+#     end
 
-    return nothing
-end
+#     return nothing
+# end
 
 
 # function compute_Psi_element(i, j, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, InputDimensions)
