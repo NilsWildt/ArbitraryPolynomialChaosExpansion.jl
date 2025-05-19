@@ -233,11 +233,11 @@ function compute_Psi_element(i, j, TrainingInput, MultivariatePolynomialDegrees,
         degree = MultivariatePolynomialDegrees[i, ii] + 1
         coeffs = @views OrthonormalBasis[degree, 1:degree, ii]
         x = TrainingInput[j, ii]
-        p_x = evalpoly_two(x, coeffs)  # Use evalpoly_two instead of evalpoly
-        product *= p_x
+        product *= evalpoly_two(x, coeffs)
     end
     return product
 end
+
 
 
 # @stable function aPCE_PsiPolynomialMatrix_zygote(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis) where {T <: Real}

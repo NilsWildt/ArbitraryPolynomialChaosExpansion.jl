@@ -554,6 +554,7 @@ function evalpoly_two(x, cs::AbstractArray)
     return i == fi ? muladd(out, x, @inbounds(cs[fi])) : out
 end
 
+
 @stable function evaluate_derivative_horner(x, coeffs)
     n = length(coeffs) - 1
     if n == 0
