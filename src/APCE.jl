@@ -1,5 +1,19 @@
 module APCE
-using AppleAccelerate
+using LinearAlgebra.BLAS: gemv, gemv!, gemm!, trsm!, axpy!, ger!
+using LinearAlgebra: LinearAlgebra, BLAS, transpose
+using LinearAlgebra: checksquare
+using LazyArrays
+using LinearAlgebra: svd, norm, pinv, Diagonal, tr
+if Sys.isapple() && (Sys.ARCH == :aarch64 || Sys.ARCH == :arm64)
+    @info "Running benchmarks on Apple with ARM CPUs. Using `AppleAccelerate.jl`."
+    using AppleAccelerate: AppleAccelerate
+end
+
+if Sys.ARCH == :x86_64 && contains(CPU_MODEL, "intel")
+    @info "Running benchmarks on Intel CPUs. Loading `MKL.jl`."
+    using MKL: MKL
+end
+using BLISBLAS: BLISBLAS
 import Optim: NewtonTrustRegion, Options, optimize, minimizer, minimum, LBFGS
 import RegularizationTools: Lₖx₀, solve, RegularizationProblem, setupRegularizationProblem, to_general_form, to_standard_form, gcv_tr, gcv_svd, invert, Lₖ, NelderMead, LₖB, Lₖx₀B, LₖDₓ, Lₖx₀Dₓ, LₖDₓB, Lₖx₀DₓB
 using CPUSummary: CPUSummary
@@ -20,11 +34,7 @@ using Infiltrator: Infiltrator, @infiltrate
 using Krylov: Krylov
 using LazyGrids: LazyGrids
 using LineSearches: LineSearches
-using LinearAlgebra.BLAS: gemv, gemv!, gemm!, trsm!, axpy!, ger!
-using LinearAlgebra: LinearAlgebra, BLAS, transpose
-using LinearAlgebra: checksquare
-using LazyArrays
-using LinearAlgebra: svd, norm, pinv, Diagonal, tr
+
 # using Octavian: Octavian
 using OnlineStats: OnlineStats, Extrema, Mean, Series, Variance, eachrow, value
 using Polyester: Polyester, @batch

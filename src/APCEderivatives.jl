@@ -293,28 +293,29 @@ function ChainRulesCore.rrule(
 end
 
 
-
-function ChainRulesCore.rrule(::typeof(aPCE_PsiPolynomialMatrix_zygote), 
-                             TrainingInput, 
-                             MultivariatePolynomialDegrees, 
-                             OrthonormalBasis)
+function ChainRulesCore.rrule(
+        ::typeof(aPCE_PsiPolynomialMatrix_zygote),
+        TrainingInput,
+        MultivariatePolynomialDegrees,
+        OrthonormalBasis
+    )
     # Ensure input is matrix
     x = ensure_matrix(TrainingInput)
-    
+
     # Forward pass
     Psi = aPCE_PsiPolynomialMatrix_zygote(x, MultivariatePolynomialDegrees, OrthonormalBasis)
-    
+
     # Extract dimensions
     NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
     NCpoints = size(x, 1)
     T = eltype(x)
-    
+
     function aPCE_PsiPolynomialMatrix_pullback(ΔPsi)
         ΔTrainingInput = zeros(T, size(x))
-        
+
         # Pre-compute polynomial evaluations to avoid redundant calculations
         poly_values = Array{T}(undef, NumberOfTerms, InputDimensions, NCpoints)
-        
+
         # First pass: compute all polynomial evaluations
         for i in 1:NumberOfTerms
             for d in 1:InputDimensions
@@ -326,7 +327,7 @@ function ChainRulesCore.rrule(::typeof(aPCE_PsiPolynomialMatrix_zygote),
                 end
             end
         end
-        
+
         # Second pass: compute gradients
         for j in 1:NCpoints
             for i in 1:NumberOfTerms
@@ -334,44 +335,44 @@ function ChainRulesCore.rrule(::typeof(aPCE_PsiPolynomialMatrix_zygote),
                 if Δij == zero(T)
                     continue
                 end
-                
+
                 for d in 1:InputDimensions
                     degree = MultivariatePolynomialDegrees[i, d]
                     if degree == 0
                         continue  # Derivative of constant is zero
                     end
-                    
+
                     # Compute derivative for dimension d
                     derivative_coeffs = zeros(T, degree)
-                    coeffs = @view OrthonormalBasis[degree+1, 1:degree+1, d]
+                    coeffs = @view OrthonormalBasis[degree + 1, 1:(degree + 1), d]
                     for k in 1:degree
-                        derivative_coeffs[k] = coeffs[k+1] * k
+                        derivative_coeffs[k] = coeffs[k + 1] * k
                     end
-                    
+
                     x_val = x[j, d]
                     deriv_value = evalpoly_two(x_val, derivative_coeffs)
-                    
+
                     # Compute product of polynomial values for other dimensions
                     other_dims_product = one(T)
                     for other_d in 1:InputDimensions
                         if other_d != d
                             other_dims_product *= poly_values[i, other_d, j]
-                            
+
                             # Early termination if product becomes zero
                             if other_dims_product == zero(T)
                                 break
                             end
                         end
                     end
-                    
+
                     # Update gradient
                     ΔTrainingInput[j, d] += Δij * deriv_value * other_dims_product
                 end
             end
         end
-        
+
         return (NoTangent(), ΔTrainingInput, NoTangent(), NoTangent())
     end
-    
+
     return Psi, aPCE_PsiPolynomialMatrix_pullback
 end

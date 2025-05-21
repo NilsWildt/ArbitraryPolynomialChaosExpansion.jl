@@ -139,17 +139,16 @@ end
 end
 
 
-
 # Wrapper function to maintain compatibility
 
 # function aPCE_PsiPolynomialMatrix_zygote(
-#     TrainingInput::AbstractArray{T}, 
-#     MultivariatePolynomialDegrees, 
+#     TrainingInput::AbstractArray{T},
+#     MultivariatePolynomialDegrees,
 #     OrthonormalBasis) where {T <: Real}
-    
+
 #     NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
 #     NCpoints = size(TrainingInput, 1)
-    
+
 #     # Use a list comprehension instead of in-place operations
 #     # This creates the matrix without mutation
 #     Psi = [
@@ -237,7 +236,6 @@ function compute_Psi_element(i, j, TrainingInput, MultivariatePolynomialDegrees,
     end
     return product
 end
-
 
 
 # @stable function aPCE_PsiPolynomialMatrix_zygote(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis) where {T <: Real}
