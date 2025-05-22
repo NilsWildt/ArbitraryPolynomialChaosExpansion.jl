@@ -4,15 +4,33 @@ using LinearAlgebra: LinearAlgebra, BLAS, transpose
 using LinearAlgebra: checksquare
 using LazyArrays
 using LinearAlgebra: svd, norm, pinv, Diagonal, tr
-if Sys.isapple() && (Sys.ARCH == :aarch64 || Sys.ARCH == :arm64)
-    @info "Running benchmarks on Apple with ARM CPUs. Using `AppleAccelerate.jl`."
-    using AppleAccelerate: AppleAccelerate
+# Define CPU_MODEL safely with fallback
+const CPU_MODEL = get(ENV, "CPU_MODEL", try
+    Sys.cpu_info()[1].model
+catch
+    ""
+end)
+
+# Use conditional loading directly
+if Sys.isapple() && Sys.ARCH in (:aarch64, :arm64)
+    @info "Using `AppleAccelerate.jl` for Apple Silicon."
+    using AppleAccelerate
+    
+    # AppleAccelerate.@replaceBase sin cos tan
+    # AppleAccelerate.@replaceBase asin acos atan
+    # AppleAccelerate.@replaceBase sinh cosh tanh
+    # AppleAccelerate.@replaceBase asinh acosh atanh
+    # AppleAccelerate.@replaceBase exp exp2 expm1
+    # AppleAccelerate.@replaceBase log log10 log2 log1p
+    # AppleAccelerate.@replaceBase sqrt
+    # AppleAccelerate.@replaceBase ceil floor trunc round
+    # AppleAccelerate.@replaceBase abs
+elseif Sys.ARCH == :x86_64 && occursin(r"intel"i, CPU_MODEL)
+    @info "Detected Intel x86_64 CPU. Loading `MKL.jl`."
+    using MKL
 end
 
-if Sys.ARCH == :x86_64 && contains(CPU_MODEL, "intel")
-    @info "Running benchmarks on Intel CPUs. Loading `MKL.jl`."
-    using MKL: MKL
-end
+
 using BLISBLAS: BLISBLAS
 import Optim: NewtonTrustRegion, Options, optimize, minimizer, minimum, LBFGS
 import RegularizationTools: Lₖx₀, solve, RegularizationProblem, setupRegularizationProblem, to_general_form, to_standard_form, gcv_tr, gcv_svd, invert, Lₖ, NelderMead, LₖB, Lₖx₀B, LₖDₓ, Lₖx₀Dₓ, LₖDₓB, Lₖx₀DₓB
@@ -62,16 +80,7 @@ using KernelAbstractions
 
 BLAS.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
 
-# Main transcendental and math functions - these are the most commonly replaced
-AppleAccelerate.@replaceBase sin cos tan
-AppleAccelerate.@replaceBase asin acos atan
-AppleAccelerate.@replaceBase sinh cosh tanh
-AppleAccelerate.@replaceBase asinh acosh atanh
-AppleAccelerate.@replaceBase exp exp2 expm1
-AppleAccelerate.@replaceBase log log10 log2 log1p
-AppleAccelerate.@replaceBase sqrt
-AppleAccelerate.@replaceBase ceil floor trunc round
-AppleAccelerate.@replaceBase abs
+
 
 
 configdir(args...) = projectdir("configs", args...)
