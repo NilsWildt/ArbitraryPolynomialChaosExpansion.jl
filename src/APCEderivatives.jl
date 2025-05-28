@@ -14,6 +14,7 @@
 # using Polynomials
 # using Tracker
 
+using Mooncake: @from_rrule, DefaultCtx
 
 function ChainRulesCore.frule((_, Δx), ::typeof(reverse_columns!), x)
     Δx_reversed = similar(Δx)
@@ -260,6 +261,7 @@ end
 # 	return Ψforward, compose_Ψ_pullback
 # end
 
+
 function ChainRulesCore.rrule(
         ::typeof(compute_Psi_element),
         i, j, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, InputDimensions
@@ -376,3 +378,16 @@ function ChainRulesCore.rrule(
 
     return Psi, aPCE_PsiPolynomialMatrix_pullback
 end
+
+
+@from_rrule DefaultCtx Tuple{
+    typeof(compute_Psi_element), 
+    Any, Any, AbstractArray, AbstractArray, AbstractArray, Integer
+}
+
+# aPCE_PsiPolynomialMatrix_zygote rule
+@from_rrule DefaultCtx Tuple{
+    typeof(aPCE_PsiPolynomialMatrix_zygote), 
+    AbstractArray, AbstractArray, AbstractArray
+}
+
