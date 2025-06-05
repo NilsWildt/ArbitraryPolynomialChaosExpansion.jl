@@ -12,11 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 using ChainRulesCore
-
-@info "Benchmarking Matrix mutplication speed" LinearAlgebra.peakflops(; parallel = true)
+# @info "Benchmarking Matrix mutplication speed" LinearAlgebra.peakflops(; parallel = true)
 
 # Strided.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
-LinearAlgebra.BLAS.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
+# LinearAlgebra.BLAS.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
 
 @stable function normalization_functions(matrix)
     # Calculate mean and std for each column
@@ -629,6 +628,7 @@ function evalpoly_two(x, cs::AbstractArray)
     end
     return i == fi ? muladd(out, x, @inbounds(cs[fi])) : out
 end
+
 
 @stable function evaluate_derivative_horner(x, coeffs)
     n = length(coeffs) - 1

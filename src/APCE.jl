@@ -5,17 +5,18 @@ using LinearAlgebra: checksquare
 using LazyArrays
 using LinearAlgebra: svd, norm, pinv, Diagonal, tr
 # Define CPU_MODEL safely with fallback
-const CPU_MODEL = get(ENV, "CPU_MODEL", try
-    Sys.cpu_info()[1].model
-catch
-    ""
-end)
+const CPU_MODEL = get(
+    ENV, "CPU_MODEL", try
+        Sys.cpu_info()[1].model
+    catch
+        ""
+    end
+)
 
 # Use conditional loading directly
 if Sys.isapple() && Sys.ARCH in (:aarch64, :arm64)
     @info "Using `AppleAccelerate.jl` for Apple Silicon."
     using AppleAccelerate
-    
     # AppleAccelerate.@replaceBase sin cos tan
     # AppleAccelerate.@replaceBase asin acos atan
     # AppleAccelerate.@replaceBase sinh cosh tanh
@@ -81,8 +82,6 @@ using KernelAbstractions
 BLAS.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
 
 
-
-
 configdir(args...) = projectdir("configs", args...)
 outputdir(args...) = projectdir("output", args...)
 
@@ -92,6 +91,9 @@ export run, create_basis!, aPCE_FullBasis, aPCE_MultivariatePolynomialDegrees, a
 include("APCEfunctions.jl")
 include("APCEhighlevel.jl")
 include("utils.jl")
+
+include("TensorOperationsMooncakeExt.jl")
+using .TensorOperationsMooncakeExt
 
 @setup_workload begin
     @suppress begin

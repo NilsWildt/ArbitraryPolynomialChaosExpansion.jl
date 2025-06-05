@@ -18,7 +18,6 @@ mutable struct aPCE{T <: Real}
     ExpansionCoefficients::Matrix{T}
     do_gauss::Bool
 
-    # Constructor
     @stable function aPCE(
             InputDistribution::AbstractVecOrMat{T},
             ExpansionDegree::Int64;

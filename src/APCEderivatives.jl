@@ -338,7 +338,7 @@ function ChainRulesCore.rrule(
                     continue
                 end
 
-                for d in 1:InputDimensions
+                @batch for d in 1:InputDimensions
                     degree = MultivariatePolynomialDegrees[i, d]
                     if degree == 0
                         continue  # Derivative of constant is zero
@@ -381,13 +381,15 @@ end
 
 
 @from_rrule DefaultCtx Tuple{
-    typeof(compute_Psi_element), 
-    Any, Any, AbstractArray, AbstractArray, AbstractArray, Integer
+    typeof(compute_Psi_element),
+    Any, Any, AbstractArray, AbstractArray, AbstractArray, Integer,
 }
 
 # aPCE_PsiPolynomialMatrix_zygote rule
 @from_rrule DefaultCtx Tuple{
-    typeof(aPCE_PsiPolynomialMatrix_zygote), 
-    AbstractArray, AbstractArray, AbstractArray
+    typeof(aPCE_PsiPolynomialMatrix_zygote),
+    AbstractArray, AbstractArray, AbstractArray,
 }
 
+
+### TensorOperations Tricks!
