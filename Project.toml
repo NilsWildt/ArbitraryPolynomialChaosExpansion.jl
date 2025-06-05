@@ -71,10 +71,4 @@ UnrolledUtilities = "0fe1646c-419e-43be-ac14-22321958931b"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [compat]
-AppleAccelerate = "0.4.0"
-BLISBLAS = "0.1.1"
-MKL = "0.8.0"
-Mooncake = "0.4.121"
-Reactant = "0.2.124"
-Requires = "1.3.1"
-Zygote = "0.7.7"
+
