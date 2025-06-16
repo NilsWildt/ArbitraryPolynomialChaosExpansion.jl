@@ -287,8 +287,9 @@ end
     return Psi
 end
 
-@stable @inline function compute_moments!(m::AbstractArray{T}, Data::AbstractArray{S}, NumberOfDataPoints, dd) where {T <: Real, S<:Real}
-    current_power = ones(T, length(Data))  # Start with Data .^ 0 which is 1
+@stable @inline function compute_moments!(m::AbstractArray{T}, Data::AbstractArray{S}, NumberOfDataPoints::Integer, dd::Integer) where {T <: Real, S<:Real}
+    current_power = Vector{T}(undef, length(Data))  # Pre-allocate with correct type
+    fill!(current_power, one(T))  # Initialize with ones of correct type
     @inbounds for l in 0:(2 * dd + 1)
         m[l + 1] = sum(current_power) / NumberOfDataPoints
         current_power .*= Data  # Increment the power of Data
@@ -313,30 +314,13 @@ end
 end
 
 @stable @inbounds function aPCE_OrthonormalBasis(Data::Array{T}, Degree::S, center_data::Val{true}) where {T<:Real,S<:Integer}
-    return aPCE_OrthonormalBasis(Data, Degree, center_data)
-end
-
-@stable @inbounds function aPCE_OrthonormalBasis(Data::Array{T}, Degree::S, center_data::Val{false}) where {T<:Real,S<:Integer}
-    return aPCE_OrthonormalBasis(Data, Degree, center_data)
-end
-
-@stable @inbounds function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::Val{true}) where {T<:Real,S<:Integer}
-    return aPCE_OrthonormalBasis(Array(Data), Degree, center_data)
-end
-
-@stable @inbounds function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::Val{false}) where {T<:Real,S<:Integer}
-    return aPCE_OrthonormalBasis(Array(Data), Degree, center_data)
-end
-
-@stable @inbounds function aPCE_OrthonormalBasis(Data, Degree::S, center_data::Val{true}) where {S <: Integer}
-    T = eltype(Data)
     d = Degree #Degree of polynomial expansion
     dd = d #Degree of polinomial for roots definitions
     NumberOfDataPoints = length(Data)
     MeanOfData = mean(Data)
     Data = (Data .- MeanOfData)  # center_data
     m = zeros(T, 2 * dd + 2)
-    @batch for col in axes(Data, 2)
+    for col in axes(Data, 2)
         compute_moments!(m, view(Data, :, col), NumberOfDataPoints, dd)
     end
     OrthonormalBasis = zeros(T, dd + 1, dd + 1)
@@ -389,8 +373,7 @@ end
     return OrthonormalBasis
 end
 
-@stable @inbounds function aPCE_OrthonormalBasis(Data, Degree::S, center_data::Val{false}) where {S <: Integer}
-    T = eltype(Data)
+@stable @inbounds function aPCE_OrthonormalBasis(Data::Array{T}, Degree::S, center_data::Val{false}) where {T<:Real,S<:Integer}
     d = Degree #Degree of polynomial expansion
     dd = d #Degree of polynomial for roots definition
     NumberOfDataPoints = length(Data)
@@ -444,6 +427,13 @@ end
     return OrthonormalBasis
 end
 
+@stable @inbounds function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::Val{true}) where {T<:Real,S<:Integer}
+    return aPCE_OrthonormalBasis(Array(Data), Degree, center_data)
+end
+
+@stable @inbounds function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::Val{false}) where {T<:Real,S<:Integer}
+    return aPCE_OrthonormalBasis(Array(Data), Degree, center_data)
+end
 
 @stable function aPCE_FullBasis(Data, Degree)
     T = eltype(Data)
