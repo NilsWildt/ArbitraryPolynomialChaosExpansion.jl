@@ -303,12 +303,30 @@ end
     @inferred aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true))
 end
 
-@stable @inbounds function aPCE_OrthonormalBasis(Data, Degree::S, center_data::Val{false}) where {S <: Integer}
-    T = eltype(Data)
-    d = Degree #Degree of polinomial expansion
-    dd = d #Degree of polynomial for roots definition
-    NumberOfDataPoints = length(Data)
+@stable function create_basis(x, degree, is_orthonormal::Val{true}; center_data = true)
+    input_dimensions = size(x, 2)
+    OrthonormalBasis = Array{eltype(x), 3}(undef, degree + 1, degree + 1, input_dimensions)
+    for i in 1:input_dimensions
+        OrthonormalBasis[:, :, i] .= aPCE_OrthonormalBasis(view(x, :, i), degree, Val(center_data))
+    end # x[:,i]
+    return OrthonormalBasis
+end
 
+@stable @inbounds function aPCE_OrthonormalBasis(Data::AbstractArray{T,1}, Degree::S, center_data::Val{true}) where {T<:Real,S<:Integer}
+    return aPCE_OrthonormalBasis(collect(Data), Degree, center_data)
+end
+
+@stable @inbounds function aPCE_OrthonormalBasis(Data::AbstractArray{T,1}, Degree::S, center_data::Val{false}) where {T<:Real,S<:Integer}
+    return aPCE_OrthonormalBasis(collect(Data), Degree, center_data)
+end
+
+@stable @inbounds function aPCE_OrthonormalBasis(Data, Degree::S, center_data::Val{true}) where {S <: Integer}
+    T = eltype(Data)
+    d = Degree #Degree of polynomial expansion
+    dd = d #Degree of polinomial for roots definitions
+    NumberOfDataPoints = length(Data)
+    MeanOfData = mean(Data)
+    Data = (Data .- MeanOfData)  # center_data
     m = zeros(T, 2 * dd + 2)
     @batch for col in axes(Data, 2)
         compute_moments!(m, view(Data, :, col), NumberOfDataPoints, dd)
@@ -340,8 +358,9 @@ end
         end
         Vc[degree + 1] = one(T)
 
-        PolyCoeff_NonNorm[degree + 1, 1:(degree + 1)] .=   Hankel \ Vc #   pinv(Hankel) * Vc #
+        PolyCoeff_NonNorm[degree + 1, 1:(degree + 1)] .= pinv(Hankel) * Vc # more robust?
 
+        #Normalization of polynomial coefficients
         P_norm = 0.0
         for i in 1:NumberOfDataPoints
             Poly = 0
@@ -355,11 +374,14 @@ end
         end
     end
 
+    for k in 1:lastindex(OrthonormalBasis, 2)
+        OrthonormalBasis[:, k] = @views OrthonormalBasis[:, k] ./ (MeanOfData^(k - 1))
+    end
+
     return OrthonormalBasis
 end
 
-
-@stable @inbounds function aPCE_OrthonormalBasis_zygote(Data, Degree::S, center_data::Val{false}) where {S <: Integer}
+@stable @inbounds function aPCE_OrthonormalBasis(Data, Degree::S, center_data::Val{false}) where {S <: Integer}
     T = eltype(Data)
     d = Degree #Degree of polynomial expansion
     dd = d #Degree of polynomial for roots definition
@@ -480,11 +502,11 @@ end
 end
 
 @testitem "numberPolynomials" begin
-    @test numberPolynomials(3, 2) == 10
-    @test numberPolynomials(5, 3) == 56
-    @test numberPolynomials(0, 0) == 1
-    @test numberPolynomials(1, 1) == 2
-    @test typeof(numberPolynomials(3, 2)) == Int
+    @test APCE.numberPolynomials(3, 2) == 10
+    @test APCE.numberPolynomials(5, 3) == 56
+    @test APCE.numberPolynomials(0, 0) == 1
+    @test APCE.numberPolynomials(1, 1) == 2
+    @test typeof(APCE.numberPolynomials(3, 2)) == Int
 end
 
 @stable function reverse_columns!(x)
@@ -497,20 +519,20 @@ end
 @testitem "reverse_columns!" begin
     mat1 = [1 2 3; 4 5 6; 7 8 9]
     expected1 = [3 2 1; 6 5 4; 9 8 7]
-    reverse_columns!(mat1)
+    APCE.reverse_columns!(mat1)
     @test mat1 == expected1
 
     mat2 = [1 2; 3 4; 5 6]
     expected2 = [2 1; 4 3; 6 5]
-    reverse_columns!(mat2)
+    APCE.reverse_columns!(mat2)
     @test mat2 == expected2
 
     mat3 = [1 2 3 4; 5 6 7 8]
     expected3 = [4 3 2 1; 8 7 6 5]
-    reverse_columns!(mat3)
+    APCE.reverse_columns!(mat3)
     @test mat3 == expected3
 
-    @test typeof(reverse_columns!(mat1)) == Matrix{Int}
+    @test typeof(APCE.reverse_columns!(mat1)) == Matrix{Int}
 end
 
 function create_basis(x, degree; center_data = true)
@@ -579,10 +601,10 @@ end
 end
 
 @testitem "derivative_coeffs" begin
-    @test derivative_coeffs([1.0, 2.0, 3.0]) == [2.0, 6.0]  # Derivative of 1 + 2x + 3x^2
-    @test derivative_coeffs([0.0, 0.0, 0.0]) == [0.0, 0.0]  # Derivative of 0 polynomial
-    @test derivative_coeffs([5.0]) == [0.0]                 # Derivative of constant polynomial
-    @test derivative_coeffs([1.0, -1.0, 1.0, -1.0]) == [-1.0, 2.0, -3.0]  # Derivative of 1 - x + x^2 - x^3
+    @test APCE.derivative_coeffs([1.0, 2.0, 3.0]) == [2.0, 6.0]  # Derivative of 1 + 2x + 3x^2
+    @test APCE.derivative_coeffs([0.0, 0.0, 0.0]) == [0.0, 0.0]  # Derivative of 0 polynomial
+    @test APCE.derivative_coeffs([5.0]) == [0.0]                 # Derivative of constant polynomial
+    @test APCE.derivative_coeffs([1.0, -1.0, 1.0, -1.0]) == [-1.0, 2.0, -3.0]  # Derivative of 1 - x + x^2 - x^3
 end
 
 function evalpoly_two(x, coeffs)
@@ -599,11 +621,11 @@ function evalpoly_two(x, coeffs)
 end
 
 @testitem "evalpoly_two" begin
-    @test evalpoly_two(2.0, [1.0, 2.0, 3.0, 4.0]) == 49.0  # Polynomial 1 + 2x + 3x^2 + 4x^3 at x=2
-    @test evalpoly_two(0.0, [1.0, 2.0, 3.0, 4.0]) == 1.0   # Polynomial 1 + 2x + 3x^2 + 4x^3 at x=0
-    @test evalpoly_two(1.0, [0.0, 0.0, 0.0, 0.0]) == 0.0   # Zero polynomial at x=1
-    @test evalpoly_two(1.0, [5.0]) == 5.0                  # Constant polynomial at x=1
-    @test evalpoly_two(2.0, [1.0, -1.0, 1.0, -1.0]) == -5.0  # Polynomial 1 - x + x^2 - x^3 at x=2
+    @test APCE.evalpoly_two(2.0, [1.0, 2.0, 3.0, 4.0]) == 49.0  # Polynomial 1 + 2x + 3x^2 + 4x^3 at x=2
+    @test APCE.evalpoly_two(0.0, [1.0, 2.0, 3.0, 4.0]) == 1.0   # Polynomial 1 + 2x + 3x^2 + 4x^3 at x=0
+    @test APCE.evalpoly_two(1.0, [0.0, 0.0, 0.0, 0.0]) == 0.0   # Zero polynomial at x=1
+    @test APCE.evalpoly_two(1.0, [5.0]) == 5.0                  # Constant polynomial at x=1
+    @test APCE.evalpoly_two(2.0, [1.0, -1.0, 1.0, -1.0]) == -5.0  # Polynomial 1 - x + x^2 - x^3 at x=2
 end
 
 @stable function evaluate_derivative_horner(x, coeffs)
@@ -628,12 +650,12 @@ end
 end
 
 @testitem "evaluate_derivative_horner" begin
-    @test evaluate_derivative_horner(2.0, [1.0, 2.0, 3.0]) == 14.0  # Derivative of 1 + 2x + 3x^2 at x=2
-    @test evaluate_derivative_horner(0.0, [1.0, 2.0, 3.0]) == 2.0   # Derivative of 1 + 2x + 3x^2 at x=0
-    @test evaluate_derivative_horner(1.0, [0.0, 0.0, 0.0]) == 0.0   # Derivative of 0 polynomial at x=1
-    @test evaluate_derivative_horner(1.0, [5.0]) == 0.0             # Derivative of constant polynomial at x=1
-    @test typeof(evaluate_derivative_horner(2.0, [1.0, 2.0, 3.0])) == Float64
-    @inferred evaluate_derivative_horner(1.0, [5.0])
+    @test APCE.evaluate_derivative_horner(2.0, [1.0, 2.0, 3.0]) == 14.0  # Derivative of 1 + 2x + 3x^2 at x=2
+    @test APCE.evaluate_derivative_horner(0.0, [1.0, 2.0, 3.0]) == 2.0   # Derivative of 1 + 2x + 3x^2 at x=0
+    @test APCE.evaluate_derivative_horner(1.0, [0.0, 0.0, 0.0]) == 0.0   # Derivative of 0 polynomial at x=1
+    @test APCE.evaluate_derivative_horner(1.0, [5.0]) == 0.0             # Derivative of constant polynomial at x=1
+    @test typeof(APCE.evaluate_derivative_horner(2.0, [1.0, 2.0, 3.0])) == Float64
+    @inferred APCE.evaluate_derivative_horner(1.0, [5.0])
 end
 
 @stable @inline function evaluate_polynomial_horner_array(x, coeffs)
