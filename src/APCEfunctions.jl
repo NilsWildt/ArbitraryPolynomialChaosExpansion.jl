@@ -312,12 +312,20 @@ end
     return OrthonormalBasis
 end
 
-@stable @inbounds function aPCE_OrthonormalBasis(Data::AbstractArray{T,1}, Degree::S, center_data::Val{true}) where {T<:Real,S<:Integer}
-    return aPCE_OrthonormalBasis(collect(Data), Degree, center_data)
+@stable @inbounds function aPCE_OrthonormalBasis(Data::Array{T}, Degree::S, center_data::Val{true}) where {T<:Real,S<:Integer}
+    return aPCE_OrthonormalBasis(Data, Degree, center_data)
 end
 
-@stable @inbounds function aPCE_OrthonormalBasis(Data::AbstractArray{T,1}, Degree::S, center_data::Val{false}) where {T<:Real,S<:Integer}
-    return aPCE_OrthonormalBasis(collect(Data), Degree, center_data)
+@stable @inbounds function aPCE_OrthonormalBasis(Data::Array{T}, Degree::S, center_data::Val{false}) where {T<:Real,S<:Integer}
+    return aPCE_OrthonormalBasis(Data, Degree, center_data)
+end
+
+@stable @inbounds function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::Val{true}) where {T<:Real,S<:Integer}
+    return aPCE_OrthonormalBasis(Array(Data), Degree, center_data)
+end
+
+@stable @inbounds function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::Val{false}) where {T<:Real,S<:Integer}
+    return aPCE_OrthonormalBasis(Array(Data), Degree, center_data)
 end
 
 @stable @inbounds function aPCE_OrthonormalBasis(Data, Degree::S, center_data::Val{true}) where {S <: Integer}
