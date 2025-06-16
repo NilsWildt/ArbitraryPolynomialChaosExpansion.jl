@@ -63,7 +63,7 @@ using PrecompileTools: @setup_workload, @compile_workload    # this is a small d
 using PrettyTables: PrettyTables
 using Random: Random, Xoshiro, shuffle
 using RegularizationTools: RegularizationTools
-# using ReverseDiff: ReverseDiff
+using ReverseDiff: ReverseDiff
 # using StaticArrays: StaticArrays
 using StatsBase: StatsBase, fit!, mean, sum
 using Bumper
@@ -92,8 +92,8 @@ include("APCEfunctions.jl")
 include("APCEhighlevel.jl")
 include("utils.jl")
 
-include("TensorOperationsMooncakeExt.jl")
-using .TensorOperationsMooncakeExt
+# include("TensorOperationsMooncakeExt.jl")
+# using .TensorOperationsMooncakeExt
 
 @setup_workload begin
     @suppress begin

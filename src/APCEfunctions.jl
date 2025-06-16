@@ -282,7 +282,7 @@ end
     return Psi
 end
 
-@stable @inline function compute_moments!(m::AbstractArray{T}, Data::AbstractArray{T}, NumberOfDataPoints, dd) where {T <: Real}
+@stable @inline function compute_moments!(m::AbstractArray{T}, Data::AbstractArray{S}, NumberOfDataPoints, dd) where {T <: Real, S<:Real}
     current_power = ones(T, length(Data))  # Start with Data .^ 0 which is 1
     @inbounds for l in 0:(2 * dd + 1)
         m[l + 1] = sum(current_power) / NumberOfDataPoints
@@ -291,7 +291,7 @@ end
 end
 
 
-@stable @inbounds function aPCE_OrthonormalBasis(Data, Degree::S, center_data::Val{true}) where {S <: Integer}
+function aPCE_OrthonormalBasis(Data, Degree::S, center_data::Val{true}) where {S <: Integer}
     T = eltype(Data)
     d = Degree #Degree of polynomial expansion
     dd = d #Degree of polinomial for roots definitions
@@ -300,7 +300,7 @@ end
     MeanOfData = mean(Data)
     Data = (Data .- MeanOfData)  # center_data
     m = zeros(T, 2 * dd + 2)
-    @batch for col in axes(Data, 2)
+    for col in axes(Data, 2)
         compute_moments!(m, view(Data, :, col), NumberOfDataPoints, dd)
     end
     OrthonormalBasis = zeros(T, dd + 1, dd + 1)
@@ -335,7 +335,9 @@ end
         # PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Krylov.usymlq(Array(Hankel),Array(Vc)) |> first
         # catch
         #     @warn "Hankel matrix singular, trying pseudo inverse." #  Vp Hankel Vc
-        PolyCoeff_NonNorm[degree + 1, 1:(degree + 1)] .= pinv(Hankel) * Vc # more robust?
+        # Main.@infiltrate
+        # @info "" Hankel Vc
+        PolyCoeff_NonNorm[degree + 1, 1:(degree + 1)] .=  Hankel \ Vc #  pinv(Hankel) * Vc # more robust?
         # end
         # Vp = Hankel \ Vc
         # PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Vp
@@ -356,12 +358,12 @@ end
             P_norm += Poly^2 / NumberOfDataPoints
         end
         for k in 0:degree
-            OrthonormalBasis[degree + 1, k + 1] = @views PolyCoeff_NonNorm[degree + 1, k + 1] / sqrt(P_norm)
+            OrthonormalBasis[degree + 1, k + 1] = @views PolyCoeff_NonNorm[degree + 1, k + 1] / sqrt(P_norm+1e-10)
         end
     end
 
     for k in 1:lastindex(OrthonormalBasis, 2)
-        OrthonormalBasis[:, k] = @views OrthonormalBasis[:, k] ./ (MeanOfData^(k - 1))
+        OrthonormalBasis[:, k] = @views OrthonormalBasis[:, k] ./ (MeanOfData^(k - 1)+1e-10)
     end
 
     return OrthonormalBasis
@@ -405,7 +407,7 @@ end
         end
         Vc[degree + 1] = one(T)
 
-        PolyCoeff_NonNorm[degree + 1, 1:(degree + 1)] .= Hankel \ Vc #  pinv(Hankel) * Vc #
+        PolyCoeff_NonNorm[degree + 1, 1:(degree + 1)] .=   Hankel \ Vc #   pinv(Hankel) * Vc #
 
         P_norm = 0.0
         for i in 1:NumberOfDataPoints
@@ -556,7 +558,7 @@ function create_basis(x, degree; center_data = true)
 end
 
 # Univartiate BASIS creation
-@stable function create_basis(x, degree, is_orthonormal::Val{true}; center_data = true)
+function create_basis(x, degree, is_orthonormal::Val{true}; center_data = true)
     input_dimensions = size(x, 2)
     OrthonormalBasis = Array{eltype(x), 3}(undef, degree + 1, degree + 1, input_dimensions)
     for i in 1:input_dimensions
@@ -565,7 +567,7 @@ end
     return OrthonormalBasis
 end
 
-@stable function create_basis(x, degree, is_orthonormal::Val{false}; center_data = true)
+function create_basis(x, degree, is_orthonormal::Val{false}; center_data = true)
     input_dimensions = size(x, 2)
     OrthonormalBasis = Array{eltype(x), 3}(undef, degree + 1, degree + 1, input_dimensions)
     for i in 1:input_dimensions
@@ -574,7 +576,7 @@ end
     return OrthonormalBasis
 end
 
-@stable function create_basis!(OrthonormalBasis, x, degree; center_data = false)
+function create_basis!(OrthonormalBasis, x, degree; center_data = false)
     # @ignore_derivatives begin
     input_dimensions = size(x, 2)
     # OrthonormalBasis = eltype(x).(OrthonormalBasis)
@@ -599,7 +601,7 @@ end
 @stable function evaluate_Ψ(x, coeffs, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name)
     T = eltype(coeffs)
     Ψ = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree) #.|> T
-    TensorOperations.@tensor PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
+    TensorOperations.@tensor order=(k,i) PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
     # PredictionOutput = outer_product_kernel(cu(Ψ), cu(coeffs))
     return PredictionOutput
 end

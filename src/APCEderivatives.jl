@@ -393,3 +393,124 @@ end
 
 
 ### TensorOperations Tricks!
+
+
+using ChainRulesCore
+using ForwardDiff
+
+function ChainRulesCore.rrule(::typeof(create_basis), x::AbstractArray{T}, d_expansion::Int; center_data=false) where {T}
+    # Forward pass
+    basis = create_basis(x, d_expansion; center_data=center_data)
+    
+    # Define the pullback
+    function create_basis_pullback(Δbasis)
+        # Use ForwardDiff to compute the gradient
+        function basis_wrapper(x_vec)
+            x_reshaped = reshape(x_vec, size(x))
+            basis = create_basis(x_reshaped, d_expansion; center_data=center_data)
+            # Return a scalar value for gradient computation
+            return sum(basis .* Δbasis)
+        end
+        
+        # Compute gradient using ForwardDiff
+        grad = ForwardDiff.gradient(basis_wrapper, vec(x))
+        
+        # Reshape gradient to match input shape
+        grad_reshaped = reshape(grad, size(x))
+        
+        # Return the gradient with respect to x
+        return (NoTangent(), grad_reshaped, NoTangent())
+    end
+    
+    return basis, create_basis_pullback
+end
+
+# Mooncake.jl version of the rrule for create_basis
+@from_rrule DefaultCtx Tuple{
+    typeof(create_basis),
+    AbstractArray, Integer
+}
+
+# Enzyme rules
+using Enzyme
+
+# Enzyme rule for reverse_columns!
+function Enzyme.autodiff(::Enzyme.ReverseMode, ::typeof(reverse_columns!), x::AbstractArray)
+    x_reversed = similar(x)
+    for row in axes(x, 1)
+        x_reversed[row, :] = reverse(x[row, :])
+    end
+    return x_reversed
+end
+
+# Enzyme rule for compute_Psi_element
+function Enzyme.autodiff(::Enzyme.ReverseMode, ::typeof(compute_Psi_element), i, j, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, InputDimensions)
+    # Forward computation
+    product = one(eltype(TrainingInput))
+    derivatives = zeros(size(TrainingInput, 2))
+
+    for ii in 1:InputDimensions
+        degree = MultivariatePolynomialDegrees[i, ii] + 1
+        coeffs = OrthonormalBasis[degree, 1:degree, ii]
+        x = TrainingInput[j, ii]
+        p_x = evalpoly(x, coeffs)
+
+        # Compute derivative for this dimension
+        other_products = prod(
+            ii == jj ? evalpoly_derivative(x, coeffs) : evalpoly(x, coeffs)
+                for jj in 1:InputDimensions
+        )
+        derivatives[ii] = other_products
+
+        product *= p_x
+    end
+
+    return product, derivatives
+end
+
+# Enzyme rule for aPCE_PsiPolynomialMatrix_zygote
+function Enzyme.autodiff(::Enzyme.ReverseMode, ::typeof(aPCE_PsiPolynomialMatrix_zygote), TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis)
+    # Ensure input is matrix
+    x = ensure_matrix(TrainingInput)
+
+    # Forward pass
+    Psi = aPCE_PsiPolynomialMatrix_zygote(x, MultivariatePolynomialDegrees, OrthonormalBasis)
+
+    # Extract dimensions
+    NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
+    NCpoints = size(x, 1)
+    T = eltype(x)
+
+    # Pre-compute polynomial evaluations to avoid redundant calculations
+    poly_values = Array{T}(undef, NumberOfTerms, InputDimensions, NCpoints)
+
+    # First pass: compute all polynomial evaluations
+    for i in 1:NumberOfTerms
+        for d in 1:InputDimensions
+            degree = MultivariatePolynomialDegrees[i, d] + 1
+            coeffs = @view OrthonormalBasis[degree, 1:degree, d]
+            for j in 1:NCpoints
+                x_val = x[j, d]
+                poly_values[i, d, j] = evalpoly_two(x_val, coeffs)
+            end
+        end
+    end
+
+    return Psi, poly_values
+end
+
+# Enzyme rule for create_basis
+function Enzyme.autodiff(::Enzyme.ReverseMode, ::typeof(create_basis), x::AbstractArray{T}, d_expansion::Int; center_data=false) where {T}
+    # Forward pass
+    basis = create_basis(x, d_expansion; center_data=center_data)
+    
+    # Compute gradient using Enzyme's autodiff
+    function basis_wrapper(x_vec)
+        x_reshaped = reshape(x_vec, size(x))
+        basis = create_basis(x_reshaped, d_expansion; center_data=center_data)
+        return sum(basis)
+    end
+    
+    # Return both the basis and a function to compute gradients
+    return basis, basis_wrapper
+end
