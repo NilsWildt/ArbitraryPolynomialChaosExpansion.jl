@@ -1,8 +1,10 @@
 module APCE
+using TestItems
 using LinearAlgebra.BLAS: gemv, gemv!, gemm!, trsm!, axpy!, ger!
 using LinearAlgebra: LinearAlgebra, BLAS, transpose
 using LinearAlgebra: checksquare
 using LazyArrays
+using ReverseDiff: ReverseDiff
 using LinearAlgebra: svd, norm, pinv, Diagonal, tr
 # Define CPU_MODEL safely with fallback
 const CPU_MODEL = get(

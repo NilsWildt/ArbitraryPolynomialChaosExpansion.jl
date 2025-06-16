@@ -137,6 +137,11 @@ end
     return indices::Matrix{T} # from sparse to matrix.
 end
 
+@testitem "aPCE_MultivariatePolynomialDegrees" begin
+    @test aPCE_MultivariatePolynomialDegrees(2, 1, 1.0, 1.0) == [0 0; 0 1; 1 0]
+    @test aPCE_MultivariatePolynomialDegrees(2, 2, 1.0, 1.0) == [0 0; 0 1; 1 0; 0 2; 1 1; 2 0]
+    @inferred aPCE_MultivariatePolynomialDegrees(2, 2, 1.0, 1.0)
+end
 
 # Wrapper function to maintain compatibility
 
@@ -291,84 +296,12 @@ end
 end
 
 
-function aPCE_OrthonormalBasis(Data, Degree::S, center_data::Val{true}) where {S <: Integer}
-    T = eltype(Data)
-    d = Degree #Degree of polynomial expansion
-    dd = d #Degree of polinomial for roots definitions
-    # @warn "Weird, is that properly normalized? Not /std and minus mean?"
-    NumberOfDataPoints = length(Data)
-    MeanOfData = mean(Data)
-    Data = (Data .- MeanOfData)  # center_data
-    m = zeros(T, 2 * dd + 2)
-    for col in axes(Data, 2)
-        compute_moments!(m, view(Data, :, col), NumberOfDataPoints, dd)
-    end
-    OrthonormalBasis = zeros(T, dd + 1, dd + 1)
-    OrthogonalBasis = zeros(T, dd + 1, dd + 1) # Allocate once for all :)
-    PolyCoeff_NonNorm_prealloc = zeros(T, dd + 1, dd + 1) # Allocate once for all :)
-
-    for degree in 0:dd
-        Hankel = @views OrthogonalBasis[1:(degree + 1), 1:(degree + 1)]
-        Vc = zeros(T, degree + 1)
-        PolyCoeff_NonNorm = @views PolyCoeff_NonNorm_prealloc[1:(degree + 1), 1:(degree + 1)]
-
-        for i in 0:(degree - 1)
-            for j in 0:degree
-                Hankel[i + 1, j + 1] = @views m[i + j + 1]  # put in the moment
-            end
-            Hankel[i + 1, :] = @views Hankel[i + 1, :] / maximum(abs.(@views Hankel[i + 1, :]))
-        end
-        for j in 0:(degree - 1)
-            Hankel[degree + 1, j + 1] = zero(T)
-        end
-        Hankel[degree + 1, degree + 1] = one(T)
-        Hankel[degree + 1, :] = @views Hankel[degree + 1, :] / maximum(abs.(@views Hankel[degree + 1, :]))
-
-        # Loop for Vc
-        for i in 0:(degree - 1)
-            Vc[i + 1] = zero(T)
-        end
-        Vc[degree + 1] = one(T)
-
-
-        # PolyCoeff_NonNorm[degree + 1, 1:(degree + 1)] .= LinearAlgebra.factorize(Hankel) \ Vc
-        # PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Krylov.usymlq(Array(Hankel),Array(Vc)) |> first
-        # catch
-        #     @warn "Hankel matrix singular, trying pseudo inverse." #  Vp Hankel Vc
-        # Main.@infiltrate
-        # @info "" Hankel Vc
-        PolyCoeff_NonNorm[degree + 1, 1:(degree + 1)] .=  Hankel \ Vc #  pinv(Hankel) * Vc # more robust?
-        # end
-        # Vp = Hankel \ Vc
-        # PolyCoeff_NonNorm[degree+1, 1:degree+1] .= Vp
-        # @ignore_derivatives begin
-
-        # deviation = 100 * abs(sum(abs.(Hankel * PolyCoeff_NonNorm[degree+1, 1:degree+1])) - sum(abs.(Vc)))
-        # if (deviation > 0.5)
-        #     @warn "Computational error of the linear solver is too high: $(round(deviation;digits=3))"
-        # end
-
-        #Normalization of polynomial coefficients
-        P_norm = 0.0
-        for i in 1:NumberOfDataPoints
-            Poly = 0
-            for k in 0:degree
-                Poly += @views PolyCoeff_NonNorm[degree + 1, k + 1] * Data[i]^k
-            end
-            P_norm += Poly^2 / NumberOfDataPoints
-        end
-        for k in 0:degree
-            OrthonormalBasis[degree + 1, k + 1] = @views PolyCoeff_NonNorm[degree + 1, k + 1] / sqrt(P_norm+1e-10)
-        end
-    end
-
-    for k in 1:lastindex(OrthonormalBasis, 2)
-        OrthonormalBasis[:, k] = @views OrthonormalBasis[:, k] ./ (MeanOfData^(k - 1)+1e-10)
-    end
-
-    return OrthonormalBasis
+@testitem "aPCE_OrthonormalBasis" begin
+    @test aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true)) ≈ [1.0 0.0; 0.0 4.5]
+    @test aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false)) ≈ [1.0 0.0; -0.5 1.5]
+    @inferred aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false))
+    @inferred aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true))
 end
-
 
 @stable @inbounds function aPCE_OrthonormalBasis(Data, Degree::S, center_data::Val{false}) where {S <: Integer}
     T = eltype(Data)
@@ -546,11 +479,38 @@ end
     return UInt128(prod(UInt128(x + 1):UInt128(d + n)) ÷ factorial(UInt128(y))) |> Int
 end
 
+@testitem "numberPolynomials" begin
+    @test numberPolynomials(3, 2) == 10
+    @test numberPolynomials(5, 3) == 56
+    @test numberPolynomials(0, 0) == 1
+    @test numberPolynomials(1, 1) == 2
+    @test typeof(numberPolynomials(3, 2)) == Int
+end
+
 @stable function reverse_columns!(x)
     @inbounds for row in axes(x, 1)
         x[row, :] = reverse(@views x[row, :])
     end
     return x
+end
+
+@testitem "reverse_columns!" begin
+    mat1 = [1 2 3; 4 5 6; 7 8 9]
+    expected1 = [3 2 1; 6 5 4; 9 8 7]
+    reverse_columns!(mat1)
+    @test mat1 == expected1
+
+    mat2 = [1 2; 3 4; 5 6]
+    expected2 = [2 1; 4 3; 6 5]
+    reverse_columns!(mat2)
+    @test mat2 == expected2
+
+    mat3 = [1 2 3 4; 5 6 7 8]
+    expected3 = [4 3 2 1; 8 7 6 5]
+    reverse_columns!(mat3)
+    @test mat3 == expected3
+
+    @test typeof(reverse_columns!(mat1)) == Matrix{Int}
 end
 
 function create_basis(x, degree; center_data = true)
@@ -618,19 +578,33 @@ end
     return [i * coeffs[i + 1] for i in 1:(length(coeffs) - 1)]
 end
 
-function evalpoly_two(x, cs::AbstractArray)
-    i = lastindex(cs)
-    out = cs[i]
-    i -= 1
-    fi = firstindex(cs)
-    while i > fi
-        out = muladd(out, x, cs[i])
-        out = muladd(out, x, cs[i - 1])
-        i -= 2
-    end
-    return i == fi ? muladd(out, x, @inbounds(cs[fi])) : out
+@testitem "derivative_coeffs" begin
+    @test derivative_coeffs([1.0, 2.0, 3.0]) == [2.0, 6.0]  # Derivative of 1 + 2x + 3x^2
+    @test derivative_coeffs([0.0, 0.0, 0.0]) == [0.0, 0.0]  # Derivative of 0 polynomial
+    @test derivative_coeffs([5.0]) == [0.0]                 # Derivative of constant polynomial
+    @test derivative_coeffs([1.0, -1.0, 1.0, -1.0]) == [-1.0, 2.0, -3.0]  # Derivative of 1 - x + x^2 - x^3
 end
 
+function evalpoly_two(x, coeffs)
+    i = lastindex(coeffs)
+    out = coeffs[i]
+    i -= 1
+    fi = firstindex(coeffs)
+    while i > fi
+        out = muladd(out, x, coeffs[i])
+        out = muladd(out, x, coeffs[i - 1])
+        i -= 2
+    end
+    return i == fi ? muladd(out, x, @inbounds(coeffs[fi])) : out
+end
+
+@testitem "evalpoly_two" begin
+    @test evalpoly_two(2.0, [1.0, 2.0, 3.0, 4.0]) == 49.0  # Polynomial 1 + 2x + 3x^2 + 4x^3 at x=2
+    @test evalpoly_two(0.0, [1.0, 2.0, 3.0, 4.0]) == 1.0   # Polynomial 1 + 2x + 3x^2 + 4x^3 at x=0
+    @test evalpoly_two(1.0, [0.0, 0.0, 0.0, 0.0]) == 0.0   # Zero polynomial at x=1
+    @test evalpoly_two(1.0, [5.0]) == 5.0                  # Constant polynomial at x=1
+    @test evalpoly_two(2.0, [1.0, -1.0, 1.0, -1.0]) == -5.0  # Polynomial 1 - x + x^2 - x^3 at x=2
+end
 
 @stable function evaluate_derivative_horner(x, coeffs)
     n = length(coeffs) - 1
@@ -651,6 +625,15 @@ end
         @infiltrate
     end
     return derivative_value
+end
+
+@testitem "evaluate_derivative_horner" begin
+    @test evaluate_derivative_horner(2.0, [1.0, 2.0, 3.0]) == 14.0  # Derivative of 1 + 2x + 3x^2 at x=2
+    @test evaluate_derivative_horner(0.0, [1.0, 2.0, 3.0]) == 2.0   # Derivative of 1 + 2x + 3x^2 at x=0
+    @test evaluate_derivative_horner(1.0, [0.0, 0.0, 0.0]) == 0.0   # Derivative of 0 polynomial at x=1
+    @test evaluate_derivative_horner(1.0, [5.0]) == 0.0             # Derivative of constant polynomial at x=1
+    @test typeof(evaluate_derivative_horner(2.0, [1.0, 2.0, 3.0])) == Float64
+    @inferred evaluate_derivative_horner(1.0, [5.0])
 end
 
 @stable @inline function evaluate_polynomial_horner_array(x, coeffs)
