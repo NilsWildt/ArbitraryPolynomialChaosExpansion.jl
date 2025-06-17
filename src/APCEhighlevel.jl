@@ -97,7 +97,7 @@ function aPCE_PsiPolynomialMatrix(aPCE::aPCE{T}, TrainingInput::S)::S where {T <
 end
 
 
-function GaussianCollocation(aPCE::aPCE{T}, len = 0; strategy = :PCM) where {T <: Real}
+function GaussianCollocation(aPCE::aPCE{T}, len = 0; strategy = :PCM)::Matrix{T} where {T <: Real}
     @assert aPCE.do_gauss "Gaussian collocation requires the do_gauss flag to be set to true"
 
     # Generate all possible combinations of polynomial points
@@ -301,4 +301,104 @@ end
     @einsum PredictionOutput[k, j] := Psi[i, k] * θ[i, j]
     # PredictionOutput = outer_product_kernel(cu(Psi), cu(aPCE.ExpansionCoefficients))
     return PredictionOutput
+end
+
+@testitem "aPCE_constructor_test" begin
+    # Test basic constructor
+    TrainingInput = rand(10, 2)
+    degree = 1
+    apc = aPCE(TrainingInput, degree)
+    @test apc.input_dimensions == 2
+    @test apc.ExpansionDegree == 1
+    @test apc.is_orthonormal == true
+    @test apc.do_gauss == false
+
+    # Test with different options
+    apc2 = aPCE(TrainingInput, degree; outdim = 3, is_orthonormal = false, do_gauss = true)
+    @test apc2.output_dimensions == 3
+    @test apc2.is_orthonormal == false
+    @test apc2.do_gauss == true
+end
+
+@testitem "aPCE_predict_test" begin
+    # Create test data
+    TrainingInput = rand(10, 2)
+    TrainingOutput = rand(10, 1)
+    degree = 1
+    apc = aPCE(TrainingInput, degree)
+
+    # Train the model
+    train!(apc, TrainingInput, TrainingOutput)
+
+    # Test prediction
+    test_input = rand(5, 2)
+    prediction = predict(apc, test_input)
+    @test size(prediction) == (5, 1)
+    @test all(!isnan, prediction)
+    @test all(!isinf, prediction)
+end
+
+@testitem "aPCE_UQ_test" begin
+    # Create test data
+    TrainingInput = rand(10, 2)
+    TrainingOutput = rand(10, 1)
+    degree = 1
+    apc = aPCE(TrainingInput, degree)
+
+    # Train the model
+    train!(apc, TrainingInput, TrainingOutput)
+
+    # Test UQ
+    uq_result = UQ(apc)
+    @test haskey(uq_result, :OutputMean)
+    @test haskey(uq_result, :OutputVar)
+    @test length(uq_result.OutputMean) == 1
+    @test length(uq_result.OutputVar) == 1
+    @test all(!isnan, uq_result.OutputMean)
+    @test all(!isnan, uq_result.OutputVar)
+    @test all(!isinf, uq_result.OutputMean)
+    @test all(!isinf, uq_result.OutputVar)
+end
+
+@testitem "aPCE_GaussianCollocation_test" begin
+    # Create test data
+    TrainingInput = rand(10, 2)
+    degree = 1
+    apc = aPCE(TrainingInput, degree; do_gauss = true)
+
+    # Test Gaussian collocation
+    collocation_points = GaussianCollocation(apc)
+    @test size(collocation_points, 2) == 2
+    @test all(!isnan, collocation_points)
+    @test all(!isinf, collocation_points)
+
+    # Test with different strategies
+    collocation_points_ft = GaussianCollocation(apc; strategy = :FT)
+    collocation_points_pcm = GaussianCollocation(apc; strategy = :PCM)
+    @test size(collocation_points_ft, 2) == 2
+    @test size(collocation_points_pcm, 2) == 2
+end
+
+@testitem "aPCE_type_stability_test" begin
+    # Test type stability of constructor
+    TrainingInput = rand(10, 2)
+    degree = 1
+    @inferred aPCE(TrainingInput, degree)
+    @inferred aPCE(TrainingInput, degree; outdim = 3, is_orthonormal = false, do_gauss = true)
+
+    # Test type stability of predict
+    apc = aPCE(TrainingInput, degree)
+    TrainingOutput = rand(10, 1)
+    train!(apc, TrainingInput, TrainingOutput)
+    test_input = rand(5, 2)
+    @inferred predict(apc, test_input)
+
+    # Test type stability of UQ
+    @inferred UQ(apc)
+
+    # Test type stability of GaussianCollocation
+    apc_gauss = aPCE(TrainingInput, degree; do_gauss = true)
+    @inferred GaussianCollocation(apc_gauss)
+    @inferred GaussianCollocation(apc_gauss; strategy = :FT)
+    @inferred GaussianCollocation(apc_gauss; strategy = :PCM)
 end

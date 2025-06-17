@@ -398,37 +398,37 @@ end
 using ChainRulesCore
 using ForwardDiff
 
-function ChainRulesCore.rrule(::typeof(create_basis), x::AbstractArray{T}, d_expansion::Int; center_data=false) where {T}
+function ChainRulesCore.rrule(::typeof(create_basis), x::AbstractArray{T}, d_expansion::Int; center_data = false) where {T}
     # Forward pass
-    basis = create_basis(x, d_expansion; center_data=center_data)
-    
+    basis = create_basis(x, d_expansion; center_data = center_data)
+
     # Define the pullback
     function create_basis_pullback(Δbasis)
         # Use ForwardDiff to compute the gradient
         function basis_wrapper(x_vec)
             x_reshaped = reshape(x_vec, size(x))
-            basis = create_basis(x_reshaped, d_expansion; center_data=center_data)
+            basis = create_basis(x_reshaped, d_expansion; center_data = center_data)
             # Return a scalar value for gradient computation
             return sum(basis .* Δbasis)
         end
-        
+
         # Compute gradient using ForwardDiff
         grad = ForwardDiff.gradient(basis_wrapper, vec(x))
-        
+
         # Reshape gradient to match input shape
         grad_reshaped = reshape(grad, size(x))
-        
+
         # Return the gradient with respect to x
         return (NoTangent(), grad_reshaped, NoTangent())
     end
-    
+
     return basis, create_basis_pullback
 end
 
 # Mooncake.jl version of the rrule for create_basis
 @from_rrule DefaultCtx Tuple{
     typeof(create_basis),
-    AbstractArray, Integer
+    AbstractArray, Integer,
 }
 
 # Enzyme rules
@@ -500,17 +500,17 @@ function Enzyme.autodiff(::Enzyme.ReverseMode, ::typeof(aPCE_PsiPolynomialMatrix
 end
 
 # Enzyme rule for create_basis
-function Enzyme.autodiff(::Enzyme.ReverseMode, ::typeof(create_basis), x::AbstractArray{T}, d_expansion::Int; center_data=false) where {T}
+function Enzyme.autodiff(::Enzyme.ReverseMode, ::typeof(create_basis), x::AbstractArray{T}, d_expansion::Int; center_data = false) where {T}
     # Forward pass
-    basis = create_basis(x, d_expansion; center_data=center_data)
-    
+    basis = create_basis(x, d_expansion; center_data = center_data)
+
     # Compute gradient using Enzyme's autodiff
     function basis_wrapper(x_vec)
         x_reshaped = reshape(x_vec, size(x))
-        basis = create_basis(x_reshaped, d_expansion; center_data=center_data)
+        basis = create_basis(x_reshaped, d_expansion; center_data = center_data)
         return sum(basis)
     end
-    
+
     # Return both the basis and a function to compute gradients
     return basis, basis_wrapper
 end

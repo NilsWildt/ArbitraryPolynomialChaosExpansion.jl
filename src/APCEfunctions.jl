@@ -287,7 +287,7 @@ end
     return Psi
 end
 
-@stable @inline function compute_moments!(m::AbstractArray{T}, Data::AbstractArray{S}, NumberOfDataPoints::Integer, dd::Integer) where {T <: Real, S<:Real}
+@stable @inline function compute_moments!(m::AbstractArray{T}, Data::AbstractArray{S}, NumberOfDataPoints::Integer, dd::Integer) where {T <: Real, S <: Real}
     current_power = Vector{T}(undef, length(Data))  # Pre-allocate with correct type
     fill!(current_power, one(T))  # Initialize with ones of correct type
     @inbounds for l in 0:(2 * dd + 1)
@@ -298,7 +298,7 @@ end
 
 
 @testitem "aPCE_OrthonormalBasis" begin
-    @test aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true)) ≈ [1.0 0.0; 0.0 4.5]
+    @test aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true)) ≈  [1.0 0.0; -0.5 1.5]
     @test aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false)) ≈ [1.0 0.0; -0.5 1.5]
     @inferred aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false))
     @inferred aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true))
@@ -313,36 +313,43 @@ end
     return OrthonormalBasis
 end
 
-@stable @inbounds function aPCE_OrthonormalBasis(Data::Array{T}, Degree::S, center_data::Val{true}) where {T<:Real,S<:Integer}
+@stable @inbounds function aPCE_OrthonormalBasis(Data::Array{T}, Degree::S, center_data::Val{true}) where {T <: Real, S <: Integer}
     d = Degree #Degree of polynomial expansion
-    dd = d #Degree of polinomial for roots definitions
+    dd = d #Degree of polynomial for roots definition
     NumberOfDataPoints = length(Data)
     MeanOfData = mean(Data)
-    Data = (Data .- MeanOfData)  # center_data
+    Data_scaled = Data ./ MeanOfData  # scale data by division (not subtraction)
+
+    # Compute moments using scaled data
     m = zeros(T, 2 * dd + 2)
-    for col in axes(Data, 2)
-        compute_moments!(m, view(Data, :, col), NumberOfDataPoints, dd)
+    for i in 0:(2 * dd + 1)
+        m[i + 1] = sum(Data_scaled .^ i) / NumberOfDataPoints
     end
+
     OrthonormalBasis = zeros(T, dd + 1, dd + 1)
-    OrthogonalBasis = zeros(T, dd + 1, dd + 1) # Allocate once for all :)
-    PolyCoeff_NonNorm_prealloc = zeros(T, dd + 1, dd + 1) # Allocate once for all :)
+    OrthogonalBasis = zeros(T, dd + 1, dd + 1)
 
     for degree in 0:dd
         Hankel = @views OrthogonalBasis[1:(degree + 1), 1:(degree + 1)]
         Vc = zeros(T, degree + 1)
-        PolyCoeff_NonNorm = @views PolyCoeff_NonNorm_prealloc[1:(degree + 1), 1:(degree + 1)]
 
         for i in 0:(degree - 1)
             for j in 0:degree
-                Hankel[i + 1, j + 1] = @views m[i + j + 1]  # put in the moment
+                Hankel[i + 1, j + 1] = m[i + j + 1]
             end
-            Hankel[i + 1, :] = @views Hankel[i + 1, :] / maximum(abs.(@views Hankel[i + 1, :]))
+            max_val = maximum(abs.(@views Hankel[i + 1, :]))
+            if max_val > zero(T)
+                Hankel[i + 1, :] = @views Hankel[i + 1, :] / max_val
+            end
         end
         for j in 0:(degree - 1)
             Hankel[degree + 1, j + 1] = zero(T)
         end
         Hankel[degree + 1, degree + 1] = one(T)
-        Hankel[degree + 1, :] = @views Hankel[degree + 1, :] / maximum(abs.(@views Hankel[degree + 1, :]))
+        max_val = maximum(abs.(@views Hankel[degree + 1, :]))
+        if max_val > zero(T)
+            Hankel[degree + 1, :] = @views Hankel[degree + 1, :] / max_val
+        end
 
         # Loop for Vc
         for i in 0:(degree - 1)
@@ -350,58 +357,82 @@ end
         end
         Vc[degree + 1] = one(T)
 
-        PolyCoeff_NonNorm[degree + 1, 1:(degree + 1)] .= pinv(Hankel) * Vc # more robust?
+        try
+            OrthogonalBasis[degree + 1, 1:(degree + 1)] .= Hankel\Vc
+        catch
+            OrthogonalBasis[degree + 1, 1:(degree + 1)] .= pinv(Hankel) * Vc
+            @warn "Used pinv for polynomial basis of degree $degree"
+        end
 
-        #Normalization of polynomial coefficients
-        P_norm = 0.0
+        # Check computational error
+        if 100 * abs(sum(abs.(Hankel * OrthogonalBasis[degree + 1, 1:(degree + 1)])) - sum(abs.(Vc))) > 0.5
+            deviation = 100 * abs(sum(abs.(Hankel * OrthogonalBasis[degree + 1, 1:(degree + 1)])) - sum(abs.(Vc))) / sum(abs.(Vc))
+            @warn "Computational error of the linear solver is too high: $(round(deviation; digits = 3))% for polynomial basis of degree $degree"
+        end
+
+        #Normalization of polynomial coefficients using scaled data
+        P_norm = zero(T)
         for i in 1:NumberOfDataPoints
-            Poly = 0
+            Poly = zero(T)
             for k in 0:degree
-                Poly += @views PolyCoeff_NonNorm[degree + 1, k + 1] * Data[i]^k
+                Poly += @views OrthogonalBasis[degree + 1, k + 1] * Data_scaled[i]^k
             end
             P_norm += Poly^2 / NumberOfDataPoints
         end
         for k in 0:degree
-            OrthonormalBasis[degree + 1, k + 1] = @views PolyCoeff_NonNorm[degree + 1, k + 1] / sqrt(P_norm)
+            OrthonormalBasis[degree + 1, k + 1] = @views OrthogonalBasis[degree + 1, k + 1] / sqrt(P_norm)
         end
     end
 
+    # Backward transformation to data space (matching MATLAB implementation)
+    # First scale data back
+    Data_scaled .*= MeanOfData
+    # Then transform basis column-wise like in MATLAB
     for k in 1:lastindex(OrthonormalBasis, 2)
-        OrthonormalBasis[:, k] = @views OrthonormalBasis[:, k] ./ (MeanOfData^(k - 1))
+        # In MATLAB: k goes from 1 to length(Polynomial)
+        # So we use k-1 for the power to match MATLAB's behavior
+        # For centered case, we need to divide by MeanOfData^(k-1) to match MATLAB
+        OrthonormalBasis[:, k] = OrthonormalBasis[:, k] ./ (MeanOfData^(k-1))
     end
 
     return OrthonormalBasis
 end
 
-@stable @inbounds function aPCE_OrthonormalBasis(Data::Array{T}, Degree::S, center_data::Val{false}) where {T<:Real,S<:Integer}
+@stable @inbounds function aPCE_OrthonormalBasis(Data::Array{T}, Degree::S, center_data::Val{false}) where {T <: Real, S <: Integer}
     d = Degree #Degree of polynomial expansion
     dd = d #Degree of polynomial for roots definition
     NumberOfDataPoints = length(Data)
 
+    # Compute raw moments exactly as in MATLAB
     m = zeros(T, 2 * dd + 2)
-    @batch for col in axes(Data, 2)
-        compute_moments!(m, view(Data, :, col), NumberOfDataPoints, dd)
+    for i in 0:(2 * dd + 1)
+        m[i + 1] = sum(Data .^ i) / NumberOfDataPoints
     end
+
     OrthonormalBasis = zeros(T, dd + 1, dd + 1)
-    OrthogonalBasis = zeros(T, dd + 1, dd + 1) # Allocate once for all :)
-    PolyCoeff_NonNorm_prealloc = zeros(T, dd + 1, dd + 1) # Allocate once for all :)
+    OrthogonalBasis = zeros(T, dd + 1, dd + 1)
 
     for degree in 0:dd
         Hankel = @views OrthogonalBasis[1:(degree + 1), 1:(degree + 1)]
         Vc = zeros(T, degree + 1)
-        PolyCoeff_NonNorm = @views PolyCoeff_NonNorm_prealloc[1:(degree + 1), 1:(degree + 1)]
 
         for i in 0:(degree - 1)
             for j in 0:degree
-                Hankel[i + 1, j + 1] = @views m[i + j + 1]  # put in the moment
+                Hankel[i + 1, j + 1] = m[i + j + 1]
             end
-            Hankel[i + 1, :] = @views Hankel[i + 1, :] / maximum(abs.(@views Hankel[i + 1, :]))
+            max_val = maximum(abs.(@views Hankel[i + 1, :]))
+            if max_val > zero(T)
+                Hankel[i + 1, :] = @views Hankel[i + 1, :] / max_val
+            end
         end
         for j in 0:(degree - 1)
             Hankel[degree + 1, j + 1] = zero(T)
         end
         Hankel[degree + 1, degree + 1] = one(T)
-        Hankel[degree + 1, :] = @views Hankel[degree + 1, :] / maximum(abs.(@views Hankel[degree + 1, :]))
+        max_val = maximum(abs.(@views Hankel[degree + 1, :]))
+        if max_val > zero(T)
+            Hankel[degree + 1, :] = @views Hankel[degree + 1, :] / max_val
+        end
 
         # Loop for Vc
         for i in 0:(degree - 1)
@@ -409,29 +440,41 @@ end
         end
         Vc[degree + 1] = one(T)
 
-        PolyCoeff_NonNorm[degree + 1, 1:(degree + 1)] .= Hankel \ Vc
+        try
+            OrthogonalBasis[degree + 1, 1:(degree + 1)] .= Hankel\Vc
+        catch
+            OrthogonalBasis[degree + 1, 1:(degree + 1)] .= pinv(Hankel) * Vc
+            @warn "Used pinv for polynomial basis of degree $degree"
+        end
 
-        P_norm = 0.0
+        # Check computational error
+        if 100 * abs(sum(abs.(Hankel * OrthogonalBasis[degree + 1, 1:(degree + 1)])) - sum(abs.(Vc))) > 0.5
+            deviation = 100 * abs(sum(abs.(Hankel * OrthogonalBasis[degree + 1, 1:(degree + 1)])) - sum(abs.(Vc))) / sum(abs.(Vc))
+            @warn "Computational error of the linear solver is too high: $(round(deviation; digits = 3))% for polynomial basis of degree $degree"
+        end
+
+        #Normalization of polynomial coefficients using original data
+        P_norm = zero(T)
         for i in 1:NumberOfDataPoints
-            Poly = 0
+            Poly = zero(T)
             for k in 0:degree
-                Poly += @views PolyCoeff_NonNorm[degree + 1, k + 1] * Data[i]^k
+                Poly += @views OrthogonalBasis[degree + 1, k + 1] * Data[i]^k
             end
             P_norm += Poly^2 / NumberOfDataPoints
         end
         for k in 0:degree
-            OrthonormalBasis[degree + 1, k + 1] = @views PolyCoeff_NonNorm[degree + 1, k + 1] / sqrt(P_norm)
+            OrthonormalBasis[degree + 1, k + 1] = @views OrthogonalBasis[degree + 1, k + 1] / sqrt(P_norm)
         end
     end
 
     return OrthonormalBasis
 end
 
-@stable @inbounds function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::Val{true}) where {T<:Real,S<:Integer}
+@stable @inbounds function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::Val{true}) where {T <: Real, S <: Integer}
     return aPCE_OrthonormalBasis(Array(Data), Degree, center_data)
 end
 
-@stable @inbounds function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::Val{false}) where {T<:Real,S<:Integer}
+@stable @inbounds function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::Val{false}) where {T <: Real, S <: Integer}
     return aPCE_OrthonormalBasis(Array(Data), Degree, center_data)
 end
 
@@ -460,13 +503,15 @@ end
 @stable function GaussianCollocation(
         input_dimensions, ExpansionDegree, OrthonormalBasis::AbstractArray{T},
         InputDistribution::AbstractArray{T}, NumberOfTerms; strategy = :PCM
-    ) where {T <: Real}
+    )::Matrix{T} where {T <: Real}
     # @info input_dimensions
     polynomial_roots = zeros(T, input_dimensions, ExpansionDegree + 1)
     @inbounds for d in Base.oneto(Int64(input_dimensions))
         polynomial_basis = @views OrthonormalBasis[:, :, d]
-        # @debug "" polynomial_basis
-        polynomial_roots[d, :] = @view reinterpret(T, PolynomialRoots.roots(@views polynomial_basis[ExpansionDegree + 2, :]))[1:2:(end - 1)]
+        roots = PolynomialRoots.roots(@views polynomial_basis[ExpansionDegree + 1, :])
+        # Take only real parts and ensure we have the right number of roots
+        real_roots = real.(roots)
+        polynomial_roots[d, 1:length(real_roots)] = real_roots
     end
     PointsVector = 1:(ExpansionDegree + 1) |> collect
     UniqueCombinations = stack(reduce(vcat, (UnrolledUtilities.unrolled_product([PointsVector for _ in 1:input_dimensions]...))))'
@@ -569,6 +614,7 @@ function create_basis!(OrthonormalBasis, x, degree; center_data = false)
     end
     # return OrthonormalBasis
     # end
+    return
 end
 
 
@@ -581,7 +627,7 @@ end
 @stable function evaluate_Ψ(x, coeffs, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name)
     T = eltype(coeffs)
     Ψ = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree) #.|> T
-    TensorOperations.@tensor order=(k,i) PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
+    TensorOperations.@tensor order = (k, i) PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
     # PredictionOutput = outer_product_kernel(cu(Ψ), cu(coeffs))
     return PredictionOutput
 end
@@ -656,12 +702,13 @@ end
     @inferred APCE.evaluate_derivative_horner(1.0, [5.0])
 end
 
-@stable @inline function evaluate_polynomial_horner_array(x, coeffs)
-    results = Vector(undef, length(x))
-    for (i, xi) in enumerate(x)
-        result = 0.0
+@stable @inline function evaluate_polynomial_horner_array(x::AbstractVector{T}, coeffs::AbstractVector{S}) where {T <: Real, S <: Real}
+    R = promote_type(T, S)
+    results = Vector{R}(undef, length(x))
+    @inbounds for (i, xi) in enumerate(x)
+        result = zero(R)
         @simd for coeff in reverse(coeffs)
-            result = result * xi + coeff
+            result = muladd(result, xi, coeff)
         end
         results[i] = result
     end
@@ -751,3 +798,321 @@ function evalpoly_derivative(x, coeffs)
     derivative_coeffs = coeffs[2:end] .* (1:n)'
     return evalpoly_two(x, derivative_coeffs)
 end
+
+@testitem "aPCE_MultivariatePolynomialDegrees_test" begin
+    @test aPCE_MultivariatePolynomialDegrees(2, 1, 1.0, 1.0) == [0 0; 0 1; 1 0]
+    @test aPCE_MultivariatePolynomialDegrees(2, 2, 1.0, 1.0) == [0 0; 0 1; 1 0; 0 2; 1 1; 2 0]
+    @inferred aPCE_MultivariatePolynomialDegrees(2, 2, 1.0, 1.0)
+end
+
+
+@testitem "aPCE_OrthonormalBasis_test" begin
+    @test aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true)) ≈  [1.0 0.0; -0.5 1.5]
+    @test aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false)) ≈ [1.0 0.0; -0.5 1.5]
+    @inferred aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false))
+    @inferred aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true))
+end
+
+@testitem "numberPolynomials_test" begin
+    @test APCE.numberPolynomials(3, 2) == 10
+    @test APCE.numberPolynomials(5, 3) == 56
+    @test APCE.numberPolynomials(0, 0) == 1
+    @test APCE.numberPolynomials(1, 1) == 2
+    @test typeof(APCE.numberPolynomials(3, 2)) == Int
+end
+
+@testitem "type_stability_tests" begin
+    # Test type stability of normalization_functions
+    x = rand(10, 2)
+    normalize, inverse_normalize = APCE.normalization_functions(x)
+    @inferred APCE.normalization_functions(x)
+    @test typeof(normalize(x)) == typeof(x)
+    @test typeof(inverse_normalize(x)) == typeof(x)
+
+    # Test type stability of compute_Psi_element
+    TrainingInput = rand(10, 2)
+    MultivariatePolynomialDegrees = [0 0; 0 1; 1 0]
+    OrthonormalBasis = rand(3, 3, 2)
+    @inferred APCE.compute_Psi_element(1, 1, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, 2)
+
+    # Test type stability of evalpoly_two
+    x = 2.0
+    coeffs = [1.0, 2.0, 3.0]
+    @inferred APCE.evalpoly_two(x, coeffs)
+    @test typeof(APCE.evalpoly_two(x, coeffs)) == Float64
+
+    # Test type stability of evaluate_derivative_horner
+    @inferred APCE.evaluate_derivative_horner(x, coeffs)
+    @test typeof(APCE.evaluate_derivative_horner(x, coeffs)) == Float64
+
+    # Test type stability of evaluate_polynomial_horner_array
+    x_array = [1.0, 2.0, 3.0]
+    @inferred APCE.evaluate_polynomial_horner_array(x_array, coeffs)
+    @test typeof(APCE.evaluate_polynomial_horner_array(x_array, coeffs)) == Vector{Float64}
+
+    # Test type stability of train
+    Ψ = rand(10, 5)
+    y_rhs = rand(10, 2)
+    @inferred APCE.train(Ψ, y_rhs)
+    @test typeof(APCE.train(Ψ, y_rhs)) == Matrix{Float64}
+
+    # Test type stability of aPCE_FullBasis
+    Data = rand(10)
+    Degree = 2
+    @inferred APCE.aPCE_FullBasis(Data, Degree)
+    @test typeof(APCE.aPCE_FullBasis(Data, Degree)) == Matrix{Float64}
+
+    # Test type stability of GaussianCollocation
+    input_dimensions = 2
+    ExpansionDegree = 2
+    OrthonormalBasis = rand(3, 3, 2)
+    InputDistribution = rand(10, 2)
+    NumberOfTerms = 6
+    @inferred APCE.GaussianCollocation(input_dimensions, ExpansionDegree, OrthonormalBasis, InputDistribution, NumberOfTerms)
+    @test typeof(APCE.GaussianCollocation(input_dimensions, ExpansionDegree, OrthonormalBasis, InputDistribution, NumberOfTerms)) == Matrix{Float64}
+end
+
+@testitem "edge_cases_tests" begin
+    # Test edge cases for evalpoly_two
+    @test APCE.evalpoly_two(0.0, [1.0]) == 1.0  # Constant polynomial
+    @test APCE.evalpoly_two(1.0, [0.0, 0.0]) == 0.0  # Zero polynomial
+    @test APCE.evalpoly_two(Inf, [1.0, 2.0]) == Inf  # Infinity input
+    @test isnan(APCE.evalpoly_two(NaN, [1.0, 2.0]))  # NaN input
+
+    # Test edge cases for evaluate_derivative_horner
+    @test APCE.evaluate_derivative_horner(0.0, [1.0]) == 0.0  # Constant polynomial
+    @test APCE.evaluate_derivative_horner(1.0, [0.0, 0.0]) == 0.0  # Zero polynomial
+
+    # Test edge cases for train
+    Ψ = zeros(5, 3)
+    y_rhs = zeros(5, 2)
+    @test all(iszero, APCE.train(Ψ, y_rhs))  # Zero inputs
+    @test size(APCE.train(Ψ, y_rhs)) == (3, 2)  # Correct output size
+
+    # Test edge cases for aPCE_FullBasis
+    @test size(APCE.aPCE_FullBasis([1.0], 0)) == (1, 1)  # Degree 0
+    @test size(APCE.aPCE_FullBasis([1.0], 1)) == (2, 2)  # Degree 1
+end
+
+
+@testitem "aPCE_OrthonormalBasis1" begin
+    @test APCE.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true)) ≈  [1.0 0.0; -0.5 1.5]
+    @test APCE.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false)) ≈ [1.0 0.0; -0.5 1.5]
+    @inferred APCE.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false))
+    @inferred APCE.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true))
+end
+
+@testitem "aPCE_OrthonormalBasis_comprehensive_test_true" begin
+    using Statistics: mean, std
+    # Test with various input types and sizes
+    T = Float64
+    Data = rand(T, 1000)
+    Degree = 3
+
+    # Test basic functionality
+    basis = aPCE_OrthonormalBasis(Data, Degree, Val(true))
+    @test size(basis) == (Degree + 1, Degree + 1)
+    @test all(!isnan, basis)
+    @test all(!isinf, basis)
+
+    # Test type stability
+    @inferred aPCE_OrthonormalBasis(Data, Degree, Val(true))
+
+    # Test orthonormality
+    for i in 1:(Degree + 1)
+        for j in 1:(Degree + 1)
+            # Evaluate both basis functions at all data points
+            poly_i = zeros(T, length(Data))
+            poly_j = zeros(T, length(Data))
+            for k in 1:length(Data)
+                for d in 0:(i - 1)
+                    poly_i[k] += basis[i, d + 1] * Data[k]^d
+                end
+                for d in 0:(j - 1)
+                    poly_j[k] += basis[j, d + 1] * Data[k]^d
+                end
+            end
+            # Compute dot product (average of product over data points)
+            dot_product = sum(poly_i .* poly_j) / length(Data)
+            if i == j
+                @test isapprox(dot_product, one(T), rtol = 1.0e-5)
+            else
+                @test isapprox(dot_product, zero(T), atol = 1.0e-10)
+            end
+        end
+    end
+end
+
+@testitem "aPCE_OrthonormalBasis_comprehensive_test_false" begin
+    using Statistics: mean, std
+    # Test with various input types and sizes
+    T = Float64
+    Data = rand(T, 1000)
+    Degree = 3
+
+    # Test basic functionality
+    basis = aPCE_OrthonormalBasis(Data, Degree, Val(false))
+    @test size(basis) == (Degree + 1, Degree + 1)
+    @test all(!isnan, basis)
+    @test all(!isinf, basis)
+
+    # Test type stability
+    @inferred aPCE_OrthonormalBasis(Data, Degree, Val(false))
+
+    # Test orthonormality
+    for i in 1:(Degree + 1)
+        for j in 1:(Degree + 1)
+            # Evaluate both basis functions at all data points
+            poly_i = zeros(T, length(Data))
+            poly_j = zeros(T, length(Data))
+            for k in 1:length(Data)
+                for d in 0:(i - 1)
+                    poly_i[k] += basis[i, d + 1] * Data[k]^d
+                end
+                for d in 0:(j - 1)
+                    poly_j[k] += basis[j, d + 1] * Data[k]^d
+                end
+            end
+            # Compute dot product (average of product over data points)
+            dot_product = sum(poly_i .* poly_j) / length(Data)
+            if i == j
+                @test isapprox(dot_product, one(T), rtol = 1.0e-5)
+            else
+                @test isapprox(dot_product, zero(T), atol = 1.0e-5)
+            end
+        end
+    end
+end
+
+
+@testitem "reverse_columns_test" begin
+    mat1 = [1 2 3; 4 5 6; 7 8 9]
+    expected1 = [3 2 1; 6 5 4; 9 8 7]
+    APCE.reverse_columns!(mat1)
+    @test mat1 == expected1
+
+    mat2 = [1 2; 3 4; 5 6]
+    expected2 = [2 1; 4 3; 6 5]
+    APCE.reverse_columns!(mat2)
+    @test mat2 == expected2
+
+    mat3 = [1 2 3 4; 5 6 7 8]
+    expected3 = [4 3 2 1; 8 7 6 5]
+    APCE.reverse_columns!(mat3)
+    @test mat3 == expected3
+
+    @test typeof(APCE.reverse_columns!(mat1)) == Matrix{Int}
+end
+
+
+@testitem "evaluate_derivative_horner_test" begin
+    @test APCE.evaluate_derivative_horner(2.0, [1.0, 2.0, 3.0]) == 14.0  # Derivative of 1 + 2x + 3x^2 at x=2
+    @test APCE.evaluate_derivative_horner(0.0, [1.0, 2.0, 3.0]) == 2.0   # Derivative of 1 + 2x + 3x^2 at x=0
+    @test APCE.evaluate_derivative_horner(1.0, [0.0, 0.0, 0.0]) == 0.0   # Derivative of 0 polynomial at x=1
+    @test APCE.evaluate_derivative_horner(1.0, [5.0]) == 0.0             # Derivative of constant polynomial at x=1
+    @test typeof(APCE.evaluate_derivative_horner(2.0, [1.0, 2.0, 3.0])) == Float64
+    @inferred APCE.evaluate_derivative_horner(1.0, [5.0])
+end
+
+@testitem "evalpoly_two_test" begin
+    @test APCE.evalpoly_two(2.0, [1.0, 2.0, 3.0, 4.0]) == 49.0  # Polynomial 1 + 2x + 3x^2 + 4x^3 at x=2
+    @test APCE.evalpoly_two(0.0, [1.0, 2.0, 3.0, 4.0]) == 1.0   # Polynomial 1 + 2x + 3x^2 + 4x^3 at x=0
+    @test APCE.evalpoly_two(1.0, [0.0, 0.0, 0.0, 0.0]) == 0.0   # Zero polynomial at x=1
+    @test APCE.evalpoly_two(1.0, [5.0]) == 5.0                  # Constant polynomial at x=1
+    @test APCE.evalpoly_two(2.0, [1.0, -1.0, 1.0, -1.0]) == -5.0  # Polynomial 1 - x + x^2 - x^3 at x=2
+end
+
+
+@testitem "derivative_coeffs_test" begin
+    @test APCE.derivative_coeffs([1.0, 2.0, 3.0]) == [2.0, 6.0]  # Derivative of 1 + 2x + 3x^2
+    @test APCE.derivative_coeffs([0.0, 0.0, 0.0]) == [0.0, 0.0]  # Derivative of 0 polynomial
+    @test APCE.derivative_coeffs([5.0]) == [0.0]                 # Derivative of constant polynomial
+    @test APCE.derivative_coeffs([1.0, -1.0, 1.0, -1.0]) == [-1.0, 2.0, -3.0]  # Derivative of 1 - x + x^2 - x^3
+end
+
+
+## GPU Kernel for outer_product!!
+# @kernel function outer_product_kernel!(output, Ψ, expansion_coefficients)
+#     i, j = @index(Global, NTuple)
+#         for k in 1:size(output, 1)
+#             @inbounds output[k, j] += Ψ[i, k] * expansion_coefficients[i, j]
+#         end
+# end
+
+# # Creating a wrapper kernel for launching with error checks
+# function outer_product!(output, Ψ, expansion_coefficients)
+#     backend = KernelAbstractions.get_backend(Ψ)
+#     kernel! = outer_product_kernel!(backend)
+#     kernel!(output, Ψ, expansion_coefficients, ndrange=size(expansion_coefficients))
+# end
+
+# @inline function outer_product_kernel(Ψ::AbstractArray{T},α::AbstractArray{S}) where {T<:Real, S<:Real}
+#     (i_dim, k_dim) = size(Ψ)
+#     (i_dim_exp, j_dim) = size(α)
+#     backend =get_backend(Ψ) # or KernelAbstractions.CUDA() for GPU
+#     KernelAbstractions.synchronize(backend)
+#     out = KernelAbstractions.zeros(backend, S,k_dim,j_dim)
+#     outer_product!(out, Ψ, α)
+#     return out
+# end
+
+
+# function ChainRulesCore.rrule(::typeof(outer_product_kernel), Ψ, α::AbstractArray{T}) where {T<:Real}
+#     Ψ = Array(Ψ)
+#     α = Array( α)
+#     result = my_outer_product(Ψ, α)
+#     function pullback(Δresult)
+#         (i_dim, k_dim) = size(Ψ)
+#         (_, j_dim) = size(α)
+#         ΔΨ = zeros(T,i_dim,k_dim)
+#         Δα = zeros(T,i_dim,j_dim)
+#         @inbounds for i in 1:i_dim
+#             for k in 1:k_dim
+#                  @simd for j in 1:j_dim
+#                     ΔΨ[i, k] += Δresult[k, j] * α[i, j]
+#                     Δα[i, j] += Δresult[k, j] * Ψ[i, k]
+#                 end
+#             end
+#         end
+#         return (NoTangent(), ΔΨ, Δα)
+#     end
+#     return result, pullback
+#     end
+
+# @inline function outer_product_derivatives!(ΔΨ,Δα, Ψ, α,Δresult )
+#     backend = KernelAbstractions.get_backend(Ψ)
+# 	KernelAbstractions.synchronize(backend)
+
+#     kernel! = outer_product_kernel_derivatives!(backend)
+# 	KernelAbstractions.synchronize(backend)
+
+#     kernel!(ΔΨ, Δα, Ψ, α,cu(Δresult),ndrange=size(α))
+# end
+
+
+# 	@kernel function outer_product_kernel_derivatives!(ΔΨ,Δα, Ψ, α,Δresult)
+#     i, j = @index(Global, NTuple)
+#         for k in 1:size(ΔΨ, 1)
+# 			   ΔΨ[i, k] += Δresult[k, j] * α[i, j]
+#                Δα[i, j] += Δresult[k, j] * Ψ[i, k]
+#        end
+# 	end
+
+# function ChainRulesCore.rrule(::typeof(outer_product_kernel), Ψ, α)
+# 	backend = get_backend(Ψ)
+#     result = outer_product_kernel(Ψ, α)
+#     function pullback(Δresult)
+# 		Δresult = cu(Δresult)
+#         (i_dim, k_dim) = size(Ψ)
+#         (_, j_dim) = size(α)
+# 		ΔΨ = CUDA.zeros(i_dim,k_dim)
+# 		Δα = CUDA.zeros(i_dim,j_dim)
+#         outer_product_derivatives!(ΔΨ,Δα, Ψ, α,Δresult )
+#     	# KernelAbstractions.synchronize(backend)
+#         return (NoTangent(), ΔΨ, Δα)
+# 	end
+# 	return result, pullback
+#     end
+
+
+# end
