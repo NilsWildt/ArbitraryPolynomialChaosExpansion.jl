@@ -298,7 +298,7 @@ end
 
 
 @testitem "aPCE_OrthonormalBasis" begin
-    @test aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true)) ≈  [1.0 0.0; -0.5 1.5]
+    @test aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true)) ≈ [1.0 0.0; -0.5 1.5]
     @test aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false)) ≈ [1.0 0.0; -0.5 1.5]
     @inferred aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false))
     @inferred aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true))
@@ -358,7 +358,7 @@ end
         Vc[degree + 1] = one(T)
 
         try
-            OrthogonalBasis[degree + 1, 1:(degree + 1)] .= Hankel\Vc
+            OrthogonalBasis[degree + 1, 1:(degree + 1)] .= Hankel \ Vc
         catch
             OrthogonalBasis[degree + 1, 1:(degree + 1)] .= pinv(Hankel) * Vc
             @warn "Used pinv for polynomial basis of degree $degree"
@@ -392,7 +392,7 @@ end
         # In MATLAB: k goes from 1 to length(Polynomial)
         # So we use k-1 for the power to match MATLAB's behavior
         # For centered case, we need to divide by MeanOfData^(k-1) to match MATLAB
-        OrthonormalBasis[:, k] = OrthonormalBasis[:, k] ./ (MeanOfData^(k-1))
+        OrthonormalBasis[:, k] = OrthonormalBasis[:, k] ./ (MeanOfData^(k - 1))
     end
 
     return OrthonormalBasis
@@ -441,7 +441,7 @@ end
         Vc[degree + 1] = one(T)
 
         try
-            OrthogonalBasis[degree + 1, 1:(degree + 1)] .= Hankel\Vc
+            OrthogonalBasis[degree + 1, 1:(degree + 1)] .= Hankel \ Vc
         catch
             OrthogonalBasis[degree + 1, 1:(degree + 1)] .= pinv(Hankel) * Vc
             @warn "Used pinv for polynomial basis of degree $degree"
@@ -807,7 +807,7 @@ end
 
 
 @testitem "aPCE_OrthonormalBasis_test" begin
-    @test aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true)) ≈  [1.0 0.0; -0.5 1.5]
+    @test aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true)) ≈ [1.0 0.0; -0.5 1.5]
     @test aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false)) ≈ [1.0 0.0; -0.5 1.5]
     @inferred aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false))
     @inferred aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true))
@@ -896,7 +896,7 @@ end
 
 
 @testitem "aPCE_OrthonormalBasis1" begin
-    @test APCE.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true)) ≈  [1.0 0.0; -0.5 1.5]
+    @test APCE.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true)) ≈ [1.0 0.0; -0.5 1.5]
     @test APCE.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false)) ≈ [1.0 0.0; -0.5 1.5]
     @inferred APCE.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false))
     @inferred APCE.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true))
