@@ -14,7 +14,7 @@
 # using Polynomials
 # using Tracker
 
-using Mooncake: @from_rrule, DefaultCtx
+# using Mooncake: @from_rrule, DefaultCtx
 
 function ChainRulesCore.frule((_, Δx), ::typeof(reverse_columns!), x)
     Δx_reversed = similar(Δx)
@@ -307,6 +307,97 @@ function ChainRulesCore.rrule(
     # Forward pass
     Psi = aPCE_PsiPolynomialMatrix_zygote(x, MultivariatePolynomialDegrees, OrthonormalBasis)
 
+
+    # Extract dimensions
+    NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
+    NCpoints = size(x, 1)
+    T = eltype(x)
+
+    function aPCE_PsiPolynomialMatrix_pullback(ΔPsi)
+        ΔTrainingInput = zeros(T, size(x))
+
+        # Pre-compute polynomial evaluations to avoid redundant calculations
+        poly_values = Array{T}(undef, NumberOfTerms, InputDimensions, NCpoints)
+
+        # First pass: compute all polynomial evaluations
+        for i in 1:NumberOfTerms
+            for d in 1:InputDimensions
+                degree = MultivariatePolynomialDegrees[i, d] + 1
+                coeffs = @view OrthonormalBasis[degree, 1:degree, d]
+                for j in 1:NCpoints
+                    x_val = x[j, d]
+                    poly_values[i, d, j] = evalpoly_two(x_val, coeffs)
+                end
+            end
+        end
+
+        # Second pass: compute gradients
+        for j in 1:NCpoints
+            for i in 1:NumberOfTerms
+                Δij = ΔPsi[i, j]
+                if Δij == zero(T)
+                    continue
+                end
+
+                for d in 1:InputDimensions
+                    degree = MultivariatePolynomialDegrees[i, d]
+                    if degree == 0
+                        continue  # Derivative of constant is zero
+                    end
+
+                    # Compute derivative for dimension d
+                    derivative_coeffs = zeros(T, degree)
+                    coeffs = @view OrthonormalBasis[degree + 1, 1:(degree + 1), d]
+                    for k in 1:degree
+                        derivative_coeffs[k] = coeffs[k + 1] * k
+                    end
+
+                    x_val = x[j, d]
+                    deriv_value = evalpoly_two(x_val, derivative_coeffs)
+
+                    # Compute product of polynomial values for other dimensions
+                    other_dims_product = one(T)
+                    for other_d in 1:InputDimensions
+                        if other_d != d
+                            other_dims_product *= poly_values[i, other_d, j]
+
+                            # Early termination if product becomes zero
+                            if other_dims_product == zero(T)
+                                break
+                            end
+                        end
+                    end
+
+                    # Update gradient
+                    ΔTrainingInput[j, d] += Δij * deriv_value * other_dims_product
+                end
+            end
+        end
+
+        return (NoTangent(), ΔTrainingInput, NoTangent(), NoTangent())
+    end
+
+
+    return Psi, aPCE_PsiPolynomialMatrix_pullback
+end
+
+
+function ChainRulesCore.rrule(
+        ::typeof(aPCE_PsiPolynomialMatrix),
+        TrainingInput,
+        MultivariatePolynomialDegrees,
+        OrthonormalBasis
+    )
+    # Ensure input is matrix
+    x = ensure_matrix(TrainingInput)
+
+    # Forward pass
+    # @info "DEBUGGING"
+    # @info MultivariatePolynomialDegrees OrthonormalBasis x
+    Psi = aPCE_PsiPolynomialMatrix(x, MultivariatePolynomialDegrees, OrthonormalBasis)
+    # @info "DEBUGGING end "
+
+
     # Extract dimensions
     NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
     NCpoints = size(x, 1)
@@ -380,18 +471,6 @@ function ChainRulesCore.rrule(
 end
 
 
-@from_rrule DefaultCtx Tuple{
-    typeof(compute_Psi_element),
-    Any, Any, AbstractArray, AbstractArray, AbstractArray, Integer,
-}
-
-# aPCE_PsiPolynomialMatrix_zygote rule
-@from_rrule DefaultCtx Tuple{
-    typeof(aPCE_PsiPolynomialMatrix_zygote),
-    AbstractArray, AbstractArray, AbstractArray,
-}
-
-
 ### TensorOperations Tricks!
 
 
@@ -426,91 +505,91 @@ function ChainRulesCore.rrule(::typeof(create_basis), x::AbstractArray{T}, d_exp
 end
 
 # Mooncake.jl version of the rrule for create_basis
-@from_rrule DefaultCtx Tuple{
-    typeof(create_basis),
-    AbstractArray, Integer,
-}
+# @from_rrule DefaultCtx Tuple{
+#     typeof(create_basis),
+#     AbstractArray, Integer,
+# }
 
 # Enzyme rules
-using Enzyme
+# using Enzyme
 
-# Enzyme rule for reverse_columns!
-function Enzyme.autodiff(::Enzyme.ReverseMode, ::typeof(reverse_columns!), x::AbstractArray)
-    x_reversed = similar(x)
-    for row in axes(x, 1)
-        x_reversed[row, :] = reverse(x[row, :])
-    end
-    return x_reversed
-end
+# # Enzyme rule for reverse_columns!
+# function Enzyme.autodiff(::Enzyme.ReverseMode, ::typeof(reverse_columns!), x::AbstractArray)
+#     x_reversed = similar(x)
+#     for row in axes(x, 1)
+#         x_reversed[row, :] = reverse(x[row, :])
+#     end
+#     return x_reversed
+# end
 
-# Enzyme rule for compute_Psi_element
-function Enzyme.autodiff(::Enzyme.ReverseMode, ::typeof(compute_Psi_element), i, j, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, InputDimensions)
-    # Forward computation
-    product = one(eltype(TrainingInput))
-    derivatives = zeros(size(TrainingInput, 2))
+# # Enzyme rule for compute_Psi_element
+# function Enzyme.autodiff(::Enzyme.ReverseMode, ::typeof(compute_Psi_element), i, j, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, InputDimensions)
+#     # Forward computation
+#     product = one(eltype(TrainingInput))
+#     derivatives = zeros(size(TrainingInput, 2))
 
-    for ii in 1:InputDimensions
-        degree = MultivariatePolynomialDegrees[i, ii] + 1
-        coeffs = OrthonormalBasis[degree, 1:degree, ii]
-        x = TrainingInput[j, ii]
-        p_x = evalpoly(x, coeffs)
+#     for ii in 1:InputDimensions
+#         degree = MultivariatePolynomialDegrees[i, ii] + 1
+#         coeffs = OrthonormalBasis[degree, 1:degree, ii]
+#         x = TrainingInput[j, ii]
+#         p_x = evalpoly(x, coeffs)
 
-        # Compute derivative for this dimension
-        other_products = prod(
-            ii == jj ? evalpoly_derivative(x, coeffs) : evalpoly(x, coeffs)
-                for jj in 1:InputDimensions
-        )
-        derivatives[ii] = other_products
+#         # Compute derivative for this dimension
+#         other_products = prod(
+#             ii == jj ? evalpoly_derivative(x, coeffs) : evalpoly(x, coeffs)
+#                 for jj in 1:InputDimensions
+#         )
+#         derivatives[ii] = other_products
 
-        product *= p_x
-    end
+#         product *= p_x
+#     end
 
-    return product, derivatives
-end
+#     return product, derivatives
+# end
 
-# Enzyme rule for aPCE_PsiPolynomialMatrix_zygote
-function Enzyme.autodiff(::Enzyme.ReverseMode, ::typeof(aPCE_PsiPolynomialMatrix_zygote), TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis)
-    # Ensure input is matrix
-    x = ensure_matrix(TrainingInput)
+# # Enzyme rule for aPCE_PsiPolynomialMatrix_zygote
+# function Enzyme.autodiff(::Enzyme.ReverseMode, ::typeof(aPCE_PsiPolynomialMatrix_zygote), TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis)
+#     # Ensure input is matrix
+#     x = ensure_matrix(TrainingInput)
 
-    # Forward pass
-    Psi = aPCE_PsiPolynomialMatrix_zygote(x, MultivariatePolynomialDegrees, OrthonormalBasis)
+#     # Forward pass
+#     Psi = aPCE_PsiPolynomialMatrix_zygote(x, MultivariatePolynomialDegrees, OrthonormalBasis)
 
-    # Extract dimensions
-    NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
-    NCpoints = size(x, 1)
-    T = eltype(x)
+#     # Extract dimensions
+#     NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
+#     NCpoints = size(x, 1)
+#     T = eltype(x)
 
-    # Pre-compute polynomial evaluations to avoid redundant calculations
-    poly_values = Array{T}(undef, NumberOfTerms, InputDimensions, NCpoints)
+#     # Pre-compute polynomial evaluations to avoid redundant calculations
+#     poly_values = Array{T}(undef, NumberOfTerms, InputDimensions, NCpoints)
 
-    # First pass: compute all polynomial evaluations
-    for i in 1:NumberOfTerms
-        for d in 1:InputDimensions
-            degree = MultivariatePolynomialDegrees[i, d] + 1
-            coeffs = @view OrthonormalBasis[degree, 1:degree, d]
-            for j in 1:NCpoints
-                x_val = x[j, d]
-                poly_values[i, d, j] = evalpoly_two(x_val, coeffs)
-            end
-        end
-    end
+#     # First pass: compute all polynomial evaluations
+#     for i in 1:NumberOfTerms
+#         for d in 1:InputDimensions
+#             degree = MultivariatePolynomialDegrees[i, d] + 1
+#             coeffs = @view OrthonormalBasis[degree, 1:degree, d]
+#             for j in 1:NCpoints
+#                 x_val = x[j, d]
+#                 poly_values[i, d, j] = evalpoly_two(x_val, coeffs)
+#             end
+#         end
+#     end
 
-    return Psi, poly_values
-end
+#     return Psi, poly_values
+# end
 
-# Enzyme rule for create_basis
-function Enzyme.autodiff(::Enzyme.ReverseMode, ::typeof(create_basis), x::AbstractArray{T}, d_expansion::Int; center_data = false) where {T}
-    # Forward pass
-    basis = create_basis(x, d_expansion; center_data = center_data)
+# # Enzyme rule for create_basis
+# function Enzyme.autodiff(::Enzyme.ReverseMode, ::typeof(create_basis), x::AbstractArray{T}, d_expansion::Int; center_data = false) where {T}
+#     # Forward pass
+#     basis = create_basis(x, d_expansion; center_data = center_data)
 
-    # Compute gradient using Enzyme's autodiff
-    function basis_wrapper(x_vec)
-        x_reshaped = reshape(x_vec, size(x))
-        basis = create_basis(x_reshaped, d_expansion; center_data = center_data)
-        return sum(basis)
-    end
+#     # Compute gradient using Enzyme's autodiff
+#     function basis_wrapper(x_vec)
+#         x_reshaped = reshape(x_vec, size(x))
+#         basis = create_basis(x_reshaped, d_expansion; center_data = center_data)
+#         return sum(basis)
+#     end
 
-    # Return both the basis and a function to compute gradients
-    return basis, basis_wrapper
-end
+#     # Return both the basis and a function to compute gradients
+#     return basis, basis_wrapper
+# end

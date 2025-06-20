@@ -95,6 +95,7 @@ export aPCE_OrthonormalBasis
 include("APCEfunctions.jl")
 include("APCEhighlevel.jl")
 include("utils.jl")
+include("APCEderivatives.jl")
 
 # include("TensorOperationsMooncakeExt.jl")
 # using .TensorOperationsMooncakeExt

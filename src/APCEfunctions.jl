@@ -171,18 +171,24 @@ end
 # end
 
 
-function aPCE_PsiPolynomialMatrix_zygote(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis) where {T <: Real}
+# Type-stable version of aPCE_PsiPolynomialMatrix_zygote
+@stable function aPCE_PsiPolynomialMatrix_zygote(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis) where {T <: Real}
     NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
     NCpoints = size(TrainingInput, 1)
 
-    Psi = [
-        compute_Psi_element(i, j, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, InputDimensions)
-            for i in 1:NumberOfTerms, j in 1:NCpoints
-    ]
-    return reshape(Psi, NumberOfTerms, NCpoints)
+    # Pre-allocate with the correct type
+    Psi = zeros(T, NumberOfTerms, NCpoints)
+
+    # Fill the matrix in a type-stable way
+    @inbounds for i in 1:NumberOfTerms
+        for j in 1:NCpoints
+            Psi[i, j] = compute_Psi_element(i, j, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, InputDimensions)
+        end
+    end
+    return Psi
 end
 
-
+# Keep the fallback for non-typed inputs
 function aPCE_PsiPolynomialMatrix_zygote(TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis)
     NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
     NCpoints = size(TrainingInput, 1)
@@ -270,18 +276,18 @@ end
     NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
     NCpoints = size(TrainingInput, 1)
     Psi = ones(T, NumberOfTerms, NCpoints)
-    # OrthonormalBasis = T.(OrthonormalBasis)
     # Function to evaluate polynomials for a given term and input sample
     @inbounds for i in 1:NumberOfTerms  # For each term in the polynomial expansion
-        # product = 1.0  # Initialize the product for this term and sample
         for ii in 1:InputDimensions  # For each dimension of the input
             degree = MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
             coeffs = @views OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
-            p = Polynomials.Polynomial(coeffs)  # Create the polynomial
-            # p = Poly(coeffs)
             x = @views TrainingInput[:, ii]
-            @.. Psi[i, :] *= p(x)  # Evaluate the polynomial at x and multiply
-            # Psi[i,j] *= evalpoly(x, p)
+            # Use type-stable polynomial evaluation instead of Polynomials.Polynomial
+            poly_values = evaluate_polynomial_horner_array(x, coeffs)
+            # Use simple loop instead of @.. for maximum type stability
+            for j in 1:NCpoints
+                Psi[i, j] *= poly_values[j]
+            end
         end
     end
     return Psi
@@ -312,6 +318,27 @@ end
     end # x[:,i]
     return OrthonormalBasis
 end
+
+# @stable function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{S}) where {S,T<:Real}
+#     NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
+#     NCpoints = size(TrainingInput, 1)
+#     Psi = ones(T, NumberOfTerms, NCpoints)
+#     # OrthonormalBasis = T.(OrthonormalBasis)
+#     # Function to evaluate polynomials for a given term and input sample
+#     @inbounds for i ∈ 1:NumberOfTerms  # For each term in the polynomial expansion
+#         # product = 1.0  # Initialize the product for this term and sample
+#         for ii ∈ 1:InputDimensions  # For each dimension of the inputf@
+#             degree = MultivariatePolynomialDegrees[i, ii] + 1  # Degree for this dimension, adjusted for 1-based indexing
+#             coeffs = @views OrthonormalBasis[degree, 1:degree, ii]  # Extract the coefficients for the polynomial
+#             p = Polynomials.Polynomial(coeffs)  # Create the polynomial
+#             # p = Poly(coeffs)
+#             x = @views TrainingInput[:, ii]
+#             @..  Psi[i, :] *= p(x)  # Evaluate the polynomial at x and multiply
+#             # Psi[i,j] *= evalpoly(x, p)
+#         end
+#     end
+#     return Psi
+# end
 
 @stable @inbounds function aPCE_OrthonormalBasis(Data::Array{T}, Degree::S, center_data::Val{true}) where {T <: Real, S <: Integer}
     d = Degree #Degree of polynomial expansion
@@ -361,13 +388,13 @@ end
             OrthogonalBasis[degree + 1, 1:(degree + 1)] .= Hankel \ Vc
         catch
             OrthogonalBasis[degree + 1, 1:(degree + 1)] .= pinv(Hankel) * Vc
-            @warn "Used pinv for polynomial basis of degree $degree"
+            # @warn "Used pinv for polynomial basis of degree $degree"
         end
 
         # Check computational error
         if 100 * abs(sum(abs.(Hankel * OrthogonalBasis[degree + 1, 1:(degree + 1)])) - sum(abs.(Vc))) > 0.5
             deviation = 100 * abs(sum(abs.(Hankel * OrthogonalBasis[degree + 1, 1:(degree + 1)])) - sum(abs.(Vc))) / sum(abs.(Vc))
-            @warn "Computational error of the linear solver is too high: $(round(deviation; digits = 3))% for polynomial basis of degree $degree"
+            # @warn "Computational error of the linear solver is too high: $(round(deviation; digits = 3))% for polynomial basis of degree $degree"
         end
 
         #Normalization of polynomial coefficients using scaled data
@@ -444,13 +471,13 @@ end
             OrthogonalBasis[degree + 1, 1:(degree + 1)] .= Hankel \ Vc
         catch
             OrthogonalBasis[degree + 1, 1:(degree + 1)] .= pinv(Hankel) * Vc
-            @warn "Used pinv for polynomial basis of degree $degree"
+            # @warn "Used pinv for polynomial basis of degree $degree"
         end
 
         # Check computational error
         if 100 * abs(sum(abs.(Hankel * OrthogonalBasis[degree + 1, 1:(degree + 1)])) - sum(abs.(Vc))) > 0.5
             deviation = 100 * abs(sum(abs.(Hankel * OrthogonalBasis[degree + 1, 1:(degree + 1)])) - sum(abs.(Vc))) / sum(abs.(Vc))
-            @warn "Computational error of the linear solver is too high: $(round(deviation; digits = 3))% for polynomial basis of degree $degree"
+            # @warn "Computational error of the linear solver is too high: $(round(deviation; digits = 3))% for polynomial basis of degree $degree"
         end
 
         #Normalization of polynomial coefficients using original data
@@ -582,8 +609,8 @@ function create_basis(x, degree; center_data = true)
     return create_basis(x, degree, Val(true); center_data = center_data)
 end
 
-# Univartiate BASIS creation
-function create_basis(x, degree, is_orthonormal::Val{true}; center_data = true)
+
+@stable function create_basis(x, degree, is_orthonormal::Val{true}; center_data = true)
     input_dimensions = size(x, 2)
     OrthonormalBasis = Array{eltype(x), 3}(undef, degree + 1, degree + 1, input_dimensions)
     for i in 1:input_dimensions
@@ -592,7 +619,8 @@ function create_basis(x, degree, is_orthonormal::Val{true}; center_data = true)
     return OrthonormalBasis
 end
 
-function create_basis(x, degree, is_orthonormal::Val{false}; center_data = true)
+
+@stable function create_basis(x, degree, is_orthonormal::Val{false}; center_data = true)
     input_dimensions = size(x, 2)
     OrthonormalBasis = Array{eltype(x), 3}(undef, degree + 1, degree + 1, input_dimensions)
     for i in 1:input_dimensions
@@ -1030,89 +1058,169 @@ end
     @test APCE.derivative_coeffs([1.0, -1.0, 1.0, -1.0]) == [-1.0, 2.0, -3.0]  # Derivative of 1 - x + x^2 - x^3
 end
 
+@testitem "create_basis_orthonormal_true_test" begin
+    # Test basic functionality
+    x = rand(100, 2)
+    degree = 3
+    basis = APCE.create_basis(x, degree, Val(true))
 
-## GPU Kernel for outer_product!!
-# @kernel function outer_product_kernel!(output, Ψ, expansion_coefficients)
-#     i, j = @index(Global, NTuple)
-#         for k in 1:size(output, 1)
-#             @inbounds output[k, j] += Ψ[i, k] * expansion_coefficients[i, j]
-#         end
-# end
+    @test size(basis) == (degree + 1, degree + 1, size(x, 2))
+    @test eltype(basis) == eltype(x)
+    @test all(!isnan, basis)
+    @test all(!isinf, basis)
 
-# # Creating a wrapper kernel for launching with error checks
-# function outer_product!(output, Ψ, expansion_coefficients)
-#     backend = KernelAbstractions.get_backend(Ψ)
-#     kernel! = outer_product_kernel!(backend)
-#     kernel!(output, Ψ, expansion_coefficients, ndrange=size(expansion_coefficients))
-# end
+    # Test type stability
+    @inferred APCE.create_basis(x, degree, Val(true))
 
-# @inline function outer_product_kernel(Ψ::AbstractArray{T},α::AbstractArray{S}) where {T<:Real, S<:Real}
-#     (i_dim, k_dim) = size(Ψ)
-#     (i_dim_exp, j_dim) = size(α)
-#     backend =get_backend(Ψ) # or KernelAbstractions.CUDA() for GPU
-#     KernelAbstractions.synchronize(backend)
-#     out = KernelAbstractions.zeros(backend, S,k_dim,j_dim)
-#     outer_product!(out, Ψ, α)
-#     return out
-# end
+    # Test with different input types
+    x_float32 = rand(Float32, 50, 3)
+    basis_float32 = APCE.create_basis(x_float32, 2, Val(true))
+    @test eltype(basis_float32) == Float32
+    @test size(basis_float32) == (3, 3, 3)
 
+    # Test edge cases
+    x_single = rand(10, 1)
+    basis_single = APCE.create_basis(x_single, 0, Val(true))
+    @test size(basis_single) == (1, 1, 1)
+    @test basis_single[1, 1, 1] ≈ 1.0 atol = 1.0e-10
+end
 
-# function ChainRulesCore.rrule(::typeof(outer_product_kernel), Ψ, α::AbstractArray{T}) where {T<:Real}
-#     Ψ = Array(Ψ)
-#     α = Array( α)
-#     result = my_outer_product(Ψ, α)
-#     function pullback(Δresult)
-#         (i_dim, k_dim) = size(Ψ)
-#         (_, j_dim) = size(α)
-#         ΔΨ = zeros(T,i_dim,k_dim)
-#         Δα = zeros(T,i_dim,j_dim)
-#         @inbounds for i in 1:i_dim
-#             for k in 1:k_dim
-#                  @simd for j in 1:j_dim
-#                     ΔΨ[i, k] += Δresult[k, j] * α[i, j]
-#                     Δα[i, j] += Δresult[k, j] * Ψ[i, k]
-#                 end
-#             end
-#         end
-#         return (NoTangent(), ΔΨ, Δα)
-#     end
-#     return result, pullback
-#     end
+@testitem "create_basis_orthonormal_false_test" begin
+    # Test basic functionality
+    x = rand(100, 2)
+    degree = 3
+    basis = APCE.create_basis(x, degree, Val(false))
 
-# @inline function outer_product_derivatives!(ΔΨ,Δα, Ψ, α,Δresult )
-#     backend = KernelAbstractions.get_backend(Ψ)
-# 	KernelAbstractions.synchronize(backend)
+    @test size(basis) == (degree + 1, degree + 1, size(x, 2))
+    @test eltype(basis) == eltype(x)
+    @test all(!isnan, basis)
+    @test all(!isinf, basis)
 
-#     kernel! = outer_product_kernel_derivatives!(backend)
-# 	KernelAbstractions.synchronize(backend)
+    # Test type stability
+    @inferred APCE.create_basis(x, degree, Val(false))
 
-#     kernel!(ΔΨ, Δα, Ψ, α,cu(Δresult),ndrange=size(α))
-# end
+    # Test that it produces the expected full basis structure
+    # For degree 3, each dimension should have a (4,4) matrix with upper triangular structure
+    for dim in 1:size(x, 2)
+        basis_dim = basis[:, :, dim]
+        # Check upper triangular structure (1s on and above diagonal, 0s below)
+        for i in 1:(degree + 1)
+            for j in 1:(degree + 1)
+                if i >= j
+                    @test basis_dim[i, j] == 1.0
+                else
+                    @test basis_dim[i, j] == 0.0
+                end
+            end
+        end
+    end
 
+    # Test with different input types
+    x_float32 = rand(Float32, 50, 3)
+    basis_float32 = APCE.create_basis(x_float32, 2, Val(false))
+    @test eltype(basis_float32) == Float32
+    @test size(basis_float32) == (3, 3, 3)
 
-# 	@kernel function outer_product_kernel_derivatives!(ΔΨ,Δα, Ψ, α,Δresult)
-#     i, j = @index(Global, NTuple)
-#         for k in 1:size(ΔΨ, 1)
-# 			   ΔΨ[i, k] += Δresult[k, j] * α[i, j]
-#                Δα[i, j] += Δresult[k, j] * Ψ[i, k]
-#        end
-# 	end
+    # Test edge cases
+    x_single = rand(10, 1)
+    basis_single = APCE.create_basis(x_single, 0, Val(false))
+    @test size(basis_single) == (1, 1, 1)
+    @test basis_single[1, 1, 1] == 1.0
 
-# function ChainRulesCore.rrule(::typeof(outer_product_kernel), Ψ, α)
-# 	backend = get_backend(Ψ)
-#     result = outer_product_kernel(Ψ, α)
-#     function pullback(Δresult)
-# 		Δresult = cu(Δresult)
-#         (i_dim, k_dim) = size(Ψ)
-#         (_, j_dim) = size(α)
-# 		ΔΨ = CUDA.zeros(i_dim,k_dim)
-# 		Δα = CUDA.zeros(i_dim,j_dim)
-#         outer_product_derivatives!(ΔΨ,Δα, Ψ, α,Δresult )
-#     	# KernelAbstractions.synchronize(backend)
-#         return (NoTangent(), ΔΨ, Δα)
-# 	end
-# 	return result, pullback
-#     end
+    # Test degree 1 case
+    basis_degree1 = APCE.create_basis(x_single, 1, Val(false))
+    @test size(basis_degree1) == (2, 2, 1)
+    @test basis_degree1[:, :, 1] == [1.0 0.0; 1.0 1.0]
+end
 
+@testitem "create_basis_comparison_test" begin
+    # Test that orthonormal and non-orthonormal bases have same structure but different values
+    x = rand(50, 2)
+    degree = 2
 
-# end
+    basis_ortho = APCE.create_basis(x, degree, Val(true))
+    basis_full = APCE.create_basis(x, degree, Val(false))
+
+    @test size(basis_ortho) == size(basis_full)
+    @test eltype(basis_ortho) == eltype(basis_full)
+
+    # Orthonormal basis should have different values than full basis
+    @test !isapprox(basis_ortho, basis_full, atol = 1.0e-10)
+
+    # Full basis should have the expected structure (upper triangular with 1s)
+    for dim in 1:size(x, 2)
+        basis_dim = basis_full[:, :, dim]
+        for i in 1:(degree + 1)
+            for j in 1:(degree + 1)
+                if i >= j
+                    @test basis_dim[i, j] == 1.0
+                else
+                    @test basis_dim[i, j] == 0.0
+                end
+            end
+        end
+    end
+
+    # Orthonormal basis should not have this simple structure
+    for dim in 1:size(x, 2)
+        basis_dim = basis_ortho[:, :, dim]
+        # Check that it's not the identity matrix (which would be the case for full basis)
+        @test !all(basis_dim[i, j] == (i >= j ? 1.0 : 0.0) for i in 1:(degree + 1), j in 1:(degree + 1))
+    end
+end
+
+@testitem "create_basis_functional_test" begin
+    # Test that the bases can be used in polynomial evaluation
+    x = rand(20, 2)
+    degree = 2
+
+    # Create both types of bases
+    basis_ortho = APCE.create_basis(x, degree, Val(true))
+    basis_full = APCE.create_basis(x, degree, Val(false))
+
+    # Test that we can extract coefficients from both bases
+    for dim in 1:size(x, 2)
+        for d in 1:(degree + 1)
+            coeffs_ortho = APCE.coeffs_from_basis(basis_ortho, d, dim)
+            coeffs_full = APCE.coeffs_from_basis(basis_full, d, dim)
+
+            @test length(coeffs_ortho) == d
+            @test length(coeffs_full) == d
+            @test all(!isnan, coeffs_ortho)
+            @test all(!isnan, coeffs_full)
+        end
+    end
+
+    # Test that polynomial evaluation works with both bases
+    test_point = rand(2)
+    multivar_degrees = [0 0; 0 1; 1 0; 0 2; 1 1; 2 0]  # 2D, degree 2
+
+    # This should work without errors for both basis types
+    @test_nowarn APCE.aPCE_PsiPolynomialMatrix_zygote(test_point', multivar_degrees, basis_ortho)
+    @test_nowarn APCE.aPCE_PsiPolynomialMatrix_zygote(test_point', multivar_degrees, basis_full)
+end
+
+@testitem "create_basis_default_test" begin
+    # Test the default create_basis function (should default to orthonormal)
+    x = rand(30, 2)
+    degree = 2
+
+    # Test default behavior
+    basis_default = APCE.create_basis(x, degree)
+    basis_ortho = APCE.create_basis(x, degree, Val(true))
+
+    # Default should be the same as orthonormal
+    @test isapprox(basis_default, basis_ortho, atol = 1.0e-10)
+
+    # Test with center_data parameter
+    basis_default_centered = APCE.create_basis(x, degree, center_data = true)
+    basis_default_uncentered = APCE.create_basis(x, degree, center_data = false)
+
+    # These should be different when center_data differs
+    @test !isapprox(basis_default_centered, basis_default_uncentered, atol = 1.0e-10)
+
+    # Test type stability
+    @inferred APCE.create_basis(x, degree)
+    @inferred APCE.create_basis(x, degree, center_data = true)
+    @inferred APCE.create_basis(x, degree, center_data = false)
+end
