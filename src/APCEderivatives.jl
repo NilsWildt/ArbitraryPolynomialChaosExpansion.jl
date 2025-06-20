@@ -477,38 +477,65 @@ end
 using ChainRulesCore
 using ForwardDiff
 
-function ChainRulesCore.rrule(::typeof(create_basis), x::AbstractArray{T}, d_expansion::Int; center_data = false) where {T}
-    # Forward pass
-    basis = create_basis(x, d_expansion; center_data = center_data)
 
-    # Define the pullback
+
+function ChainRulesCore.rrule(::typeof(create_basis), x::AbstractArray, d_expansion::Int, is_orthonormal::Val{B}; center_data=true) where {B}
+    basis = create_basis(x, d_expansion, is_orthonormal; center_data=center_data)
     function create_basis_pullback(Δbasis)
-        # Use ForwardDiff to compute the gradient
         function basis_wrapper(x_vec)
             x_reshaped = reshape(x_vec, size(x))
-            basis = create_basis(x_reshaped, d_expansion; center_data = center_data)
-            # Return a scalar value for gradient computation
-            return sum(basis .* Δbasis)
+            basis_val = create_basis(x_reshaped, d_expansion, is_orthonormal; center_data=center_data)
+            return sum(basis_val .* unthunk(Δbasis))
         end
-
-        # Compute gradient using ForwardDiff
         grad = ForwardDiff.gradient(basis_wrapper, vec(x))
-
+        # grad = Enzyme.gradient(Reverse, basis_wrapper, vec(x))
         # Reshape gradient to match input shape
         grad_reshaped = reshape(grad, size(x))
-
-        # Return the gradient with respect to x
-        return (NoTangent(), grad_reshaped, NoTangent())
+        return (NoTangent(), grad_reshaped, NoTangent(), NoTangent())
     end
-
     return basis, create_basis_pullback
 end
 
+
+Enzyme.@import_rrule(typeof(create_basis), AbstractArray, Integer, Val)
+
+ReverseDiff.@grad_from_chainrules create_basis(
+    x::ReverseDiff.TrackedArray, d::Integer, is_orthonormal::Val
+);
+
+
+# function ChainRulesCore.rrule(::typeof(create_basis), x::AbstractArray{T}, d_expansion::Int; center_data = false) where {T}
+#     # Forward pass
+#     basis = create_basis(x, d_expansion; center_data = center_data)
+
+#     # Define the pullback
+#     function create_basis_pullback(Δbasis)
+#         # Use ForwardDiff to compute the gradient
+#         function basis_wrapper(x_vec)
+#             x_reshaped = reshape(x_vec, size(x))
+#             basis = create_basis(x_reshaped, d_expansion; center_data = center_data)
+#             # Return a scalar value for gradient computation
+#             return sum(basis .* Δbasis)
+#         end
+
+#         # Compute gradient using ForwardDiff
+#         grad = ForwardDiff.gradient(basis_wrapper, vec(x))
+
+#         # Reshape gradient to match input shape
+#         grad_reshaped = reshape(grad, size(x))
+
+#         # Return the gradient with respect to x
+#         return (NoTangent(), grad_reshaped, NoTangent())
+#     end
+
+#     return basis, create_basis_pullback
+# end
+
 # Mooncake.jl version of the rrule for create_basis
-# @from_rrule DefaultCtx Tuple{
-#     typeof(create_basis),
-#     AbstractArray, Integer,
-# }
+@from_rrule DefaultCtx Tuple{
+    typeof(create_basis),
+    AbstractArray, Integer,
+}
 
 # Enzyme rules
 # using Enzyme
@@ -593,3 +620,107 @@ end
 #     # Return both the basis and a function to compute gradients
 #     return basis, basis_wrapper
 # end
+
+@testitem "create_basis differentiation" begin
+    using DifferentiationInterface
+    using DifferentiationInterfaceTest
+    using Test
+    using StableRNGs
+    using LinearAlgebra
+    using ForwardDiff
+    using Zygote
+    using Mooncake
+    using Enzyme
+
+    N = 100
+    d_in = 1
+    xs = rand(StableRNG(1), N, d_in)
+    x = xs .^ 3 .+ rand(StableRNG(123), size(xs))
+    d_out = 2
+
+    f_true_centered(x_in) = sum(create_basis(x_in, d_out, Val(true); center_data = true))
+    f_true(x_in) = sum(create_basis(x_in, d_out, Val(true); center_data = false))
+    f_false(x_in) = sum(create_basis(x_in, d_out, Val(false)))
+
+    # Reference gradients using ForwardDiff
+    ∇f_true = x -> ForwardDiff.gradient(f_true, x)
+    ∇f_true_centered = x -> ForwardDiff.gradient(f_true_centered, x)
+    ∇f_false = x -> ForwardDiff.gradient(f_false, x)
+
+    # Define backends (only the ones you want to test)
+    backends = [AutoZygote(), AutoForwardDiff(), AutoMooncake(;config=nothing), AutoEnzyme()]
+
+    # Define scenarios for create_basis
+    scenarios_create_basis = [
+        Scenario{:gradient, :out}(f_true, x; res1=∇f_true(x)),
+        Scenario{:gradient, :out}(f_false, x; res1=∇f_false(x)),
+        Scenario{:gradient, :out}(f_true_centered, x; res1=∇f_true_centered(x))
+    ]
+
+    # Test create_basis differentiation
+    test_differentiation(
+        backends,
+        scenarios_create_basis;
+        logging = false,
+        allocations = :none,
+        benchmark = :none,
+        correctness = true,
+        type_stability = :none,
+        detailed = true,
+        atol=1e-3,
+        rtol=1e-3,
+        count_calls=true,
+        scenario_intact=true
+    )
+end
+
+@testitem "aPCE_OrthonormalBasis differentiation" begin
+    using DifferentiationInterface
+    using DifferentiationInterfaceTest
+    using Test
+    using StableRNGs
+    using LinearAlgebra
+    using ForwardDiff
+    using Zygote
+    using Mooncake
+    using Enzyme
+
+    N = 100
+    d_in = 1
+    xs = rand(StableRNG(1), N, d_in)
+    x = xs .^ 3 .+ rand(StableRNG(123), size(xs))
+    degree = 3
+
+    # Test function that uses aPCE_OrthonormalBasis
+    f_orthonormal(x_in) = sum(aPCE_OrthonormalBasis(x_in, degree, Val(true)))
+    f_orthonormal_no_center(x_in) = sum(aPCE_OrthonormalBasis(x_in, degree, Val(false)))
+
+    # Reference gradients using ForwardDiff
+    ∇f_orthonormal = x -> ForwardDiff.gradient(f_orthonormal, x)
+    ∇f_orthonormal_no_center = x -> ForwardDiff.gradient(f_orthonormal_no_center, x)
+
+    # Define backends (only the ones you want to test)
+    backends = [AutoZygote(), AutoForwardDiff(), AutoMooncake(;config=nothing), AutoEnzyme()]
+
+    # Define scenarios for aPCE_OrthonormalBasis
+    scenarios_orthonormal = [
+        Scenario{:gradient, :out}(f_orthonormal, x; res1=∇f_orthonormal(x)),
+        Scenario{:gradient, :out}(f_orthonormal_no_center, x; res1=∇f_orthonormal_no_center(x))
+    ]
+
+    # Test aPCE_OrthonormalBasis differentiation
+    test_differentiation(
+        backends,
+        scenarios_orthonormal;
+        logging = false,
+        allocations = :none,
+        benchmark = :none,
+        correctness = true,
+        type_stability = :none,
+        detailed = true,
+        atol=1e-3,
+        rtol=1e-3,
+        count_calls=true,
+        scenario_intact=true
+    )
+end

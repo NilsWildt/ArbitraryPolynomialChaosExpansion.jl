@@ -293,14 +293,17 @@ end
     return Psi
 end
 
+
 @stable @inline function compute_moments!(m::AbstractArray{T}, Data::AbstractArray{S}, NumberOfDataPoints::Integer, dd::Integer) where {T <: Real, S <: Real}
     current_power = Vector{T}(undef, length(Data))  # Pre-allocate with correct type
     fill!(current_power, one(T))  # Initialize with ones of correct type
-    @inbounds for l in 0:(2 * dd + 1)
+    for l in 0:(2 * dd + 1)
         m[l + 1] = sum(current_power) / NumberOfDataPoints
         current_power .*= Data  # Increment the power of Data
     end
+    return nothing
 end
+
 
 
 @testitem "aPCE_OrthonormalBasis" begin
@@ -340,7 +343,171 @@ end
 #     return Psi
 # end
 
-@stable @inbounds function aPCE_OrthonormalBasis(Data::Array{T}, Degree::S, center_data::Val{true}) where {T <: Real, S <: Integer}
+# @stable @inbounds function aPCE_OrthonormalBasis(Data::Array{T}, Degree::S, center_data::Val{true}) where {T <: Real, S <: Integer}
+#     d = Degree #Degree of polynomial expansion
+#     dd = d #Degree of polynomial for roots definition
+#     NumberOfDataPoints = length(Data)
+#     MeanOfData = mean(Data)
+#     Data_scaled = Data ./ MeanOfData  # scale data by division (not subtraction)
+
+#     # Compute moments using scaled data
+#     m = zeros(T, 2 * dd + 2)
+#     for i in 0:(2 * dd + 1)
+#         m[i + 1] = sum(Data_scaled .^ i) / NumberOfDataPoints
+#     end
+
+#     OrthonormalBasis = zeros(T, dd + 1, dd + 1)
+#     OrthogonalBasis = zeros(T, dd + 1, dd + 1)
+
+#     for degree in 0:dd
+#         Hankel = @views OrthogonalBasis[1:(degree + 1), 1:(degree + 1)]
+#         Vc = zeros(T, degree + 1)
+
+#         for i in 0:(degree - 1)
+#             for j in 0:degree
+#                 Hankel[i + 1, j + 1] = m[i + j + 1]
+#             end
+#             max_val = maximum(abs.(@views Hankel[i + 1, :]))
+#             if max_val > zero(T)
+#                 Hankel[i + 1, :] = @views Hankel[i + 1, :] / max_val
+#             end
+#         end
+#         for j in 0:(degree - 1)
+#             Hankel[degree + 1, j + 1] = zero(T)
+#         end
+#         Hankel[degree + 1, degree + 1] = one(T)
+#         max_val = maximum(abs.(@views Hankel[degree + 1, :]))
+#         if max_val > zero(T)
+#             Hankel[degree + 1, :] = @views Hankel[degree + 1, :] / max_val
+#         end
+
+#         # Loop for Vc
+#         for i in 0:(degree - 1)
+#             Vc[i + 1] = zero(T)
+#         end
+#         Vc[degree + 1] = one(T)
+
+#         try
+#             OrthogonalBasis[degree + 1, 1:(degree + 1)] .= Hankel \ Vc
+#         catch
+#             OrthogonalBasis[degree + 1, 1:(degree + 1)] .= pinv(Hankel) * Vc
+#             # @warn "Used pinv for polynomial basis of degree $degree"
+#         end
+
+#         # Check computational error
+#         if 100 * abs(sum(abs.(Hankel * OrthogonalBasis[degree + 1, 1:(degree + 1)])) - sum(abs.(Vc))) > 0.5
+#             deviation = 100 * abs(sum(abs.(Hankel * OrthogonalBasis[degree + 1, 1:(degree + 1)])) - sum(abs.(Vc))) / sum(abs.(Vc))
+#             # @warn "Computational error of the linear solver is too high: $(round(deviation; digits = 3))% for polynomial basis of degree $degree"
+#         end
+
+#         #Normalization of polynomial coefficients using scaled data
+#         P_norm = zero(T)
+#         for i in 1:NumberOfDataPoints
+#             Poly = zero(T)
+#             for k in 0:degree
+#                 Poly += @views OrthogonalBasis[degree + 1, k + 1] * Data_scaled[i]^k
+#             end
+#             P_norm += Poly^2 / NumberOfDataPoints
+#         end
+#         for k in 0:degree
+#             OrthonormalBasis[degree + 1, k + 1] = @views OrthogonalBasis[degree + 1, k + 1] / sqrt(P_norm)
+#         end
+#     end
+
+#     # Backward transformation to data space (matching MATLAB implementation)
+#     # First scale data back
+#     Data_scaled .*= MeanOfData
+#     # Then transform basis column-wise like in MATLAB
+#     for k in 1:lastindex(OrthonormalBasis, 2)
+#         # In MATLAB: k goes from 1 to length(Polynomial)
+#         # So we use k-1 for the power to match MATLAB's behavior
+#         # For centered case, we need to divide by MeanOfData^(k-1) to match MATLAB
+#         OrthonormalBasis[:, k] = OrthonormalBasis[:, k] ./ (MeanOfData^(k - 1))
+#     end
+
+#     return OrthonormalBasis
+# end
+
+# @stable @inbounds function aPCE_OrthonormalBasis(Data::Array{T}, Degree::S, center_data::Val{false}) where {T <: Real, S <: Integer}
+#     d = Degree #Degree of polynomial expansion
+#     dd = d #Degree of polynomial for roots definition
+#     NumberOfDataPoints = length(Data)
+
+#     # Compute raw moments exactly as in MATLAB
+#     m = zeros(T, 2 * dd + 2)
+#     for i in 0:(2 * dd + 1)
+#         m[i + 1] = sum(Data .^ i) / NumberOfDataPoints
+#     end
+
+#     OrthonormalBasis = zeros(T, dd + 1, dd + 1)
+#     OrthogonalBasis = zeros(T, dd + 1, dd + 1)
+
+#     for degree in 0:dd
+#         Hankel = @views OrthogonalBasis[1:(degree + 1), 1:(degree + 1)]
+#         Vc = zeros(T, degree + 1)
+
+#         for i in 0:(degree - 1)
+#             for j in 0:degree
+#                 Hankel[i + 1, j + 1] = m[i + j + 1]
+#             end
+#             max_val = maximum(abs.(@views Hankel[i + 1, :]))
+#             if max_val > zero(T)
+#                 Hankel[i + 1, :] = @views Hankel[i + 1, :] / max_val
+#             end
+#         end
+#         for j in 0:(degree - 1)
+#             Hankel[degree + 1, j + 1] = zero(T)
+#         end
+#         Hankel[degree + 1, degree + 1] = one(T)
+#         max_val = maximum(abs.(@views Hankel[degree + 1, :]))
+#         if max_val > zero(T)
+#             Hankel[degree + 1, :] = @views Hankel[degree + 1, :] / max_val
+#         end
+
+#         # Loop for Vc
+#         for i in 0:(degree - 1)
+#             Vc[i + 1] = zero(T)
+#         end
+#         Vc[degree + 1] = one(T)
+
+#         try
+#             OrthogonalBasis[degree + 1, 1:(degree + 1)] .= Hankel \ Vc
+#         catch
+#             OrthogonalBasis[degree + 1, 1:(degree + 1)] .= pinv(Hankel) * Vc
+#             # @warn "Used pinv for polynomial basis of degree $degree"
+#         end
+
+#         # Check computational error
+#         if 100 * abs(sum(abs.(Hankel * OrthogonalBasis[degree + 1, 1:(degree + 1)])) - sum(abs.(Vc))) > 0.5
+#             deviation = 100 * abs(sum(abs.(Hankel * OrthogonalBasis[degree + 1, 1:(degree + 1)])) - sum(abs.(Vc))) / sum(abs.(Vc))
+#             # @warn "Computational error of the linear solver is too high: $(round(deviation; digits = 3))% for polynomial basis of degree $degree"
+#         end
+
+#         #Normalization of polynomial coefficients using original data
+#         P_norm = zero(T)
+#         for i in 1:NumberOfDataPoints
+#             Poly = zero(T)
+#             for k in 0:degree
+#                 Poly += @views OrthogonalBasis[degree + 1, k + 1] * Data[i]^k
+#             end
+#             P_norm += Poly^2 / NumberOfDataPoints
+#         end
+#         for k in 0:degree
+#             OrthonormalBasis[degree + 1, k + 1] = @views OrthogonalBasis[degree + 1, k + 1] / sqrt(P_norm)
+#         end
+#     end
+
+#     return OrthonormalBasis
+# end
+
+# @stable @inbounds function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::Val{true}) where {T <: Real, S <: Integer}
+#     return aPCE_OrthonormalBasis(Array(Data), Degree, center_data)
+# end
+
+# @stable @inbounds function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::Val{false}) where {T <: Real, S <: Integer}
+#     return aPCE_OrthonormalBasis(Array(Data), Degree, center_data)
+# end
+@stable @inbounds function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::Val{true}) where {T <: Real, S <: Integer}
     d = Degree #Degree of polynomial expansion
     dd = d #Degree of polynomial for roots definition
     NumberOfDataPoints = length(Data)
@@ -387,8 +554,21 @@ end
         try
             OrthogonalBasis[degree + 1, 1:(degree + 1)] .= Hankel \ Vc
         catch
-            OrthogonalBasis[degree + 1, 1:(degree + 1)] .= pinv(Hankel) * Vc
-            # @warn "Used pinv for polynomial basis of degree $degree"
+            @debug "Linear solve failed for polynomial basis of degree $degree. Trying pseudo-inverse."
+            local basis_row
+            try
+                basis_row = pinv(Hankel) * Vc
+            catch
+                basis_row = nothing
+            end
+
+            if basis_row === nothing || any(!isfinite, basis_row)
+                @debug "Pseudo-inverse failed or resulted in non-finite values for degree $degree. Falling back to standard monomial basis."
+                fill!(@view(OrthogonalBasis[degree + 1, 1:degree]), zero(T))
+                OrthogonalBasis[degree + 1, degree + 1] = one(T)
+            else
+                OrthogonalBasis[degree + 1, 1:(degree + 1)] .= basis_row
+            end
         end
 
         # Check computational error
@@ -413,19 +593,16 @@ end
 
     # Backward transformation to data space (matching MATLAB implementation)
     # First scale data back
-    Data_scaled .*= MeanOfData
     # Then transform basis column-wise like in MATLAB
     for k in 1:lastindex(OrthonormalBasis, 2)
-        # In MATLAB: k goes from 1 to length(Polynomial)
-        # So we use k-1 for the power to match MATLAB's behavior
-        # For centered case, we need to divide by MeanOfData^(k-1) to match MATLAB
         OrthonormalBasis[:, k] = OrthonormalBasis[:, k] ./ (MeanOfData^(k - 1))
     end
 
     return OrthonormalBasis
 end
 
-@stable @inbounds function aPCE_OrthonormalBasis(Data::Array{T}, Degree::S, center_data::Val{false}) where {T <: Real, S <: Integer}
+# ╔═╡ 616701d9-192b-45ce-bc61-23d545479a0f
+@stable @inbounds function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::Val{false}) where {T <: Real, S <: Integer}
     d = Degree #Degree of polynomial expansion
     dd = d #Degree of polynomial for roots definition
     NumberOfDataPoints = length(Data)
@@ -497,13 +674,6 @@ end
     return OrthonormalBasis
 end
 
-@stable @inbounds function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::Val{true}) where {T <: Real, S <: Integer}
-    return aPCE_OrthonormalBasis(Array(Data), Degree, center_data)
-end
-
-@stable @inbounds function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::Val{false}) where {T <: Real, S <: Integer}
-    return aPCE_OrthonormalBasis(Array(Data), Degree, center_data)
-end
 
 @stable function aPCE_FullBasis(Data, Degree)
     T = eltype(Data)
@@ -605,12 +775,13 @@ end
     @test typeof(APCE.reverse_columns!(mat1)) == Matrix{Int}
 end
 
+
 function create_basis(x, degree; center_data = true)
     return create_basis(x, degree, Val(true); center_data = center_data)
 end
 
 
-@stable function create_basis(x, degree, is_orthonormal::Val{true}; center_data = true)
+function create_basis(x, degree, is_orthonormal::Val{true}; center_data = true)
     input_dimensions = size(x, 2)
     OrthonormalBasis = Array{eltype(x), 3}(undef, degree + 1, degree + 1, input_dimensions)
     for i in 1:input_dimensions
@@ -620,7 +791,7 @@ end
 end
 
 
-@stable function create_basis(x, degree, is_orthonormal::Val{false}; center_data = true)
+function create_basis(x, degree, is_orthonormal::Val{false}; center_data = true)
     input_dimensions = size(x, 2)
     OrthonormalBasis = Array{eltype(x), 3}(undef, degree + 1, degree + 1, input_dimensions)
     for i in 1:input_dimensions
@@ -642,8 +813,9 @@ function create_basis!(OrthonormalBasis, x, degree; center_data = false)
     end
     # return OrthonormalBasis
     # end
-    return
+    return nothing
 end
+
 
 
 @stable function compose_Ψ(x::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis, degree) where {T}
@@ -1215,6 +1387,8 @@ end
     # Test with center_data parameter
     basis_default_centered = APCE.create_basis(x, degree, center_data = true)
     basis_default_uncentered = APCE.create_basis(x, degree, center_data = false)
+    @info "basis_default_centered" basis_default_centered
+    @info "basis_default_uncentered" basis_default_uncentered
 
     # These should be different when center_data differs
     @test !isapprox(basis_default_centered, basis_default_uncentered, atol = 1.0e-10)

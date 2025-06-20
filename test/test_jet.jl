@@ -272,56 +272,29 @@ begin
         end
         # return OrthonormalBasis
         # end
-        return
+        return nothing
     end
 end
 
-# ╔═╡ bcfefdb0-2f0d-4b0c-992f-6d80b8536b30
-# function ChainRulesCore.rrule(::typeof(create_basis), x::AbstractArray, d_expansion::Int, is_orthonormal::Val{B}; center_data=true) where {B}
-#     basis = create_basis(x, d_expansion, is_orthonormal; center_data=center_data)
-#     function create_basis_pullback(Δbasis)
-#         function basis_wrapper(x_vec)
-#             x_reshaped = reshape(x_vec, size(x))
-#             basis_val = create_basis(x_reshaped, d_expansion, is_orthonormal; center_data=center_data)
-#             return sum(basis_val .* unthunk(Δbasis))
-#         end
-#         grad = ForwardDiff.gradient(basis_wrapper, vec(x))
-#         grad_reshaped = reshape(grad, size(x))
-#         return (NoTangent(), grad_reshaped, NoTangent(), NoTangent())
-#     end
-#     return basis, create_basis_pullback
-# end
-
-function ChainRulesCore.rrule(::typeof(create_basis), x::AbstractArray{T}, d_expansion::Int; center_data=false) where {T}
-    # Forward pass
-    basis = create_basis(x, d_expansion; center_data=center_data)
-    
-    # Define the pullback
+function ChainRulesCore.rrule(::typeof(create_basis), x::AbstractArray, d_expansion::Int, is_orthonormal::Val{B}; center_data=true) where {B}
+    basis = create_basis(x, d_expansion, is_orthonormal; center_data=center_data)
     function create_basis_pullback(Δbasis)
-        # Use ForwardDiff to compute the gradient
         function basis_wrapper(x_vec)
             x_reshaped = reshape(x_vec, size(x))
-            basis = create_basis(x_reshaped, d_expansion; center_data=center_data)
-            # Return a scalar value for gradient computation
-            return sum(basis .* Δbasis)
+            basis_val = create_basis(x_reshaped, d_expansion, is_orthonormal; center_data=center_data)
+            return sum(basis_val .* unthunk(Δbasis))
         end
-        
-        # Compute gradient using ForwardDiff
         grad = ForwardDiff.gradient(basis_wrapper, vec(x))
-        
+        # grad = Enzyme.gradient(Reverse, basis_wrapper, vec(x))
         # Reshape gradient to match input shape
         grad_reshaped = reshape(grad, size(x))
-        
-        # Return the gradient with respect to x
-        return (NoTangent(), grad_reshaped, NoTangent())
+        return (NoTangent(), grad_reshaped, NoTangent(), NoTangent())
     end
-    
     return basis, create_basis_pullback
 end
 
 
-
-# Enzyme.@import_rrule(typeof(create_basis), AbstractArray, Integer, Val)
+Enzyme.@import_rrule(typeof(create_basis), AbstractArray, Integer, Val)
 
 ReverseDiff.@grad_from_chainrules create_basis(
     x::ReverseDiff.TrackedArray, d::Integer, is_orthonormal::Val
