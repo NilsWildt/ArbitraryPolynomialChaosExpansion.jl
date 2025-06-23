@@ -77,7 +77,11 @@ jobs:
         run: julia -e 'using Pkg; Pkg.Registry.update()'
       - uses: julia-actions/julia-runtest@v1
 
-
+  julia-ci:
+    uses: julia-vscode/testitem-workflow/.github/workflows/juliaci.yml@v1
+    permissions: write-all
+    secrets:
+      codecov_token: ${{ secrets.CODECOV_TOKEN }}
   # test:
   #   runs-on: ubuntu-latest
   #   steps:
