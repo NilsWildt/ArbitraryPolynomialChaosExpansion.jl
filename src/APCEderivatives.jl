@@ -674,6 +674,14 @@ ReverseDiff.@grad_from_chainrules create_basis(
 end
 
 @testitem "aPCE_OrthonormalBasis differentiation" begin
+    import Pkg
+    Pkg.add("DifferentiationInterface")
+    Pkg.add("DifferentiationInterfaceTest")
+    Pkg.add("Test")
+    Pkg.add("StableRNGs")
+    Pkg.add("LinearAlgebra")
+    Pkg.add("ForwardDiff")
+    Pkg.add("Zygote")
     using DifferentiationInterface
     using DifferentiationInterfaceTest
     using Test
