@@ -478,23 +478,22 @@ using ChainRulesCore
 using ForwardDiff
 
 
-
-function ChainRulesCore.rrule(::typeof(create_basis), x::AbstractArray, d_expansion::Int, is_orthonormal::Val{B}; center_data=true) where {B}
-    basis = create_basis(x, d_expansion, is_orthonormal; center_data=center_data)
-    function create_basis_pullback(Δbasis)
-        function basis_wrapper(x_vec)
-            x_reshaped = reshape(x_vec, size(x))
-            basis_val = create_basis(x_reshaped, d_expansion, is_orthonormal; center_data=center_data)
-            return sum(basis_val .* unthunk(Δbasis))
-        end
-        grad = ForwardDiff.gradient(basis_wrapper, vec(x))
-        # grad = Enzyme.gradient(Reverse, basis_wrapper, vec(x))
-        # Reshape gradient to match input shape
-        grad_reshaped = reshape(grad, size(x))
-        return (NoTangent(), grad_reshaped, NoTangent(), NoTangent())
-    end
-    return basis, create_basis_pullback
-end
+# function ChainRulesCore.rrule(::typeof(create_basis), x::AbstractArray, d_expansion::Int, is_orthonormal::Val{B}; center_data=true) where {B}
+#     basis = create_basis(x, d_expansion, is_orthonormal; center_data=center_data)
+#     function create_basis_pullback(Δbasis)
+#         function basis_wrapper(x_vec)
+#             x_reshaped = reshape(x_vec, size(x))
+#             basis_val = create_basis(x_reshaped, d_expansion, is_orthonormal; center_data=center_data)
+#             return sum(basis_val .* unthunk(Δbasis))
+#         end
+#         grad = ForwardDiff.gradient(basis_wrapper, vec(x))
+#         # grad = Enzyme.gradient(Reverse, basis_wrapper, vec(x))
+#         # Reshape gradient to match input shape
+#         grad_reshaped = reshape(grad, size(x))
+#         return (NoTangent(), grad_reshaped, NoTangent(), NoTangent())
+#     end
+#     return basis, create_basis_pullback
+# end
 
 
 Enzyme.@import_rrule(typeof(create_basis), AbstractArray, Integer, Val)
@@ -648,13 +647,13 @@ ReverseDiff.@grad_from_chainrules create_basis(
     ∇f_false = x -> ForwardDiff.gradient(f_false, x)
 
     # Define backends (only the ones you want to test)
-    backends = [AutoZygote(), AutoForwardDiff(), AutoMooncake(;config=nothing), AutoEnzyme()]
+    backends = [AutoZygote(), AutoForwardDiff(), AutoMooncake(; config = nothing), AutoEnzyme()]
 
     # Define scenarios for create_basis
     scenarios_create_basis = [
-        Scenario{:gradient, :out}(f_true, x; res1=∇f_true(x)),
-        Scenario{:gradient, :out}(f_false, x; res1=∇f_false(x)),
-        Scenario{:gradient, :out}(f_true_centered, x; res1=∇f_true_centered(x))
+        Scenario{:gradient, :out}(f_true, x; res1 = ∇f_true(x)),
+        Scenario{:gradient, :out}(f_false, x; res1 = ∇f_false(x)),
+        Scenario{:gradient, :out}(f_true_centered, x; res1 = ∇f_true_centered(x)),
     ]
 
     # Test create_basis differentiation
@@ -667,10 +666,10 @@ ReverseDiff.@grad_from_chainrules create_basis(
         correctness = true,
         type_stability = :none,
         detailed = true,
-        atol=1e-3,
-        rtol=1e-3,
-        count_calls=true,
-        scenario_intact=true
+        atol = 1.0e-3,
+        rtol = 1.0e-3,
+        count_calls = true,
+        scenario_intact = true
     )
 end
 
@@ -700,12 +699,12 @@ end
     ∇f_orthonormal_no_center = x -> ForwardDiff.gradient(f_orthonormal_no_center, x)
 
     # Define backends (only the ones you want to test)
-    backends = [AutoZygote(), AutoForwardDiff(), AutoMooncake(;config=nothing), AutoEnzyme()]
+    backends = [AutoZygote(), AutoForwardDiff(), AutoMooncake(; config = nothing), AutoEnzyme()]
 
     # Define scenarios for aPCE_OrthonormalBasis
     scenarios_orthonormal = [
-        Scenario{:gradient, :out}(f_orthonormal, x; res1=∇f_orthonormal(x)),
-        Scenario{:gradient, :out}(f_orthonormal_no_center, x; res1=∇f_orthonormal_no_center(x))
+        Scenario{:gradient, :out}(f_orthonormal, x; res1 = ∇f_orthonormal(x)),
+        Scenario{:gradient, :out}(f_orthonormal_no_center, x; res1 = ∇f_orthonormal_no_center(x)),
     ]
 
     # Test aPCE_OrthonormalBasis differentiation
@@ -718,9 +717,9 @@ end
         correctness = true,
         type_stability = :none,
         detailed = true,
-        atol=1e-3,
-        rtol=1e-3,
-        count_calls=true,
-        scenario_intact=true
+        atol = 1.0e-3,
+        rtol = 1.0e-3,
+        count_calls = true,
+        scenario_intact = true
     )
 end

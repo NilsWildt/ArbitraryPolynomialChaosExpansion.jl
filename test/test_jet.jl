@@ -276,12 +276,12 @@ begin
     end
 end
 
-function ChainRulesCore.rrule(::typeof(create_basis), x::AbstractArray, d_expansion::Int, is_orthonormal::Val{B}; center_data=true) where {B}
-    basis = create_basis(x, d_expansion, is_orthonormal; center_data=center_data)
+function ChainRulesCore.rrule(::typeof(create_basis), x::AbstractArray, d_expansion::Int, is_orthonormal::Val{B}; center_data = true) where {B}
+    basis = create_basis(x, d_expansion, is_orthonormal; center_data = center_data)
     function create_basis_pullback(Δbasis)
         function basis_wrapper(x_vec)
             x_reshaped = reshape(x_vec, size(x))
-            basis_val = create_basis(x_reshaped, d_expansion, is_orthonormal; center_data=center_data)
+            basis_val = create_basis(x_reshaped, d_expansion, is_orthonormal; center_data = center_data)
             return sum(basis_val .* unthunk(Δbasis))
         end
         grad = ForwardDiff.gradient(basis_wrapper, vec(x))
@@ -305,17 +305,17 @@ let
     N = 100
     d_in = 1
     xs = rand(StableRNG(1), N, d_in)
-    x = xs .^ 3 .+   rand(StableRNG(123), size(xs))
+    x = xs .^ 3 .+ rand(StableRNG(123), size(xs))
     d_out = 2
 
     f_true_centered(x_in) = sum(create_basis(x_in, d_out, Val(true); center_data = true))
     f_true(x_in) = sum(create_basis(x_in, d_out, Val(true); center_data = false))
     f_false(x_in) = sum(create_basis(x_in, d_out, Val(false)))
 
-    backends = [AutoZygote(), AutoForwardDiff(), AutoReverseDiff(;compile=true),AutoMooncake(;config=nothing),AutoEnzyme()]
+    backends = [AutoZygote(), AutoForwardDiff(), AutoReverseDiff(; compile = true), AutoMooncake(; config = nothing), AutoEnzyme()]
 
-    ∇f_true = x ->ForwardDiff.gradient(f_true, x)
-    ∇f_true_centered =x -> ForwardDiff.gradient(f_true_centered, x)
+    ∇f_true = x -> ForwardDiff.gradient(f_true, x)
+    ∇f_true_centered = x -> ForwardDiff.gradient(f_true_centered, x)
     ∇f_false = x -> ForwardDiff.gradient(f_false, x)
 
     @info "" (@bs f_true(xs)) f_true(x) ∇f_true(x)
@@ -324,9 +324,8 @@ let
 
 
     scenarios = [
-        Scenario{:gradient, :out}(f_true, x;res1=∇f_true(x)), Scenario{:gradient, :out}(f_false, x;res1=∇f_false(x)),Scenario{:gradient, :out}(f_true_centered, x;res1=∇f_true_centered(x)),
+        Scenario{:gradient, :out}(f_true, x; res1 = ∇f_true(x)), Scenario{:gradient, :out}(f_false, x; res1 = ∇f_false(x)), Scenario{:gradient, :out}(f_true_centered, x; res1 = ∇f_true_centered(x)),
     ]
-
 
 
     println("Testing AD for create_basis")
@@ -339,9 +338,9 @@ let
         correctness = true,
         type_stability = :none,
         detailed = true,
-        atol=1e-3,
-        rtol=1e-3,
-        count_calls=true,
-        scenario_intact=true
+        atol = 1.0e-3,
+        rtol = 1.0e-3,
+        count_calls = true,
+        scenario_intact = true
     )
 end

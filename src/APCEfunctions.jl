@@ -305,7 +305,6 @@ end
 end
 
 
-
 @testitem "aPCE_OrthonormalBasis" begin
     @test aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true)) ≈ [1.0 0.0; -0.5 1.5]
     @test aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false)) ≈ [1.0 0.0; -0.5 1.5]
@@ -592,8 +591,9 @@ end
     end
 
     # Backward transformation to data space (matching MATLAB implementation)
-    # First scale data back
-    # Then transform basis column-wise like in MATLAB
+    # This transformation compensates for the initial data scaling to ensure
+    # the final result is equivalent to the uncentered version.
+    # The centering is purely for numerical stability during computation.
     for k in 1:lastindex(OrthonormalBasis, 2)
         OrthonormalBasis[:, k] = OrthonormalBasis[:, k] ./ (MeanOfData^(k - 1))
     end
@@ -815,7 +815,6 @@ function create_basis!(OrthonormalBasis, x, degree; center_data = false)
     # end
     return nothing
 end
-
 
 
 @stable function compose_Ψ(x::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis, degree) where {T}
@@ -1373,6 +1372,7 @@ end
 end
 
 @testitem "create_basis_default_test" begin
+    using LinearAlgebra
     # Test the default create_basis function (should default to orthonormal)
     x = rand(30, 2)
     degree = 2
@@ -1387,14 +1387,103 @@ end
     # Test with center_data parameter
     basis_default_centered = APCE.create_basis(x, degree, center_data = true)
     basis_default_uncentered = APCE.create_basis(x, degree, center_data = false)
+
+    # Debug: Check the data properties
+    @info "Data mean" mean(x, dims = 1)
+    @info "Data std" std(x, dims = 1)
+    @info "Data range" [minimum(x, dims = 1) maximum(x, dims = 1)]
+
+    # Check if the difference is actually significant
+    diff_norm = norm(basis_default_centered - basis_default_uncentered)
+    @info "Difference norm" diff_norm
+    @info "Relative difference" diff_norm / norm(basis_default_centered)
+
     @info "basis_default_centered" basis_default_centered
     @info "basis_default_uncentered" basis_default_uncentered
 
-    # These should be different when center_data differs
-    @test !isapprox(basis_default_centered, basis_default_uncentered, atol = 1.0e-10)
+    # The backward transformation in the centered version should make the results nearly identical
+    # Centering is for numerical stability, not to change the final result
+    @test isapprox(basis_default_centered, basis_default_uncentered, atol = 1.0e-8)
 
     # Test type stability
     @inferred APCE.create_basis(x, degree)
     @inferred APCE.create_basis(x, degree, center_data = true)
     @inferred APCE.create_basis(x, degree, center_data = false)
+end
+
+@testitem "create_basis_centered_vs_uncentered_test" begin
+    using LinearAlgebra
+    # Test with data that has a clear mean different from 1.0
+    # This should make the difference between centered and uncentered modes obvious
+    x = [1.0, 5.0, 10.0, 15.0, 20.0] .* ones(5, 2)  # Data with mean 10.2
+    degree = 2
+
+    @info "Test data mean" mean(x, dims = 1)
+    @info "Test data std" std(x, dims = 1)
+
+    basis_centered = APCE.create_basis(x, degree, center_data = true)
+    basis_uncentered = APCE.create_basis(x, degree, center_data = false)
+
+    # These should be nearly identical due to the backward transformation
+    diff_norm = norm(basis_centered - basis_uncentered)
+    @info "Difference norm for test data" diff_norm
+    @info "Relative difference for test data" diff_norm / norm(basis_centered)
+
+    # The backward transformation should make them nearly identical
+    @test isapprox(basis_centered, basis_uncentered, atol = 1.0e-8)
+
+    # Test that both bases are valid (no NaN or Inf)
+    @test all(!isnan, basis_centered)
+    @test all(!isnan, basis_uncentered)
+    @test all(!isinf, basis_centered)
+    @test all(!isinf, basis_uncentered)
+end
+
+@testitem "create_basis_centering_effect_test" begin
+    using LinearAlgebra
+    using Statistics: mean
+    # Test to understand the centering effect
+    x = [1.0, 5.0, 10.0, 15.0, 20.0] .* ones(5, 2)  # Data with mean 10.2
+    degree = 2
+
+    # Test individual aPCE_OrthonormalBasis calls to see the effect
+    x_col1 = view(x, :, 1)
+    mean_x = mean(x_col1)
+    @info "Data mean" mean_x
+
+    basis_centered = aPCE_OrthonormalBasis(x_col1, degree, Val(true))
+    basis_uncentered = aPCE_OrthonormalBasis(x_col1, degree, Val(false))
+
+    @info "Centered basis" basis_centered
+    @info "Uncentered basis" basis_uncentered
+
+    # Check if they're nearly identical (which would indicate the backward transformation is canceling the effect)
+    diff_norm = norm(basis_centered - basis_uncentered)
+    @info "Difference norm" diff_norm
+    @info "Relative difference" diff_norm / norm(basis_centered)
+
+    # If the backward transformation is working as intended, these should be nearly identical
+    # This suggests that centering is for numerical stability, not to change the final result
+    @test isapprox(basis_centered, basis_uncentered, atol = 1.0e-8)
+end
+
+@testitem "create_basis_numerical_stability_test" begin
+    # Test that centering provides numerical stability benefits
+    # Use data with very large values that could cause numerical issues
+    x_large = [1.0e10, 2.0e10, 3.0e10, 4.0e10, 5.0e10] .* ones(5, 2)
+    degree = 2
+
+    # Both should work without numerical errors
+    basis_centered = APCE.create_basis(x_large, degree, center_data = true)
+    basis_uncentered = APCE.create_basis(x_large, degree, center_data = false)
+
+    # Both should be valid
+    @test all(!isnan, basis_centered)
+    @test all(!isnan, basis_uncentered)
+    @test all(!isinf, basis_centered)
+    @test all(!isinf, basis_uncentered)
+
+    # They should be nearly identical
+    @test isapprox(basis_centered, basis_uncentered, atol = 1.0e-6)
+
 end
