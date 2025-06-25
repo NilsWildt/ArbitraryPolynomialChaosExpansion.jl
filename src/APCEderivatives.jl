@@ -2,20 +2,50 @@
 #
 # This software is released under the MIT License.
 # https://opensource.org/licenses/MIT
-# using Zygote
-# using ChainRulesCore
-# using ForwardDiff
-# using Zygote: @adjoint
-# using ChainRules
-# using DifferentiationInterface
-# using DispatchDoctor: @stable
-# using ComponentArrays
-# using ReverseDiff
-# using Polynomials
-# using Tracker
 
-# using Mooncake: @from_rrule, DefaultCtx
+"""
+APCEderivatives.jl
 
+This module provides automatic differentiation support for APCE (Arbitrary Polynomial Chaos Expansion) 
+functions using ChainRules.jl. It implements efficient forward and reverse mode differentiation 
+rules for polynomial basis construction and evaluation.
+
+Key Features:
+- ChainRules support for multiple AD backends (Zygote, ForwardDiff, ReverseDiff, Enzyme, Mooncake)
+- Optimized gradient computation for polynomial matrix operations
+- Type-stable differentiation rules
+- Comprehensive test coverage
+"""
+
+using ChainRulesCore
+using ForwardDiff
+using ReverseDiff
+using Mooncake: @from_rrule, DefaultCtx
+using Enzyme
+using DispatchDoctor: @stable
+
+# ===== UTILITY FUNCTIONS =====
+
+"""
+    ensure_matrix(arr)
+
+Ensure input array is a matrix. If 1D, reshape to column matrix.
+"""
+@stable function ensure_matrix(arr)
+    if ndims(arr) == 1
+        return reshape(arr, (length(arr), 1))
+    else
+        return arr
+    end
+end
+
+# ===== CHAINRULES FOR UTILITY FUNCTIONS =====
+
+"""
+    rrule(::typeof(reverse_columns!), x)
+
+ChainRule for reverse_columns! function. Computes gradient by reversing the tangent matrix.
+"""
 function ChainRulesCore.frule((_, Δx), ::typeof(reverse_columns!), x)
     Δx_reversed = similar(Δx)
     for row in axes(Δx, 1)
@@ -25,243 +55,14 @@ function ChainRulesCore.frule((_, Δx), ::typeof(reverse_columns!), x)
     return y, Δx_reversed
 end
 
-# @stable function ∂Ψ(x, degree)
-# 	input_dimensions = size(x, 2)
-# 	MultivariatePolynomialDegrees = create_Polynomial_Degrees(input_dimensions, degree; qnorm = 1.0)
-# 	OrthonormalBasis = create_basis(x, degree; qnorm = 1.0)
-# 	return Zygote.jacobian(x -> aPCE_PsiPolynomialMatrix(MultivariatePolynomialDegrees, OrthonormalBasis, x), x) |> first
-# end
+# ===== CHAINRULES FOR POLYNOMIAL EVALUATION =====
 
+"""
+    rrule(::typeof(compute_Psi_element), i, j, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, InputDimensions)
 
-# @stable function ∂create_basis(x, degree; qnorm = 1.0)
-# 	return Zygote.jacobian(x -> create_basis(x, degree; qnorm = qnorm), x) |> first
-# end
-
-@stable function ensure_matrix(arr)
-    if ndims(arr) == 1
-        return reshape(arr, (length(arr), 1))
-    else
-        return arr
-    end
-end
-
-# Base.merge(ca::ComponentVector) = ca
-# function Base.merge(ca1::ComponentVector{T1}, ca2::ComponentVector{T2}) where {T1,T2}
-#     ax = getaxes(ca1)
-#     ax2 = getaxes(ca2)
-#     vks = valkeys(ax[1])
-#     vks2 = valkeys(ax2[1])
-#     idxmap = indexmap(ax[1])
-#     _p = Vector{promote_type(T1,T2)}()
-#     sizehint!(_p, length(ca1)+length(ca2))
-#     for vk in vks
-#         if vk in vks2
-#             _p = vcat(_p, ca2[vk])
-#         else
-#             _p = vcat(_p, ca1[vk])
-#         end
-#     end
-#     new_idxmap = Vector{Pair{Symbol, Int64}}([])
-#     sizehint!(new_idxmap, length(ca2))
-#     max_val = maximum(idxmap)
-#     for vk in vks2
-#         if !(vk in vks)
-#             _p = vcat(_p, ca2[vk])
-#             new_idxmap = vcat(new_idxmap, [getval(vk)=>max_val+1])
-#             max_val += 1
-#         end
-#     end
-#     merged_ax = Axis(merge(idxmap, new_idxmap))
-#     ComponentArray(_p, merged_ax)
-# end
-
-# Base.merge(ca1::ComponentVector, ca2::ComponentVector, cs::ComponentVector) = merge(merge(ca1,ca2), cs...)
-
-# function Tracker.param(ca::ComponentArray)
-#     x = getdata(ca)
-#     length(x) == 0 && return ComponentArray(Tracker.param(Float32[]), getaxes(ca))
-#     return ComponentArray(Tracker.param(x), getaxes(ca))
-# end
-
-# Tracker.extract_grad!(ca::ComponentArray) = Tracker.extract_grad!(getdata(ca))
-
-# function Base.materialize(bc::Base.Broadcast.Broadcasted{Tracker.TrackedStyle, Nothing,
-#     typeof(zero), <:Tuple{<:ComponentVector}})
-#     ca = first(bc.args)
-#     return ComponentArray(zero.(getdata(ca)), getaxes(ca))
-# end
-
-# function Base.getindex(g::Tracker.Grads, x::ComponentArray)
-#     Tracker.istracked(getdata(x)) || error("Object not tracked: $x")
-#     return g[Tracker.tracker(getdata(x))]
-# end
-
-# # For TrackedArrays ignore Base.maybeview
-# ## Tracker with views doesn't work quite well
-# @inline function Base.getproperty(x::ComponentVector{T, <:TrackedArray},
-#     s::Symbol) where {T}
-#     return getproperty(x, Val(s))
-# end
-
-# @inline function Base.getproperty(x::ComponentVector{T, <:TrackedArray}, v::Val) where {T}
-#     return ComponentArrays._getindex(Base.getindex, x, v)
-# end
-
-
-# function ChainRulesCore.rrule(::typeof(aPCE_OrthonormalBasis), Data::AbstractArray{T}, Degree::S, normalize_data::Val{false}) where {T<:Real,S<:Integer}
-#     NCpoints, inpDim = size(Data)
-#     function aPCE_pullback(dy)
-#         ∂Data =  ForwardDiff.gradient(x -> sum(aPCE_OrthonormalBasis(x, Degree, Val(false))), Data)
-#         ∂∂ = @thunk reduce(hcat, [dy * ∂Data[:, i] for i in 1:inpDim])
-#         return ChainRulesCore.NoTangent(), ∂∂
-#     end
-#     return aPCE_OrthonormalBasis(Data, Degree, Val(false)), aPCE_pullback
-# end
-
-
-# function ChainRulesCore.rrule(::Type{ComponentArray}, nt::NamedTuple)
-#     res = ComponentArray(nt)
-#     function CA_NT_pullback(Δ::AbstractArray)
-#         if length(Δ) == length(res)
-#             return (CRC.NoTangent(), NamedTuple(ComponentArray(vec(Δ), getaxes(res))))
-#         end
-#         error("Got pullback input of shape $(size(Δ)) & type $(typeof(Δ)) for output " *
-#               "of shape $(size(res)) & type $(typeof(res))")
-#         return nothing
-#     end
-#     CA_NT_pullback(Δ::ComponentArray) = (@show Δ; (ChainRulesCore.NoTangent(), NamedTuple(Δ)))
-#     return res, CA_NT_pullback
-# end
-
-# ChainRulesCore.rrule(::Type{ComponentArray}, data, axes) = ComponentArray(data, axes), Δ -> (ChainRulesCore.NoTangent(), getdata(Δ), ChainRulesCore.NoTangent())
-
-# function ChainRulesCore.rrule(::typeof(aPCE_PsiPolynomialMatrix), TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{S}) where {S, T<:Real}
-#     # Forward pass
-#     Psi = aPCE_PsiPolynomialMatrix(TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis)
-# 	x = ensure_matrix(TrainingInput)
-# 	Nterms = size(MultivariatePolynomialDegrees, 1)
-# 	NCpoints, inpDim = size(x)
-# 	function aPCE_PsiPolynomialMatrix_pullback(dy_raw)
-# 		dy = unthunk(dy_raw)
-# 		∂x = ones(Nterms, inpDim)
-# 		@inbounds for i in 1:Nterms
-# 			for j in 1:NCpoints
-# 				for ii in 1:inpDim
-# 					# oldval = ∂x[i, ii]
-# 					∂x[i, ii] = 1.0
-# 					@batch for kk in 1:inpDim # @batch
-# 						degree_k = MultivariatePolynomialDegrees[i, kk] + 1
-# 						coeffs = @views OrthonormalBasis[degree_k, 1:degree_k, kk]
-# 						# pp = Polynomials.Polynomial(coeffs)
-# 						if ii == kk
-# 							# n = length(coeffs) - 1
-# 							# p = Poly([i * coeffs[i+1] for i in 1:n])
-# 							∂x[i, ii] *= evaluate_derivative_horner(x[j, ii], coeffs)
-# 							# ∂x[i, ii] *= p(x[j, ii])
-# 						else
-# 							# p = Poly(coeffs)
-# 							# ∂x[i, ii] *= p(x[j, ii])
-# 							∂x[i, ii] *= evalpoly_two(x[j, ii], coeffs)
-# 						end
-# 					end
-# 				end
-# 			end
-# 		end
-#         ∂OrthonormalBasis = zeros(S, size(OrthonormalBasis))
-#          for degree ∈ 1:size(OrthonormalBasis, 1)
-#             for ii ∈ 1:size(OrthonormalBasis, 3)
-#                 ∂OrthonormalBasis[degree, :, ii] =  ReverseDiff.gradient(x -> sum(aPCE_OrthonormalBasis(x, degree)), x)
-#             end
-#         end
-
-#         ∂∂OrthonormalBasis = @thunk reduce(hcat, [dy * ∂OrthonormalBasis[:, i] for i in 1:inpDim])
-
-
-# 		∂∂ = @thunk reduce(hcat, [dy * ∂x[:, i] for i in 1:inpDim])
-# 		return (NoTangent(), ∂∂, NoTangent(), ∂∂OrthonormalBasis, NoTangent())
-# 	end
-#     return Psi, aPCE_PsiPolynomialMatrix_pullback
-# end
-
-
-# @stable function ChainRulesCore.rrule(::typeof(compose_Ψ), x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
-# 	# @info "" typeof(x) typeof(MultivariatePolynomialDegrees) typeof(OrthonormalBasis) typeof(degree)
-# 	x = ensure_matrix(x)
-# 	Ψforward = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
-# 	Nterms = size(MultivariatePolynomialDegrees, 1)
-# 	NCpoints, inpDim = size(x)
-# 	function compose_Ψ_pullback(dy_raw)
-# 		dy = unthunk(dy_raw)
-# 		∂x = ones(Nterms, inpDim)
-# 		@inbounds for i in 1:Nterms
-# 			for j in 1:NCpoints
-# 				for ii in 1:inpDim
-# 					# oldval = ∂x[i, ii]
-# 					∂x[i, ii] = 1.0
-# 					@batch for kk in 1:inpDim # @batch
-# 						degree_k = MultivariatePolynomialDegrees[i, kk] + 1
-# 						coeffs = @views OrthonormalBasis[degree_k, 1:degree_k, kk]
-# 						# pp = Polynomials.Polynomial(coeffs)
-# 						if ii == kk
-# 							# n = length(coeffs) - 1
-# 							# p = Poly([i * coeffs[i+1] for i in 1:n])
-# 							∂x[i, ii] *= evaluate_derivative_horner(x[j, ii], coeffs)
-# 							# ∂x[i, ii] *= p(x[j, ii])
-# 						else
-# 							# p = Poly(coeffs)
-# 							# ∂x[i, ii] *= p(x[j, ii])
-# 							∂x[i, ii] *= evalpoly_two(x[j, ii], coeffs)
-# 						end
-# 					end
-# 				end
-# 			end
-# 		end
-# 		∂∂ = @thunk reduce(hcat, [dy * ∂x[:, i] for i in 1:inpDim])
-# 		return (NoTangent(), ∂∂, NoTangent(), @thunk(dy * Ψforward'), NoTangent())
-# 	end
-# 	return Ψforward, compose_Ψ_pullback
-# end
-
-# @stable function ChainRulesCore.rrule(::typeof(compose_Ψ), x::ComponentArrays.ComponentVector, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
-# 	# @info "" typeof(x) typeof(MultivariatePolynomialDegrees) typeof(OrthonormalBasis) typeof(degree)
-# 	OrthonormalBasis = create_basis(x.value, Layer.d_expansion; normalize_data = Layer.normalize_data) #
-# 	x = ensure_matrix(x.value)
-# 	Ψforward = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
-# 	Nterms = size(MultivariatePolynomialDegrees, 1)
-# 	NCpoints, inpDim = size(x)
-# 	function compose_Ψ_pullback(dy_raw)
-# 		dy = unthunk(dy_raw)
-# 		∂x = ones(Nterms, inpDim)
-# 		@inbounds for i in 1:Nterms
-# 			for j in 1:NCpoints
-# 				for ii in 1:inpDim
-# 					# oldval = ∂x[i, ii]
-# 					∂x[i, ii] = 1.0
-# 					@batch for kk in 1:inpDim # @batch
-# 						degree_k = MultivariatePolynomialDegrees[i, kk] + 1
-# 						coeffs = @views OrthonormalBasis[degree_k, 1:degree_k, kk]
-# 						# pp = Polynomials.Polynomial(coeffs)
-# 						if ii == kk
-# 							# n = length(coeffs) - 1
-# 							# p = Poly([i * coeffs[i+1] for i in 1:n])
-# 							∂x[i, ii] *= evaluate_derivative_horner(x[j, ii], coeffs)
-# 							# ∂x[i, ii] *= p(x[j, ii])
-# 						else
-# 							# p = Poly(coeffs)
-# 							# ∂x[i, ii] *= p(x[j, ii])
-# 							∂x[i, ii] *= evalpoly_two(x[j, ii], coeffs)
-# 						end
-# 					end
-# 				end
-# 			end
-# 		end
-# 		∂∂ = @thunk reduce(hcat, [dy * ∂x[:, i] for i in 1:inpDim])
-# 		return (NoTangent(), ∂∂, NoTangent(), ComponentVector(prior = zeros(size(x)), value = @thunk(dy * Ψforward')), NoTangent())
-# 	end
-# 	return Ψforward, compose_Ψ_pullback
-# end
-
-
+ChainRule for computing a single element of the Psi matrix. 
+Returns the polynomial evaluation and its gradient with respect to the input.
+"""
 function ChainRulesCore.rrule(
         ::typeof(compute_Psi_element),
         i, j, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, InputDimensions
@@ -270,19 +71,24 @@ function ChainRulesCore.rrule(
     product = one(eltype(TrainingInput))
     derivatives = zeros(size(TrainingInput, 2))
 
-    for ii in 1:InputDimensions
+    @inbounds for ii in 1:InputDimensions
         degree = MultivariatePolynomialDegrees[i, ii] + 1
-        coeffs = OrthonormalBasis[degree, 1:degree, ii]
+        coeffs = @view OrthonormalBasis[degree, 1:degree, ii]
         x = TrainingInput[j, ii]
-        p_x = evalpoly(x, coeffs)
+        p_x = evalpoly_two(x, coeffs)
 
-        # Compute derivative for this dimension
-        other_products = prod(
-            ii == jj ? evalpoly_derivative(x, coeffs) : evalpoly(x, coeffs)
-                for jj in 1:InputDimensions
-        )
+        # Compute derivative for this dimension using chain rule
+        other_products = one(eltype(TrainingInput))
+        for jj in 1:InputDimensions
+            if ii == jj
+                other_products *= evalpoly_derivative(x, coeffs)
+            else
+                degree_jj = MultivariatePolynomialDegrees[i, jj] + 1
+                coeffs_jj = @view OrthonormalBasis[degree_jj, 1:degree_jj, jj]
+                other_products *= evalpoly_two(TrainingInput[j, jj], coeffs_jj)
+            end
+        end
         derivatives[ii] = other_products
-
         product *= p_x
     end
 
@@ -294,7 +100,14 @@ function ChainRulesCore.rrule(
     return product, compute_Psi_element_pullback
 end
 
+# ===== CHAINRULES FOR PSI MATRIX COMPUTATION =====
 
+"""
+    rrule(::typeof(aPCE_PsiPolynomialMatrix_zygote), TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis)
+
+Efficient ChainRule for the Zygote-compatible Psi matrix computation.
+Uses pre-computed polynomial evaluations and optimized gradient computation.
+"""
 function ChainRulesCore.rrule(
         ::typeof(aPCE_PsiPolynomialMatrix_zygote),
         TrainingInput,
@@ -307,7 +120,6 @@ function ChainRulesCore.rrule(
     # Forward pass
     Psi = aPCE_PsiPolynomialMatrix_zygote(x, MultivariatePolynomialDegrees, OrthonormalBasis)
 
-
     # Extract dimensions
     NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
     NCpoints = size(x, 1)
@@ -320,7 +132,7 @@ function ChainRulesCore.rrule(
         poly_values = Array{T}(undef, NumberOfTerms, InputDimensions, NCpoints)
 
         # First pass: compute all polynomial evaluations
-        for i in 1:NumberOfTerms
+        @inbounds for i in 1:NumberOfTerms
             for d in 1:InputDimensions
                 degree = MultivariatePolynomialDegrees[i, d] + 1
                 coeffs = @view OrthonormalBasis[degree, 1:degree, d]
@@ -332,18 +144,14 @@ function ChainRulesCore.rrule(
         end
 
         # Second pass: compute gradients
-        for j in 1:NCpoints
+        @inbounds for j in 1:NCpoints
             for i in 1:NumberOfTerms
                 Δij = ΔPsi[i, j]
-                if Δij == zero(T)
-                    continue
-                end
+                iszero(Δij) && continue
 
                 for d in 1:InputDimensions
                     degree = MultivariatePolynomialDegrees[i, d]
-                    if degree == 0
-                        continue  # Derivative of constant is zero
-                    end
+                    iszero(degree) && continue  # Derivative of constant is zero
 
                     # Compute derivative for dimension d
                     derivative_coeffs = zeros(T, degree)
@@ -360,11 +168,8 @@ function ChainRulesCore.rrule(
                     for other_d in 1:InputDimensions
                         if other_d != d
                             other_dims_product *= poly_values[i, other_d, j]
-
                             # Early termination if product becomes zero
-                            if other_dims_product == zero(T)
-                                break
-                            end
+                            iszero(other_dims_product) && break
                         end
                     end
 
@@ -377,11 +182,15 @@ function ChainRulesCore.rrule(
         return (NoTangent(), ΔTrainingInput, NoTangent(), NoTangent())
     end
 
-
     return Psi, aPCE_PsiPolynomialMatrix_pullback
 end
 
+"""
+    rrule(::typeof(aPCE_PsiPolynomialMatrix), TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis)
 
+Efficient ChainRule for the optimized Psi matrix computation.
+Uses vectorized operations and pre-computed polynomial evaluations.
+"""
 function ChainRulesCore.rrule(
         ::typeof(aPCE_PsiPolynomialMatrix),
         TrainingInput,
@@ -392,11 +201,7 @@ function ChainRulesCore.rrule(
     x = ensure_matrix(TrainingInput)
 
     # Forward pass
-    # @info "DEBUGGING"
-    # @info MultivariatePolynomialDegrees OrthonormalBasis x
     Psi = aPCE_PsiPolynomialMatrix(x, MultivariatePolynomialDegrees, OrthonormalBasis)
-    # @info "DEBUGGING end "
-
 
     # Extract dimensions
     NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
@@ -410,35 +215,31 @@ function ChainRulesCore.rrule(
         poly_values = Array{T}(undef, NumberOfTerms, InputDimensions, NCpoints)
 
         # First pass: compute all polynomial evaluations
-        for i in 1:NumberOfTerms
+        @inbounds for i in 1:NumberOfTerms
             for d in 1:InputDimensions
                 degree = MultivariatePolynomialDegrees[i, d] + 1
                 coeffs = @view OrthonormalBasis[degree, 1:degree, d]
-                for j in 1:NCpoints
+                @simd for j in 1:NCpoints
                     x_val = x[j, d]
                     poly_values[i, d, j] = evalpoly_two(x_val, coeffs)
                 end
             end
         end
 
-        # Second pass: compute gradients
-        for j in 1:NCpoints
+        # Second pass: compute gradients with optimization
+        @inbounds for j in 1:NCpoints
             for i in 1:NumberOfTerms
                 Δij = ΔPsi[i, j]
-                if Δij == zero(T)
-                    continue
-                end
+                iszero(Δij) && continue
 
-                @batch for d in 1:InputDimensions
+                for d in 1:InputDimensions
                     degree = MultivariatePolynomialDegrees[i, d]
-                    if degree == 0
-                        continue  # Derivative of constant is zero
-                    end
+                    iszero(degree) && continue  # Derivative of constant is zero
 
                     # Compute derivative for dimension d
                     derivative_coeffs = zeros(T, degree)
                     coeffs = @view OrthonormalBasis[degree + 1, 1:(degree + 1), d]
-                    for k in 1:degree
+                    @simd for k in 1:degree
                         derivative_coeffs[k] = coeffs[k + 1] * k
                     end
 
@@ -450,11 +251,8 @@ function ChainRulesCore.rrule(
                     for other_d in 1:InputDimensions
                         if other_d != d
                             other_dims_product *= poly_values[i, other_d, j]
-
                             # Early termination if product becomes zero
-                            if other_dims_product == zero(T)
-                                break
-                            end
+                            iszero(other_dims_product) && break
                         end
                     end
 
@@ -470,255 +268,358 @@ function ChainRulesCore.rrule(
     return Psi, aPCE_PsiPolynomialMatrix_pullback
 end
 
+# ===== CHAINRULES FOR BASIS CREATION =====
 
-### TensorOperations Tricks!
+"""
+    rrule(::typeof(create_basis), x, degree, ::Val{is_ortho}; center_data)
 
+ChainRule for basis creation with Val dispatch.
+Uses ForwardDiff for gradient computation of the basis construction.
+"""
+function ChainRulesCore.rrule(::typeof(create_basis), x::AbstractArray{T}, degree::Integer, ::Val{is_ortho}; center_data::Bool = true) where {T, is_ortho}
+    basis = create_basis(x, degree, Val(is_ortho); center_data = center_data)
+    
+    function create_basis_pullback(Δbasis)
+        function basis_wrapper(x_vec)
+            x_reshaped = reshape(x_vec, size(x))
+            basis_val = create_basis(x_reshaped, degree, Val(is_ortho); center_data = center_data)
+            return sum(basis_val .* unthunk(Δbasis))
+        end
+        grad = ForwardDiff.gradient(basis_wrapper, vec(x))
+        grad_reshaped = reshape(grad, size(x))
+        return (NoTangent(), grad_reshaped, NoTangent(), NoTangent())
+    end
+    
+    return basis, create_basis_pullback
+end
 
-using ChainRulesCore
-using ForwardDiff
+"""
+    rrule(::typeof(create_basis), x, degree; center_data)
 
+ChainRule for basis creation with default dispatch (orthonormal basis).
+"""
+function ChainRulesCore.rrule(::typeof(create_basis), x::AbstractArray{T}, degree::Integer; center_data::Bool = true) where {T}
+    return rrule(create_basis, x, degree, Val(true); center_data = center_data)
+end
 
-# function ChainRulesCore.rrule(::typeof(create_basis), x::AbstractArray, d_expansion::Int, is_orthonormal::Val{B}; center_data=true) where {B}
-#     basis = create_basis(x, d_expansion, is_orthonormal; center_data=center_data)
-#     function create_basis_pullback(Δbasis)
-#         function basis_wrapper(x_vec)
-#             x_reshaped = reshape(x_vec, size(x))
-#             basis_val = create_basis(x_reshaped, d_expansion, is_orthonormal; center_data=center_data)
-#             return sum(basis_val .* unthunk(Δbasis))
-#         end
-#         grad = ForwardDiff.gradient(basis_wrapper, vec(x))
-#         # grad = Enzyme.gradient(Reverse, basis_wrapper, vec(x))
-#         # Reshape gradient to match input shape
-#         grad_reshaped = reshape(grad, size(x))
-#         return (NoTangent(), grad_reshaped, NoTangent(), NoTangent())
-#     end
-#     return basis, create_basis_pullback
-# end
+"""
+    rrule(::typeof(create_basis), x, degree, is_orthonormal::Bool; center_data)
+
+ChainRule for basis creation with Bool dispatch.
+Converts Bool to Val for type-stable dispatch.
+"""
+function ChainRulesCore.rrule(::typeof(create_basis), x::AbstractArray, degree::Integer, is_orthonormal::Bool; center_data::Bool = true)
+    return rrule(create_basis, x, degree, Val(is_orthonormal); center_data = center_data)
+end
+
+# ===== EXTERNAL AD BACKEND INTEGRATION =====
 
 
 Enzyme.@import_rrule(typeof(create_basis), AbstractArray, Integer, Val)
+
 
 ReverseDiff.@grad_from_chainrules create_basis(
     x::ReverseDiff.TrackedArray, d::Integer, is_orthonormal::Val
 );
 
 
-# function ChainRulesCore.rrule(::typeof(create_basis), x::AbstractArray{T}, d_expansion::Int; center_data = false) where {T}
-#     # Forward pass
-#     basis = create_basis(x, d_expansion; center_data = center_data)
-
-#     # Define the pullback
-#     function create_basis_pullback(Δbasis)
-#         # Use ForwardDiff to compute the gradient
-#         function basis_wrapper(x_vec)
-#             x_reshaped = reshape(x_vec, size(x))
-#             basis = create_basis(x_reshaped, d_expansion; center_data = center_data)
-#             # Return a scalar value for gradient computation
-#             return sum(basis .* Δbasis)
-#         end
-
-#         # Compute gradient using ForwardDiff
-#         grad = ForwardDiff.gradient(basis_wrapper, vec(x))
-
-#         # Reshape gradient to match input shape
-#         grad_reshaped = reshape(grad, size(x))
-
-#         # Return the gradient with respect to x
-#         return (NoTangent(), grad_reshaped, NoTangent())
-#     end
-
-#     return basis, create_basis_pullback
-# end
-
-# Mooncake.jl version of the rrule for create_basis
 @from_rrule DefaultCtx Tuple{
     typeof(create_basis),
     AbstractArray, Integer,
 }
 
-# Enzyme rules
-# using Enzyme
+@from_rrule DefaultCtx Tuple{
+    typeof(create_basis),
+    AbstractArray, Integer, Val,
+}
 
-# # Enzyme rule for reverse_columns!
-# function Enzyme.autodiff(::Enzyme.ReverseMode, ::typeof(reverse_columns!), x::AbstractArray)
-#     x_reversed = similar(x)
-#     for row in axes(x, 1)
-#         x_reversed[row, :] = reverse(x[row, :])
-#     end
-#     return x_reversed
-# end
+@from_rrule DefaultCtx Tuple{
+    typeof(create_basis),
+    AbstractArray, Integer, Bool,
+}
 
-# # Enzyme rule for compute_Psi_element
-# function Enzyme.autodiff(::Enzyme.ReverseMode, ::typeof(compute_Psi_element), i, j, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, InputDimensions)
-#     # Forward computation
-#     product = one(eltype(TrainingInput))
-#     derivatives = zeros(size(TrainingInput, 2))
+# ===== TESTS =====
 
-#     for ii in 1:InputDimensions
-#         degree = MultivariatePolynomialDegrees[i, ii] + 1
-#         coeffs = OrthonormalBasis[degree, 1:degree, ii]
-#         x = TrainingInput[j, ii]
-#         p_x = evalpoly(x, coeffs)
-
-#         # Compute derivative for this dimension
-#         other_products = prod(
-#             ii == jj ? evalpoly_derivative(x, coeffs) : evalpoly(x, coeffs)
-#                 for jj in 1:InputDimensions
-#         )
-#         derivatives[ii] = other_products
-
-#         product *= p_x
-#     end
-
-#     return product, derivatives
-# end
-
-# # Enzyme rule for aPCE_PsiPolynomialMatrix_zygote
-# function Enzyme.autodiff(::Enzyme.ReverseMode, ::typeof(aPCE_PsiPolynomialMatrix_zygote), TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis)
-#     # Ensure input is matrix
-#     x = ensure_matrix(TrainingInput)
-
-#     # Forward pass
-#     Psi = aPCE_PsiPolynomialMatrix_zygote(x, MultivariatePolynomialDegrees, OrthonormalBasis)
-
-#     # Extract dimensions
-#     NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
-#     NCpoints = size(x, 1)
-#     T = eltype(x)
-
-#     # Pre-compute polynomial evaluations to avoid redundant calculations
-#     poly_values = Array{T}(undef, NumberOfTerms, InputDimensions, NCpoints)
-
-#     # First pass: compute all polynomial evaluations
-#     for i in 1:NumberOfTerms
-#         for d in 1:InputDimensions
-#             degree = MultivariatePolynomialDegrees[i, d] + 1
-#             coeffs = @view OrthonormalBasis[degree, 1:degree, d]
-#             for j in 1:NCpoints
-#                 x_val = x[j, d]
-#                 poly_values[i, d, j] = evalpoly_two(x_val, coeffs)
-#             end
-#         end
-#     end
-
-#     return Psi, poly_values
-# end
-
-# # Enzyme rule for create_basis
-# function Enzyme.autodiff(::Enzyme.ReverseMode, ::typeof(create_basis), x::AbstractArray{T}, d_expansion::Int; center_data = false) where {T}
-#     # Forward pass
-#     basis = create_basis(x, d_expansion; center_data = center_data)
-
-#     # Compute gradient using Enzyme's autodiff
-#     function basis_wrapper(x_vec)
-#         x_reshaped = reshape(x_vec, size(x))
-#         basis = create_basis(x_reshaped, d_expansion; center_data = center_data)
-#         return sum(basis)
-#     end
-
-#     # Return both the basis and a function to compute gradients
-#     return basis, basis_wrapper
-# end
-
-@testitem "create_basis differentiation" begin
-    using DifferentiationInterface
-    using DifferentiationInterfaceTest
-    using Test
-    using StableRNGs
-    using LinearAlgebra
-    using ForwardDiff
-    using Zygote
-    using Mooncake
-    using Enzyme
-
-    N = 100
-    d_in = 1
-    xs = rand(StableRNG(1), N, d_in)
-    x = xs .^ 3 .+ rand(StableRNG(123), size(xs))
-    d_out = 2
-
-    f_true_centered(x_in) = sum(create_basis(x_in, d_out, Val(true); center_data = true))
-    f_true(x_in) = sum(create_basis(x_in, d_out, Val(true); center_data = false))
-    f_false(x_in) = sum(create_basis(x_in, d_out, Val(false)))
-
-    # Reference gradients using ForwardDiff
-    ∇f_true = x -> ForwardDiff.gradient(f_true, x)
-    ∇f_true_centered = x -> ForwardDiff.gradient(f_true_centered, x)
-    ∇f_false = x -> ForwardDiff.gradient(f_false, x)
-
-    # Define backends (only the ones you want to test)
-    backends = [AutoZygote(), AutoForwardDiff(), AutoMooncake(; config = nothing), AutoEnzyme()]
-
-    # Define scenarios for create_basis
-    scenarios_create_basis = [
-        Scenario{:gradient, :out}(f_true, x; res1 = ∇f_true(x)),
-        Scenario{:gradient, :out}(f_false, x; res1 = ∇f_false(x)),
-        Scenario{:gradient, :out}(f_true_centered, x; res1 = ∇f_true_centered(x)),
-    ]
-
-    # Test create_basis differentiation
-    test_differentiation(
-        backends,
-        scenarios_create_basis;
-        logging = false,
-        allocations = :none,
-        benchmark = :none,
-        correctness = true,
-        type_stability = :none,
-        detailed = true,
-        atol = 1.0e-3,
-        rtol = 1.0e-3,
-        count_calls = true,
-        scenario_intact = true
-    )
+@testitem "create_basis_chainrules_consistency" begin
+    import Pkg
+    Pkg.add("Zygote")
+    using ForwardDiff, Zygote
+    
+    x = rand(20, 2)
+    degree = 2
+    
+    # Test that all dispatch methods give same gradients
+    f1(x) = sum(create_basis(x, degree))
+    f2(x) = sum(create_basis(x, degree, Val(true)))
+    f3(x) = sum(create_basis(x, degree, true))
+    f4(x) = sum(create_basis(x, degree; center_data = true))
+    
+    grad1 = ForwardDiff.gradient(f1, x)
+    grad2 = ForwardDiff.gradient(f2, x)
+    grad3 = ForwardDiff.gradient(f3, x)
+    grad4 = ForwardDiff.gradient(f4, x)
+    @info "grad1: $grad1"
+    @info "grad2: $grad2"
+    @info "grad3: $grad3"
+    @info "grad4: $grad4"
+    @test isapprox(grad1, grad2, atol=1e-10)
+    @test isapprox(grad1, grad3, atol=1e-10)
+    @test isapprox(grad1, grad4, atol=1e-10)
+    
+    # Test Zygote consistency
+    grad1_zyg = Zygote.gradient(f1, x)[1]
+    @test isapprox(grad1, grad1_zyg, atol=1e-8)
 end
 
-@testitem "aPCE_OrthonormalBasis differentiation" begin
+@testitem "create_basis_differentiation_val_dispatch" begin
     import Pkg
+    Pkg.add("Zygote")
+    using ForwardDiff, Zygote
+    
+    x = rand(15, 2)
+    degree = 2
+    
+    # Test Val{true} dispatch
+    f_true(x) = sum(create_basis(x, degree, Val(true); center_data = true))
+    f_true_no_center(x) = sum(create_basis(x, degree, Val(true); center_data = false))
+    
+    grad_true_fd = ForwardDiff.gradient(f_true, x)
+    grad_true_no_center_fd = ForwardDiff.gradient(f_true_no_center, x)
+    
+    grad_true_zyg = Zygote.gradient(f_true, x)[1]
+    grad_true_no_center_zyg = Zygote.gradient(f_true_no_center, x)[1]
+    
+    @test isapprox(grad_true_fd, grad_true_zyg, atol=1e-8)
+    @test isapprox(grad_true_no_center_fd, grad_true_no_center_zyg, atol=1e-8)
+    
+    # Test Val{false} dispatch
+    f_false(x) = sum(create_basis(x, degree, Val(false)))
+    
+    grad_false_fd = ForwardDiff.gradient(f_false, x)
+    grad_false_zyg = Zygote.gradient(f_false, x)[1]
+    
+    @test isapprox(grad_false_fd, grad_false_zyg, atol=1e-8)
+end
+
+@testitem "create_basis_differentiation_bool_dispatch" begin
+    import Pkg
+    Pkg.add("Zygote")
+    using ForwardDiff, Zygote
+    
+    x = rand(12, 3)
+    degree = 2
+    
+    # Test Bool dispatch
+    f_bool_true(x) = sum(create_basis(x, degree, true; center_data = false))
+    f_bool_false(x) = sum(create_basis(x, degree, false; center_data = true))
+    
+    grad_bool_true_fd = ForwardDiff.gradient(f_bool_true, x)
+    grad_bool_false_fd = ForwardDiff.gradient(f_bool_false, x)
+    
+    grad_bool_true_zyg = Zygote.gradient(f_bool_true, x)[1]
+    grad_bool_false_zyg = Zygote.gradient(f_bool_false, x)[1]
+    
+    @test isapprox(grad_bool_true_fd, grad_bool_true_zyg, atol=1e-8)
+    @test isapprox(grad_bool_false_fd, grad_bool_false_zyg, atol=1e-8)
+    
+    # Test that Bool and Val give same results
+    f_val_true(x) = sum(create_basis(x, degree, Val(true); center_data = false))
+    f_val_false(x) = sum(create_basis(x, degree, Val(false); center_data = true))
+    
+    grad_val_true_fd = ForwardDiff.gradient(f_val_true, x)
+    grad_val_false_fd = ForwardDiff.gradient(f_val_false, x)
+    
+    @test isapprox(grad_bool_true_fd, grad_val_true_fd, atol=1e-12)
+    @test isapprox(grad_bool_false_fd, grad_val_false_fd, atol=1e-12)
+end
+
+@testitem "psi_matrix_chainrules" begin
+    import Pkg
+    Pkg.add("Zygote")
+    using ForwardDiff, Zygote
+    
+    # Setup test data
+    x = rand(10, 2)
+    degree = 2
+    MultivariatePolynomialDegrees = aPCE_MultivariatePolynomialDegrees(2, degree, 1.0, 1.0)
+    OrthonormalBasis = create_basis(x, degree, Val(true))
+    
+    # Test aPCE_PsiPolynomialMatrix
+    f_psi(x) = sum(aPCE_PsiPolynomialMatrix(x, MultivariatePolynomialDegrees, OrthonormalBasis))
+    
+    grad_psi_fd = ForwardDiff.gradient(f_psi, x)
+    grad_psi_zyg = Zygote.gradient(f_psi, x)[1]
+    @info "compare gradients aPCE_PsiPolynomialMatrix" mean(abs.(grad_psi_fd .- grad_psi_zyg))
+    @test isapprox(grad_psi_fd, grad_psi_zyg, atol=1e-6)
+    
+    # Test aPCE_PsiPolynomialMatrix_zygote
+    f_psi_zyg(x) = sum(aPCE_PsiPolynomialMatrix_zygote(x, MultivariatePolynomialDegrees, OrthonormalBasis))
+    
+    grad_psi_zyg_fd = ForwardDiff.gradient(f_psi_zyg, x)
+    grad_psi_zyg_zyg = Zygote.gradient(f_psi_zyg, x)[1]
+    @info "compare gradients aPCE_PsiPolynomialMatrix_zygote" mean(abs.(grad_psi_zyg_fd .- grad_psi_zyg_zyg))
+    
+    @test isapprox(grad_psi_zyg_fd, grad_psi_zyg_zyg, atol=1e-6)
+    
+    # Test that both methods give similar results
+    @test isapprox(grad_psi_fd, grad_psi_zyg_fd, atol=1e-6)
+end
+
+@testitem "compute_psi_element_chainrules" begin
+    import Pkg
+    Pkg.add("Zygote")
+    using ForwardDiff, Zygote
+    
+    # Setup test data
+    x = rand(5, 2)
+    degree = 2
+    MultivariatePolynomialDegrees = aPCE_MultivariatePolynomialDegrees(2, degree, 1.0, 1.0)
+    OrthonormalBasis = create_basis(x, degree, Val(true))
+    
+    # Test compute_Psi_element
+    i, j = 2, 3
+    f_element(x) = APCE.compute_Psi_element(i, j, x, MultivariatePolynomialDegrees, OrthonormalBasis, 2)
+    
+    grad_element_fd = ForwardDiff.gradient(f_element, x)
+    @info "grad_element_fd: $grad_element_fd"
+    grad_element_zyg = Zygote.gradient(f_element, x)
+    @info "grad_element_zyg: $grad_element_zyg"
+    
+    @test isapprox(grad_element_fd, grad_element_zyg, atol=1e-8)
+    
+    # Test that gradient is finite and reasonable
+    @test all(isfinite, grad_element_fd)
+    @test norm(grad_element_fd) > 0  # Should have non-zero gradient
+end
+
+@testitem "reverse_columns_chainrules" begin
+    import Pkg
+    Pkg.add("Zygote")
+    Pkg.add("ChainRulesCore")
+    using ChainRulesCore
+    using ForwardDiff
+    
+    # Test reverse_columns! frule
+    x = rand(3, 4)
+    Δx = rand(3, 4)
+    
+    # Test frule manually
+    y, Δy = ChainRulesCore.frule((NoTangent(), Δx), reverse_columns!, copy(x))
+    
+    # Expected behavior
+    x_copy = copy(x)
+    reverse_columns!(x_copy)
+    expected_y = x_copy
+    
+    expected_Δy = similar(Δx)
+    for row in axes(Δx, 1)
+        expected_Δy[row, :] = reverse(Δx[row, :])
+    end
+    
+    @test isapprox(y, expected_y)
+    @test isapprox(Δy, expected_Δy)
+end
+
+@testitem "type_stability_chainrules" begin
+    import Pkg
+    Pkg.add("Zygote")
+    using ForwardDiff
+    
+    x = rand(10, 2)
+    degree = 2
+    
+    # Test type stability of create_basis rrule
+    f_basis(x) = sum(create_basis(x, degree, Val(true)))
+    @inferred ForwardDiff.gradient(f_basis, x)
+    
+    # Test type stability of create_basis with different dispatches
+    f_basis_bool(x) = sum(create_basis(x, degree, true))
+    @inferred ForwardDiff.gradient(f_basis_bool, x)
+    
+    f_basis_default(x) = sum(create_basis(x, degree))
+    @inferred ForwardDiff.gradient(f_basis_default, x)
+end
+
+@testitem "edge_cases_chainrules" begin
+    import Pkg
+    Pkg.add("Zygote")
+    using ForwardDiff, Zygote
+    
+    # Test with minimal data
+    x_small = rand(2, 1)
+    degree = 1
+    
+    f_small(x) = sum(create_basis(x, degree, Val(true)))
+    grad_small_fd = ForwardDiff.gradient(f_small, x_small)
+    grad_small_zyg = Zygote.gradient(f_small, x_small)[1]
+    
+    @test isapprox(grad_small_fd, grad_small_zyg, atol=1e-8)
+    
+    # Test with degree 0
+    degree = 0
+    f_degree0(x) = sum(create_basis(x, degree, Val(false)))
+    grad_degree0_fd = ForwardDiff.gradient(f_degree0, x_small)
+    
+    # Degree 0 should give zero gradients (constant basis)
+    @test all(iszero, grad_degree0_fd)
+    
+    # Test 1D input
+    x_1d = rand(5)
+    f_1d(x) = sum(create_basis(x, 2, Val(true)))
+    grad_1d_fd = ForwardDiff.gradient(f_1d, x_1d)
+    grad_1d_zyg = Zygote.gradient(f_1d, x_1d)[1]
+    
+    @test isapprox(grad_1d_fd, grad_1d_zyg, atol=1e-8)
+end
+
+@testitem "comprehensive_ad_backend_test" begin
+    import Pkg
+    Pkg.add("Zygote")
     Pkg.add("DifferentiationInterface")
     Pkg.add("DifferentiationInterfaceTest")
-    Pkg.add("Test")
+    Pkg.add("Mooncake")
+    Pkg.add("Enzyme")
     Pkg.add("StableRNGs")
-    Pkg.add("LinearAlgebra")
-    Pkg.add("ForwardDiff")
-    Pkg.add("Zygote")
+
     using DifferentiationInterface
     using DifferentiationInterfaceTest
-    using Test
     using StableRNGs
-    using LinearAlgebra
     using ForwardDiff
     using Zygote
     using Mooncake
     using Enzyme
 
-    N = 100
-    d_in = 1
-    xs = rand(StableRNG(1), N, d_in)
-    x = xs .^ 3 .+ rand(StableRNG(123), size(xs))
-    degree = 3
+    # Setup test data
+    rng = StableRNG(1234)
+    N = 20
+    d_in = 2
+    x = rand(rng, N, d_in)
+    degree = 2
 
-    # Test function that uses aPCE_OrthonormalBasis
-    f_orthonormal(x_in) = sum(aPCE_OrthonormalBasis(x_in, degree, Val(true)))
-    f_orthonormal_no_center(x_in) = sum(aPCE_OrthonormalBasis(x_in, degree, Val(false)))
+    # Define test functions
+    f_basis_true(x_in) = sum(create_basis(x_in, degree, Val(true); center_data = true))
+    f_basis_false(x_in) = sum(create_basis(x_in, degree, Val(false)))
+    f_basis_default(x_in) = sum(create_basis(x_in, degree))
 
     # Reference gradients using ForwardDiff
-    ∇f_orthonormal = x -> ForwardDiff.gradient(f_orthonormal, x)
-    ∇f_orthonormal_no_center = x -> ForwardDiff.gradient(f_orthonormal_no_center, x)
+    ∇f_basis_true = x -> ForwardDiff.gradient(f_basis_true, x)
+    ∇f_basis_false = x -> ForwardDiff.gradient(f_basis_false, x)
+    ∇f_basis_default = x -> ForwardDiff.gradient(f_basis_default, x)
 
-    # Define backends (only the ones you want to test)
+    # Define backends to test
     backends = [AutoZygote(), AutoForwardDiff(), AutoMooncake(; config = nothing), AutoEnzyme()]
 
-    # Define scenarios for aPCE_OrthonormalBasis
-    scenarios_orthonormal = [
-        Scenario{:gradient, :out}(f_orthonormal, x; res1 = ∇f_orthonormal(x)),
-        Scenario{:gradient, :out}(f_orthonormal_no_center, x; res1 = ∇f_orthonormal_no_center(x)),
+    # Define scenarios
+    scenarios = [
+        Scenario{:gradient, :out}(f_basis_true, x; res1 = ∇f_basis_true(x)),
+        Scenario{:gradient, :out}(f_basis_false, x; res1 = ∇f_basis_false(x)),
+        Scenario{:gradient, :out}(f_basis_default, x; res1 = ∇f_basis_default(x)),
     ]
 
-    # Test aPCE_OrthonormalBasis differentiation
+    # Run comprehensive tests
     test_differentiation(
         backends,
-        scenarios_orthonormal;
+        scenarios;
         logging = false,
         allocations = :none,
         benchmark = :none,

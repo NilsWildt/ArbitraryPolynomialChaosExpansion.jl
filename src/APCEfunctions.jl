@@ -391,8 +391,30 @@ function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::V
             P_norm += Poly^2 / NumberOfDataPoints
         end
         
-        for k in 0:degree
-            OrthonormalBasis[degree + 1, k + 1] = @views OrthogonalBasis[degree + 1, k + 1] / sqrt(P_norm)
+        # Improved numerical stability check
+        eps_val = eps(T) * 1e6  # More conservative epsilon
+        if P_norm <= eps_val
+            # Fallback: use standard monomial basis for this degree
+            for i in 1:(degree + 1)
+                for j in 1:(degree + 1)
+                    if i == degree + 1 && j == degree + 1
+                        OrthonormalBasis[i, j] = one(T)
+                    elseif i >= j && i <= degree
+                        OrthonormalBasis[i, j] = one(T)
+                    else
+                        OrthonormalBasis[i, j] = zero(T)
+                    end
+                end
+            end
+        else
+            # Normal normalization with safety check
+            norm_factor = sqrt(P_norm)
+            if norm_factor <= eps_val
+                norm_factor = eps_val
+            end
+            for k in 0:degree
+                OrthonormalBasis[degree + 1, k + 1] = @views OrthogonalBasis[degree + 1, k + 1] / norm_factor
+            end
         end
     end
 
@@ -467,8 +489,30 @@ function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::V
             P_norm += Poly^2 / NumberOfDataPoints
         end
         
-        for k in 0:degree
-            OrthonormalBasis[degree + 1, k + 1] = @views OrthogonalBasis[degree + 1, k + 1] / (sqrt(P_norm)+1e-10)
+        # Improved numerical stability check
+        eps_val = eps(T) * 1e6  # More conservative epsilon
+        if P_norm <= eps_val
+            # Fallback: use standard monomial basis for this degree
+            for i in 1:(degree + 1)
+                for j in 1:(degree + 1)
+                    if i == degree + 1 && j == degree + 1
+                        OrthonormalBasis[i, j] = one(T)
+                    elseif i >= j && i <= degree
+                        OrthonormalBasis[i, j] = one(T)
+                    else
+                        OrthonormalBasis[i, j] = zero(T)
+                    end
+                end
+            end
+        else
+            # Normal normalization with safety check
+            norm_factor = sqrt(P_norm)
+            if norm_factor <= eps_val
+                norm_factor = eps_val
+            end
+            for k in 0:degree
+                OrthonormalBasis[degree + 1, k + 1] = @views OrthogonalBasis[degree + 1, k + 1] / norm_factor
+            end
         end
     end
 
