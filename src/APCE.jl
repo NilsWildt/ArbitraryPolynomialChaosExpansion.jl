@@ -44,6 +44,7 @@ using ChainRules: ChainRules
 using ChainRulesCore: ChainRulesCore
 using Combinatorics: Combinatorics, factorial
 using ComponentArrays: ComponentArrays
+using Estrin
 # using DifferentiationInterface: DifferentiationInterface
 using DispatchDoctor: @stable
 # using SparseArrays

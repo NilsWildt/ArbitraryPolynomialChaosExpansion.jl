@@ -67,17 +67,19 @@ function special_sort_two_arrays!(x::AbstractArray, y::AbstractArray)
     T = CoSorter(x[:, 1], x[:, 2], y)
     sort!(T)
     x = T.sortarray
-    y = T.coarray
+    return y = T.coarray
 end
 
 """
     reverse_columns!(x)
-
 Reverse the order of columns in each row of matrix x in-place.
 """
 function reverse_columns!(x)
+    if isempty(x)
+        return x
+    end
     @inbounds for row in axes(x, 1)
-        x[row, :] = reverse(@views x[row, :])
+        x[row, :] = reverse(@view x[row, :])
     end
     return x
 end
@@ -101,8 +103,8 @@ function evalpoly_two(x, coeffs)
     return i == fi ? muladd(out, x, @inbounds(coeffs[fi])) : out
 end
 
-   # ReverseDiff-compatible dispatch
-   function evalpoly_two(x::ReverseDiff.TrackedReal, coeffs)
+# ReverseDiff-compatible dispatch
+function evalpoly_two(x::ReverseDiff.TrackedReal, coeffs)
     isempty(coeffs) && throw(ArgumentError("coeffs cannot be empty"))
     i = lastindex(coeffs)
     out = coeffs[i]
@@ -143,7 +145,6 @@ function evalpoly_two(x::ReverseDiff.TrackedReal, coeffs::AbstractVector{<:Rever
     end
     return i == fi ? out * x + coeffs[fi] : out
 end
-
 
 
 """
@@ -203,16 +204,6 @@ function evaluate_derivative_horner(x, coeffs)
     return derivative_value
 end
 
-"""
-    evalpoly_derivative(x, coeffs)
-
-Helper function to compute polynomial derivative using evalpoly_two.
-"""
-function evalpoly_derivative(x, coeffs)
-    n = length(coeffs) - 1
-    derivative_coeffs = coeffs[2:end] .* (1:n)'
-    return evalpoly_two(x, derivative_coeffs)
-end
 
 """
     numberPolynomials(n, d)
@@ -289,19 +280,19 @@ function aPCE_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T, s_
             end
         end
     end
-    
+
     sorting_d_marginal = stats[d_marginal_indices, 3:4]
     sorting_d_interactions = stats[d_interactions_indices, 3:4]
     all_marginals = 1:length(d_marginal_indices) |> collect
     all_interactions = 1:length(d_interactions_indices) |> collect
-    
+
     if length(all_marginals) > 1
         special_sort_two_arrays!(sorting_d_marginal, all_marginals)
     end
     if length(all_interactions) > 1
         special_sort_two_arrays!(sorting_d_interactions, all_interactions)
     end
-    
+
     keeper_marginals = d_marginal_indices[filter_by_percentage(all_marginals, s_marginals)]
     keeper_interactions = d_interactions_indices[filter_by_percentage(all_interactions, s_interactions)]
     idxkeep = vcat(keeper_marginals, keeper_interactions)
@@ -357,7 +348,7 @@ function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::V
                 Hankel[i + 1, :] = @views Hankel[i + 1, :] / max_val
             end
         end
-        
+
         # Last row setup
         for j in 0:(degree - 1)
             Hankel[degree + 1, j + 1] = zero(T)
@@ -390,9 +381,9 @@ function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::V
             end
             P_norm += Poly^2 / NumberOfDataPoints
         end
-        
+
         # Improved numerical stability check
-        eps_val = eps(T) * 1e6  # More conservative epsilon
+        eps_val = eps(T) * 1.0e6  # More conservative epsilon
         if P_norm <= eps_val
             # Fallback: use standard monomial basis for this degree
             for i in 1:(degree + 1)
@@ -458,7 +449,7 @@ function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::V
                 Hankel[i + 1, :] = @views Hankel[i + 1, :] / max_val
             end
         end
-        
+
         for j in 0:(degree - 1)
             Hankel[degree + 1, j + 1] = zero(T)
         end
@@ -488,9 +479,9 @@ function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::V
             end
             P_norm += Poly^2 / NumberOfDataPoints
         end
-        
+
         # Improved numerical stability check
-        eps_val = eps(T) * 1e6  # More conservative epsilon
+        eps_val = eps(T) * 1.0e6  # More conservative epsilon
         if P_norm <= eps_val
             # Fallback: use standard monomial basis for this degree
             for i in 1:(degree + 1)
@@ -553,7 +544,7 @@ function _apce_closed_form_basis_moment!(basis, col, degree)
     for i in 0:(2 * degree + 1)
         m[i + 1] = sum(col .^ i) / n
     end
-    
+
     if degree == 0
         basis[1, 1] = 1
     elseif degree == 1
@@ -667,7 +658,7 @@ function create_basis(x::AbstractArray{T}, degree::Integer, ::Val{false}; center
     if ndims(x) == 1
         x = reshape(x, :, 1)
     end
-    
+
     input_dimensions = size(x, 2)
     FullBasis = zeros(T, degree + 1, degree + 1, input_dimensions)
 
@@ -709,7 +700,6 @@ function compute_Psi_element(i, j, TrainingInput, MultivariatePolynomialDegrees,
     return product
 end
 
-
 """
     aPCE_PsiPolynomialMatrix_zygote(TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis)
 
@@ -733,23 +723,23 @@ Compute the Psi matrix optimized for ForwardDiff compatibility.
 Uses vectorized operations for better performance.
 """
 function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{S}) where {S, T <: Real}
-   NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
-   NCpoints = size(TrainingInput, 1)
-   Psi = ones(T, NumberOfTerms, NCpoints)
+    NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
+    NCpoints = size(TrainingInput, 1)
+    Psi = ones(T, NumberOfTerms, NCpoints)
 
-   @inbounds for i in 1:NumberOfTerms
-       for ii in 1:InputDimensions
-           degree = MultivariatePolynomialDegrees[i, ii] + 1
-           coeffs = @views OrthonormalBasis[degree, 1:degree, ii]
-           x = @views TrainingInput[:, ii]
-           poly_values = evaluate_polynomial_horner_array(x, coeffs)
-        #    poly_values = evalpoly_two.(x, coeffs)
-           for j in 1:NCpoints
-               Psi[i, j] *= poly_values[j]
-           end
-       end
-   end
-   return Psi
+    @inbounds for i in 1:NumberOfTerms
+        for ii in 1:InputDimensions
+            degree = MultivariatePolynomialDegrees[i, ii] + 1
+            coeffs = @views OrthonormalBasis[degree, 1:degree, ii]
+            x = @views TrainingInput[:, ii]
+            poly_values = evaluate_polynomial_horner_array(x, coeffs)
+            #    poly_values = evalpoly_two.(x, coeffs)
+            for j in 1:NCpoints
+                Psi[i, j] *= poly_values[j]
+            end
+        end
+    end
+    return Psi
 end
 
 # ===== MOMENT COMPUTATION =====
@@ -760,13 +750,13 @@ end
 Compute moments of data up to order 2*dd+1 in-place.
 """
 @inline function compute_moments!(m::AbstractArray{T}, Data::AbstractArray{S}, NumberOfDataPoints::Integer, dd::Integer) where {T <: Real, S <: Real}
-   current_power = Vector{T}(undef, length(Data))
-   fill!(current_power, one(T))
-   for l in 0:(2 * dd + 1)
-       m[l + 1] = sum(current_power) / NumberOfDataPoints
-       current_power .*= Data
-   end
-   return nothing
+    current_power = Vector{T}(undef, length(Data))
+    fill!(current_power, one(T))
+    for l in 0:(2 * dd + 1)
+        m[l + 1] = sum(current_power) / NumberOfDataPoints
+        current_power .*= Data
+    end
+    return nothing
 end
 
 # ===== COLLOCATION POINTS =====
@@ -778,42 +768,42 @@ Generate Gaussian collocation points for quadrature.
 - `strategy`: :PCM (Probabilistic Collocation Method) or :FT (Full Tensor)
 """
 function GaussianCollocation(
-       input_dimensions, ExpansionDegree, OrthonormalBasis::AbstractArray{T},
-       InputDistribution::AbstractArray{T}, NumberOfTerms; strategy = :PCM
-   )::Matrix{T} where {T <: Real}
-   
-   polynomial_roots = zeros(T, input_dimensions, ExpansionDegree + 1)
-   @inbounds for d in Base.oneto(Int64(input_dimensions))
-       polynomial_basis = @views OrthonormalBasis[:, :, d]
-       roots = PolynomialRoots.roots(@views polynomial_basis[ExpansionDegree + 1, :])
-       real_roots = real.(roots)
-       polynomial_roots[d, 1:length(real_roots)] = real_roots
-   end
-   
-   PointsVector = 1:(ExpansionDegree + 1) |> collect
-   UniqueCombinations = stack(reduce(vcat, (UnrolledUtilities.unrolled_product([PointsVector for _ in 1:input_dimensions]...))))'
+        input_dimensions, ExpansionDegree, OrthonormalBasis::AbstractArray{T},
+        InputDistribution::AbstractArray{T}, NumberOfTerms; strategy = :PCM
+    )::Matrix{T} where {T <: Real}
 
-   sort_indices = sortperm(sum(UniqueCombinations; dims = 2); dims = 1)
-   SortUniqueCombinations = UniqueCombinations[sort_indices[:], :]
-   
-   if strategy == :FT
-       TrainingInput = SortUniqueCombinations
-       return Array(view(TrainingInput, :, (1:size(TrainingInput, 2))))
-   elseif strategy == :PCM
-       temp = abs.(polynomial_roots .- StatsBase.mean(InputDistribution; dims = 1)[:, :][1])
-       temp_sort = mapslices(sortperm, temp, dims = 2)
-       @inbounds for i in axes(polynomial_roots, 1)
-           polynomial_roots[i, :] = @views polynomial_roots[i, temp_sort[i, :]]
-       end
-       collocation_points = zeros(T, NumberOfTerms, input_dimensions)
-       @inbounds for i in 1:NumberOfTerms
-           for j in axes(SortUniqueCombinations, 2)
-               collocation_points[i, j] = @views polynomial_roots[j, Int(SortUniqueCombinations[i, j])]
-           end
-       end
-       collocation_points = sortslices(collocation_points, dims = 1, by = x -> x[1])
-       return Array(view(collocation_points, :, (1:size(collocation_points, 2))))
-   end
+    polynomial_roots = zeros(T, input_dimensions, ExpansionDegree + 1)
+    @inbounds for d in Base.oneto(Int64(input_dimensions))
+        polynomial_basis = @views OrthonormalBasis[:, :, d]
+        roots = PolynomialRoots.roots(@views polynomial_basis[ExpansionDegree + 1, :])
+        real_roots = real.(roots)
+        polynomial_roots[d, 1:length(real_roots)] = real_roots
+    end
+
+    PointsVector = 1:(ExpansionDegree + 1) |> collect
+    UniqueCombinations = stack(reduce(vcat, (UnrolledUtilities.unrolled_product([PointsVector for _ in 1:input_dimensions]...))))'
+
+    sort_indices = sortperm(sum(UniqueCombinations; dims = 2); dims = 1)
+    SortUniqueCombinations = UniqueCombinations[sort_indices[:], :]
+
+    if strategy == :FT
+        TrainingInput = SortUniqueCombinations
+        return Array(view(TrainingInput, :, (1:size(TrainingInput, 2))))
+    elseif strategy == :PCM
+        temp = abs.(polynomial_roots .- StatsBase.mean(InputDistribution; dims = 1)[:, :][1])
+        temp_sort = mapslices(sortperm, temp, dims = 2)
+        @inbounds for i in axes(polynomial_roots, 1)
+            polynomial_roots[i, :] = @views polynomial_roots[i, temp_sort[i, :]]
+        end
+        collocation_points = zeros(T, NumberOfTerms, input_dimensions)
+        @inbounds for i in 1:NumberOfTerms
+            for j in axes(SortUniqueCombinations, 2)
+                collocation_points[i, j] = @views polynomial_roots[j, Int(SortUniqueCombinations[i, j])]
+            end
+        end
+        collocation_points = sortslices(collocation_points, dims = 1, by = x -> x[1])
+        return Array(view(collocation_points, :, (1:size(collocation_points, 2))))
+    end
 end
 
 # ===== EVALUATION FUNCTIONS =====
@@ -824,8 +814,8 @@ end
 Compose the Psi matrix for evaluation.
 """
 function compose_Ψ(x::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis, degree) where {T}
-   Ψ = aPCE_PsiPolynomialMatrix_zygote(x, MultivariatePolynomialDegrees, OrthonormalBasis)' |> Matrix{T}
-   return Ψ
+    Ψ = aPCE_PsiPolynomialMatrix_zygote(x, MultivariatePolynomialDegrees, OrthonormalBasis)' |> Matrix{T}
+    return Ψ
 end
 
 """
@@ -834,10 +824,10 @@ end
 Evaluate the polynomial expansion at points x with given coefficients.
 """
 function evaluate_Ψ(x, coeffs, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name)
-   T = eltype(coeffs)
-   Ψ = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
-   TensorOperations.@tensor order = (k, i) PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
-   return PredictionOutput
+    T = eltype(coeffs)
+    Ψ = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
+    TensorOperations.@tensor order = (k, i) PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
+    return PredictionOutput
 end
 
 """
@@ -846,7 +836,7 @@ end
 Extract coefficients for a specific degree and dimension from the basis.
 """
 function coeffs_from_basis(OrthonormalBasis, degree, ii)
-   return OrthonormalBasis[degree, 1:degree, ii]
+    return OrthonormalBasis[degree, 1:degree, ii]
 end
 
 # ===== TRAINING FUNCTIONS =====
@@ -861,69 +851,58 @@ Train the polynomial expansion to find optimal coefficients.
 - `reg_order`: Regularization order
 """
 function train(Ψ::AbstractArray{T}, y_rhs; bayesian_inversion = :true, reg_order = 0) where {T <: Real}
-   NumberOfTerms = size(Ψ, 2)
-   output_dimensions = size(y_rhs, 2)
-   coeffs = zeros(T, NumberOfTerms, output_dimensions)
-   
-   # Compute pseudo-inverse
-   Psi_inv = pinv(Ψ; rtol = sqrt(eps(real(float(oneunit(eltype(Ψ)))))))
-   @einsum coeffs[i, k] = Psi_inv[i, j] * y_rhs[j, k]
+    NumberOfTerms = size(Ψ, 2)
+    output_dimensions = size(y_rhs, 2)
+    coeffs = zeros(T, NumberOfTerms, output_dimensions)
 
-   if bayesian_inversion
-       @info "Using bayesian regularization to find the expansion coefficients"
-       x₀ = coeffs
-       for i in axes(y_rhs, 2)
-           @info "Bayesian regularization for axis $i"
-           coeffs[:, i] .= invert(Ψ, y_rhs[:, i], Lₖx₀(reg_order, view(x₀, :, i)); 
-                                  alg = :gcv_svd, 
-                                  method = LBFGS(linesearch = LineSearches.BackTracking()))
-       end
-   end
+    # Compute pseudo-inverse
+    Psi_inv = pinv(Ψ; rtol = sqrt(eps(real(float(oneunit(eltype(Ψ)))))))
+    @einsum coeffs[i, k] = Psi_inv[i, j] * y_rhs[j, k]
 
-   ChainRulesCore.ignore_derivatives() do
-       for k in axes(coeffs, 2)
-           res = (@views sqrt(mean((Ψ * coeffs[:, k] .- y_rhs[:, k]) .^ 2)))
-           @info "Error for axis $k" res
-       end
-   end
-   return coeffs
+    if bayesian_inversion
+        @info "Using bayesian regularization to find the expansion coefficients"
+        x₀ = coeffs
+        for i in axes(y_rhs, 2)
+            @info "Bayesian regularization for axis $i"
+            coeffs[:, i] .= invert(
+                Ψ, y_rhs[:, i], Lₖx₀(reg_order, view(x₀, :, i));
+                alg = :gcv_svd,
+                method = LBFGS(linesearch = LineSearches.BackTracking())
+            )
+        end
+    end
+
+    ChainRulesCore.ignore_derivatives() do
+        for k in axes(coeffs, 2)
+            res = (@views sqrt(mean((Ψ * coeffs[:, k] .- y_rhs[:, k]) .^ 2)))
+            @info "Error for axis $k" res
+        end
+    end
+    return coeffs
 end
 
-# ===== CHAINRULES DEFINITIONS =====
-
-"""
-ChainRules forward rule for reverse_columns!
-"""
-function ChainRulesCore.frule((_, Δx), ::typeof(reverse_columns!), x)
-   Δx_reversed = similar(Δx)
-   for row in axes(Δx, 1)
-       Δx_reversed[row, :] = reverse(Δx[row, :])
-   end
-   y = reverse_columns!(x)
-   return y, Δx_reversed
-end
 
 # ===== TESTS =====
 
 @testitem "aPCE_MultivariatePolynomialDegrees" begin
-   @test aPCE_MultivariatePolynomialDegrees(2, 1, 1.0, 1.0) == [0 0; 0 1; 1 0]
-   @test aPCE_MultivariatePolynomialDegrees(2, 2, 1.0, 1.0) == [0 0; 0 1; 1 0; 0 2; 1 1; 2 0]
-   @inferred aPCE_MultivariatePolynomialDegrees(2, 2, 1.0, 1.0)
+    @test aPCE_MultivariatePolynomialDegrees(2, 1, 1.0, 1.0) == [0 0; 0 1; 1 0]
+    @test aPCE_MultivariatePolynomialDegrees(2, 2, 1.0, 1.0) == [0 0; 0 1; 1 0; 0 2; 1 1; 2 0]
+    @inferred aPCE_MultivariatePolynomialDegrees(2, 2, 1.0, 1.0)
 end
 
 @testitem "aPCE_OrthonormalBasis" begin
-   @test aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true)) ≈ [1.0 0.0; -0.5 1.5]
-   @test aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false)) ≈ [1.0 0.0; -0.5 1.5]
-   @inferred aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false))
-   @inferred aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true))
+    @test aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true)) ≈ [1.0 0.0; -0.5 1.5]
+    @test aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false)) ≈ [1.0 0.0; -0.5 1.5]
+    @inferred aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false))
+    @inferred aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true))
 end
 
 @testitem "numberPolynomials" begin
-   @test APCE.numberPolynomials(3, 2) == 10
-   @test APCE.numberPolynomials(5, 3) == 56
-   @test APCE.numberPolynomials(0, 0) == 1
-   @test APCE.numberPolynomials(1, 1) == 2
-   @test typeof(APCE.numberPolynomials(3, 2)) == Int
+    @test APCE.numberPolynomials(3, 2) == 10
+    @test APCE.numberPolynomials(5, 3) == 56
+    @test APCE.numberPolynomials(0, 0) == 1
+    @test APCE.numberPolynomials(1, 1) == 2
+    @test typeof(APCE.numberPolynomials(3, 2)) == Int
 end
 
 @testitem "aPCE_MultivariatePolynomialDegrees_test" begin
@@ -1147,6 +1126,17 @@ end
     @test APCE.evalpoly_two(1.0, [0.0, 0.0, 0.0, 0.0]) == 0.0   # Zero polynomial at x=1
     @test APCE.evalpoly_two(1.0, [5.0]) == 5.0                  # Constant polynomial at x=1
     @test APCE.evalpoly_two(2.0, [1.0, -1.0, 1.0, -1.0]) == -5.0  # Polynomial 1 - x + x^2 - x^3 at x=2
+end
+
+@testitem "EstrinPoly_test" begin
+    import Pkg
+    Pkg.add("Estrin")
+    using Estrin
+    @test Estrin.Poly([1.0, 2.0, 3.0, 4.0]).(2.0) == 49.0  # Polynomial 1 + 2x + 3x^2 + 4x^3 at x=2
+    @test Estrin.Poly([1.0, 2.0, 3.0, 4.0]).(0.0) == 1.0   # Polynomial 1 + 2x + 3x^2 + 4x^3 at x=0
+    @test Estrin.Poly([0.0, 0.0, 0.0, 0.0]).(1.0) == 0.0   # Zero polynomial at x=1
+    @test Estrin.Poly([5.0]).(1.0) == 5.0                  # Constant polynomial at x=1
+    @test Estrin.Poly([1.0, -1.0, 1.0, -1.0]).(2.0) == -5.0  # Polynomial 1 - x + x^2 - x^3 at x=2
 end
 
 
@@ -1421,7 +1411,7 @@ end
     # Setup test data
     x = rand(50, 2)
     degree = 2
- 
+
     # Test 1: Default - orthonormal with centering
     basis1 = create_basis(x, degree)
     @test size(basis1) == (degree + 1, degree + 1, size(x, 2))
@@ -1429,12 +1419,12 @@ end
     @test all(!isnan, basis1)
     @test all(!isinf, basis1)
     @inferred create_basis(x, degree)
- end
- 
- @testitem "create_basis_explicit_orthonormal_with_centering" begin
+end
+
+@testitem "create_basis_explicit_orthonormal_with_centering" begin
     x = rand(50, 2)
     degree = 2
- 
+
     # Test 2: Explicit orthonormal with centering
     basis2 = create_basis(x, degree, Val(true); center_data = true)
     @test size(basis2) == (degree + 1, degree + 1, size(x, 2))
@@ -1442,12 +1432,12 @@ end
     @test all(!isnan, basis2)
     @test all(!isinf, basis2)
     @inferred create_basis(x, degree, Val(true); center_data = true)
- end
- 
- @testitem "create_basis_orthonormal_without_centering" begin
+end
+
+@testitem "create_basis_orthonormal_without_centering" begin
     x = rand(50, 2)
     degree = 2
- 
+
     # Test 3: Orthonormal without centering
     basis3 = create_basis(x, degree, Val(true); center_data = false)
     @test size(basis3) == (degree + 1, degree + 1, size(x, 2))
@@ -1455,17 +1445,17 @@ end
     @test all(!isnan, basis3)
     @test all(!isinf, basis3)
     @inferred create_basis(x, degree, Val(true); center_data = false)
- end
- 
- @testitem "create_basis_monomial_basis" begin
+end
+
+@testitem "create_basis_monomial_basis" begin
     x = rand(50, 2)
     degree = 2
- 
+
     # Test 4: Monomial basis (center_data ignored)
     basis4 = create_basis(x, degree, Val(false))
     @test size(basis4) == (degree + 1, degree + 1, size(x, 2))
     @test eltype(basis4) == eltype(x)
-    
+
     # Check monomial basis structure (upper triangular with 1s)
     for dim in 1:size(x, 2)
         basis_dim = basis4[:, :, dim]
@@ -1480,12 +1470,12 @@ end
         end
     end
     @inferred create_basis(x, degree, Val(false))
- end
- 
- @testitem "create_basis_programmatic_usage" begin
+end
+
+@testitem "create_basis_programmatic_usage" begin
     x = rand(50, 2)
     degree = 2
- 
+
     # Test 5: Programmatic use with Bool
     is_ortho = true
     basis5 = create_basis(x, degree, is_ortho; center_data = false)
@@ -1494,46 +1484,46 @@ end
     @test all(!isnan, basis5)
     @test all(!isinf, basis5)
     @inferred create_basis(x, degree, is_ortho; center_data = false)
- 
+
     # Test with Bool = false
     is_ortho = false
     basis6 = create_basis(x, degree, is_ortho; center_data = true)
     @test size(basis6) == (degree + 1, degree + 1, size(x, 2))
     @inferred create_basis(x, degree, is_ortho; center_data = true)
- end
- 
- @testitem "create_basis_consistency_tests" begin
+end
+
+@testitem "create_basis_consistency_tests" begin
     x = rand(50, 2)
     degree = 2
- 
+
     # Test that default equals explicit orthonormal with centering
     basis_default = create_basis(x, degree)
     basis_explicit = create_basis(x, degree, Val(true); center_data = true)
-    @test isapprox(basis_default, basis_explicit, atol = 1e-12)
- 
+    @test isapprox(basis_default, basis_explicit, atol = 1.0e-12)
+
     # Test that Bool dispatch works correctly
     basis_bool_true = create_basis(x, degree, true; center_data = true)
     basis_val_true = create_basis(x, degree, Val(true); center_data = true)
-    @test isapprox(basis_bool_true, basis_val_true, atol = 1e-12)
- 
+    @test isapprox(basis_bool_true, basis_val_true, atol = 1.0e-12)
+
     basis_bool_false = create_basis(x, degree, false)
     basis_val_false = create_basis(x, degree, Val(false))
-    @test isapprox(basis_bool_false, basis_val_false, atol = 1e-12)
- end
- 
- @testitem "create_basis_centering_parameter_tests" begin
+    @test isapprox(basis_bool_false, basis_val_false, atol = 1.0e-12)
+end
+
+@testitem "create_basis_centering_parameter_tests" begin
     x = rand(50, 2)
     degree = 2
- 
+
     # Test that center_data parameter actually affects orthonormal basis
     basis_centered = create_basis(x, degree, Val(true); center_data = true)
     basis_uncentered = create_basis(x, degree, Val(true); center_data = false)
-    
+
     # They should be nearly identical due to backward transformation
-    @test isapprox(basis_centered, basis_uncentered, atol = 1e-8)
-    
+    @test isapprox(basis_centered, basis_uncentered, atol = 1.0e-8)
+
     # Test that center_data is ignored for monomial basis
     basis_mono_true = create_basis(x, degree, Val(false))
     basis_mono_false = create_basis(x, degree, Val(false); center_data = false)
-    @test isapprox(basis_mono_true, basis_mono_false, atol = 1e-12)
- end
+    @test isapprox(basis_mono_true, basis_mono_false, atol = 1.0e-12)
+end
