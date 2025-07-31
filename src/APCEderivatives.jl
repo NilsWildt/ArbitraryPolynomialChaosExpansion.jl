@@ -63,7 +63,7 @@ function ChainRulesCore.frule((_, Δx), ::typeof(reverse_columns!), x)
         y = reverse_columns!(x)
         return y, Δx
     end
-    
+
     Δx_reversed = similar(Δx)
     for row in axes(Δx, 1)
         Δx_reversed[row, :] = reverse(Δx[row, :])
@@ -482,21 +482,20 @@ end
 end
 
 
-
 @testitem "reverse_columns_chainrules" begin
     import Pkg
     Pkg.add("Zygote")
     Pkg.add("ChainRulesCore")
     using ChainRulesCore
     using ForwardDiff
-    
+
     # Test with non-empty matrix
     x = rand(3, 4)
     Δx = rand(3, 4)
-    
+
     # Test frule manually
     y, Δy = ChainRulesCore.frule((NoTangent(), Δx), reverse_columns!, copy(x))
-    
+
     # Expected behavior
     x_copy = copy(x)
     reverse_columns!(x_copy)
@@ -505,10 +504,10 @@ end
     for row in axes(Δx, 1)
         expected_Δy[row, :] = reverse(Δx[row, :])
     end
-    
+
     @test isapprox(y, expected_y)
     @test isapprox(Δy, expected_Δy)
-    
+
     # Test with empty matrix
     x_empty = Matrix{Float64}(undef, 0, 0)
     Δx_empty = Matrix{Float64}(undef, 0, 0)

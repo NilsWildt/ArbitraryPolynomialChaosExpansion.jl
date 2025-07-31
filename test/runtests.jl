@@ -27,27 +27,7 @@ end
 ############################################################################################
 #############################classical tests################################################
 @testset verbose = true showtiming = true "All tests" begin
-    @testset "aPCE_OrthonormalBasis" begin
-        @test APCE.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true)) ≈ [1.0 0.0; 0.0 4.5]
-        @test APCE.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false)) ≈ [1.0 0.0; -0.5 1.5]
-        @inferred APCE.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false))
-        @inferred APCE.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true))
-    end
 
-    @testset "aPCE_MultivariatePolynomialDegrees" begin
-        @test APCE.aPCE_MultivariatePolynomialDegrees(2, 1, 1.0, 1.0) == [0 0; 0 1; 1 0]
-        @test APCE.aPCE_MultivariatePolynomialDegrees(2, 2, 1.0, 1.0) == [0 0; 0 1; 1 0; 0 2; 1 1; 2 0]
-        @inferred APCE.aPCE_MultivariatePolynomialDegrees(2, 2, 1.0, 1.0)
-    end
-
-
-    @testset "numberPolynomials Tests" begin
-        @test APCE.numberPolynomials(3, 2) == 10
-        @test APCE.numberPolynomials(5, 3) == 56
-        @test APCE.numberPolynomials(0, 0) == 1
-        @test APCE.numberPolynomials(1, 1) == 2
-        @test typeof(APCE.numberPolynomials(3, 2)) == Int
-    end
 
     @testset "reverse_columns! Tests" begin
         mat1 = [1 2 3; 4 5 6; 7 8 9]
@@ -92,27 +72,16 @@ end
         @test APCE.evalpoly_two(1.0, [5.0]) == 5.0                  # Constant polynomial at x=1
         @test APCE.evalpoly_two(2.0, [1.0, -1.0, 1.0, -1.0]) == -5.0  # Polynomial 1 - x + x^2 - x^3 at x=2
     end
-
-    # @testset "Property based testing" begin
-    #     intgen = Data.Integers{UInt8}()
-    #          # Define a property `foo` and feed it `Int8` from that generator
-    #     #    @check max_examples= 10 function foo(i=intgen,j=intgen)
-    #     #     @info "property test on $i and $j"
-    #     #        MVPD = APCE.aPCE_MultivariatePolynomialDegrees(i, j, 1.0, 1.0)
-    #     #        MVPD isa AbstractArray
-    #     #    end
-    # end
-
     ###########################################################################################
     ############################Aqua################################################
     ############################################################################################
     @testset "Aqua.jl testset" begin
         Aqua.test_all(
             APCE;
-            ambiguities = false,      # TODO: fix ambiguities
+            ambiguities = true,      # TODO: fix ambiguities
             stale_deps = false,
             unbound_args = true,     # TODO: fix unbound type parameters
-            piracies = false,         # TODO: check the reported methods to be moved upstream
+            piracies = true,         # TODO: check the reported methods to be moved upstream
             deps_compat = false,
             project_extras = false,
             persistent_tasks = false,

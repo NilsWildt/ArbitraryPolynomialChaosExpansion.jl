@@ -369,7 +369,8 @@ function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::V
         try
             OrthogonalBasis[degree + 1, 1:(degree + 1)] .= Hankel \ Vc
         catch
-            OrthogonalBasis[degree + 1, 1:(degree + 1)] .= pinv(Hankel) * Vc
+            # OrthogonalBasis[degree + 1, 1:(degree + 1)] .= pinv(Hankel) * Vc
+            OrthogonalBasis[degree + 1, 1:(degree + 1)] .= solve_levenberg_marquardt(Hankel, Vc)
         end
 
         # Normalization
@@ -416,6 +417,79 @@ function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::V
 
     return OrthonormalBasis
 end
+
+function solve_levenberg_marquardt(Psi, y; λ_init=1e-3, max_iter=50)
+    # Levenberg-Marquardt with adaptive regularization
+    x = pinv(Psi) * y  # Initial guess
+    λ = λ_init
+    
+    for iter in 1:max_iter
+        residual = Psi * x - y
+        J = Psi  # Jacobian is just Psi for linear case
+        
+        # Gauss-Newton + damping
+        JtJ = J' * J
+        Jtr = J' * residual
+        
+        # Try step with current λ
+        δx = -(JtJ + λ * I) \ Jtr
+        x_new = x + δx
+        
+        new_residual = Psi * x_new - y
+        
+        # Accept/reject step and adjust λ
+        if norm(new_residual) < norm(residual)
+            x = x_new
+            λ *= 0.3  # Decrease damping
+        else
+            λ *= 2.0  # Increase damping
+        end
+        
+        if norm(δx) < 1e-15
+            break
+        end
+    end
+    
+    return x
+end
+
+function robust_iterative_refinement(A, b; maxiter = 5, tol = 1.0e-10)
+    # Initial solution using pseudoinverse
+    x = pinv(A) * b
+
+    # Sanitize initial solution
+    x = map(xi -> isfinite(xi) ? xi : 0.0, x)
+
+    converged = false
+
+    for iter in 1:maxiter
+        r = b - A * x
+
+        # Check convergence
+        if norm(r) < tol
+            converged = true
+            break
+        end
+
+        # Compute correction using pseudoinverse for robustness
+        dx = pinv(A) * r
+        x_new = x + dx
+
+        # Check if new solution is valid
+        if all(isfinite, x_new)
+            x = x_new
+        else
+            # Non-finite correction - stop refinement
+            break
+        end
+    end
+    if !converged
+        @warn "Iterative refinement did not converge"
+    end
+
+    return x
+end
+
 
 function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::Val{false}) where {T <: Real, S <: Integer}
     if ndims(Data) > 1 && size(Data, 2) > 1
@@ -467,7 +541,8 @@ function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::V
         try
             OrthogonalBasis[degree + 1, 1:(degree + 1)] .= Hankel \ Vc
         catch
-            OrthogonalBasis[degree + 1, 1:(degree + 1)] .= pinv(Hankel) * Vc
+            OrthogonalBasis[degree + 1, 1:(degree + 1)] .= solve_levenberg_marquardt(Hankel, Vc)
+            # OrthogonalBasis[degree + 1, 1:(degree + 1)] .= pinv(Hankel) * Vc
         end
 
         # Normalization using original data
@@ -1526,4 +1601,26 @@ end
     basis_mono_true = create_basis(x, degree, Val(false))
     basis_mono_false = create_basis(x, degree, Val(false); center_data = false)
     @test isapprox(basis_mono_true, basis_mono_false, atol = 1.0e-12)
+end
+
+@testitem "solve_levenberg_marquardt_basic_and_illconditioned" begin
+    using LinearAlgebra
+    # Well-conditioned system
+    A = [3.0 2.0; 1.0 2.0]
+    b = [5.0, 3.0]
+    x_true = [1.0, 1.0]
+    x_refined = APCE.solve_levenberg_marquardt(A, b)
+    @test isapprox(x_refined, x_true, atol = 1.0e-10)
+
+    eps_val = 1.0e-8
+    A_ill = [1.0 1.0; 1.0 1.0 + eps_val]
+    b_ill = [2.0, 2.0 + eps_val]
+    x_true_ill = [1.0, 1.0]
+    x_refined_ill = APCE.solve_levenberg_marquardt(A_ill, b_ill)
+    @test isapprox(x_refined_ill, x_true_ill, atol = 1.0e-6)
+
+    x_single = A_ill \ b_ill
+    err_single = norm(x_single - x_true_ill)
+    err_refined = norm(x_refined_ill - x_true_ill)
+    @test err_refined <= err_single + 1.0e-8
 end
