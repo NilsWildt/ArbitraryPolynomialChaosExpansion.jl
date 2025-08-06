@@ -6,8 +6,8 @@ using LinearAlgebra: checksquare
 using LazyArrays
 using ReverseDiff: ReverseDiff
 using LinearAlgebra: svd, norm, pinv, Diagonal, tr
-using Enzyme
-using Mooncake: @from_rrule, DefaultCtx
+# using Enzyme
+# using Mooncake: @from_rrule, DefaultCtx
 
 # Define CPU_MODEL safely with fallback
 const CPU_MODEL = get(
