@@ -744,18 +744,7 @@ function create_basis(x::AbstractArray{T}, degree::Integer, ::Val{false}; center
     return FullBasis
 end
 
-"""
-    create_basis(x, degree, is_orthonormal::Bool; center_data = true)
 
-Convenience method that converts Bool to Val for dispatch.
-"""
-function create_basis(x, degree, is_orthonormal::Bool; center_data::Bool = true)
-    if is_orthonormal
-        return create_basis(x, degree, Val(true); center_data = center_data)
-    else
-        return create_basis(x, degree, Val(false); center_data = center_data)
-    end
-end
 
 # ===== PSI MATRIX FUNCTIONS =====
 
