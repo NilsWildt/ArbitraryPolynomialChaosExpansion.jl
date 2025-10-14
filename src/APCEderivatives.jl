@@ -20,8 +20,8 @@ Key Features:
 using ChainRulesCore
 using ForwardDiff
 using ReverseDiff
-using Mooncake: @from_rrule, DefaultCtx
-using Enzyme
+# using Mooncake: @from_rrule, DefaultCtx
+# using Enzyme
 using DispatchDoctor: @stable
 
 # ===== UTILITY FUNCTIONS =====
@@ -331,7 +331,7 @@ function ChainRulesCore.rrule(::typeof(create_basis), x::AbstractArray, degree::
 end
 
 
-Enzyme.@import_rrule(typeof(create_basis), AbstractArray, Integer, Val)
+# Enzyme.@import_rrule(typeof(create_basis), AbstractArray, Integer, Val)
 
 
 ReverseDiff.@grad_from_chainrules create_basis(
@@ -339,20 +339,20 @@ ReverseDiff.@grad_from_chainrules create_basis(
 );
 
 
-@from_rrule DefaultCtx Tuple{
-    typeof(create_basis),
-    AbstractArray, Integer,
-}
+# @from_rrule DefaultCtx Tuple{
+#     typeof(create_basis),
+#     AbstractArray, Integer,
+# }
 
-@from_rrule DefaultCtx Tuple{
-    typeof(create_basis),
-    AbstractArray, Integer, Val,
-}
+# @from_rrule DefaultCtx Tuple{
+#     typeof(create_basis),
+#     AbstractArray, Integer, Val,
+# }
 
-@from_rrule DefaultCtx Tuple{
-    typeof(create_basis),
-    AbstractArray, Integer, Bool,
-}
+# @from_rrule DefaultCtx Tuple{
+#     typeof(create_basis),
+#     AbstractArray, Integer, Bool,
+# }
 
 # ===== TESTS =====
 
