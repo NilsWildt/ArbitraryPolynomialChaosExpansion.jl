@@ -13,8 +13,6 @@ ArbitraryPolynomialChaosExpansion.jl (APCE) provides efficient tools for:
 - **Moment-Based Orthogonalization**: Construct data-driven orthogonal polynomial bases
 - **Uncertainty Quantification**: Compute statistical moments and sensitivities
 - **Surrogate Modeling**: Build fast-to-evaluate polynomial approximations of expensive simulations
-- **Automatic Differentiation**: Full support for ForwardDiff, Zygote, ReverseDiff, Enzyme, and Mooncake
-
 ## Features
 
 - Data-driven orthonormal polynomial basis construction (degrees 0-4 with closed-form solutions)
@@ -147,22 +145,6 @@ Contributions are welcome! Please feel free to submit issues or pull requests.
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Citation
-
-If you use this package in your research, please cite:
-
-```bibtex
-@software{wildt2024apce,
-  author = {Wildt, Nils},
-  title = {ArbitraryPolynomialChaosExpansion.jl: A Julia Package for Arbitrary Polynomial Chaos Expansion},
-  year = {2024},
-  url = {https://github.com/NilsWildt/ArbitraryPolynomialChaosExpansion.jl},
-  version = {0.2.4}
-}
-```
-
-Or use the `CITATION.cff` file for automated citation tools.
 
 ## References
 
