@@ -1,7 +1,7 @@
 using Revise
 using DrWatson
 
-@quickactivate "APCE"
+@quickactivate "ArbitraryPolynomialChaosExpansion"
 module Runner
     using CairoMakie
     using Makie
@@ -28,8 +28,9 @@ module Runner
     info_logging = ConsoleLogger(stderr, Logging.Info)
     # Here you may include files from the source directory
     global_logger(info_logging)
-    include(srcdir("APCE.jl"))
-    using .APCE
+    include(srcdir("ArbitraryPolynomialChaosExpansion.jl"))
+    using .ArbitraryPolynomialChaosExpansion
+    const APCE = ArbitraryPolynomialChaosExpansion
     # using Preferences
     # set_preferences!(APCE, "precompile_workload" => false; force=true)
 

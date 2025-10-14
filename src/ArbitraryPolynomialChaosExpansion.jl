@@ -1,4 +1,4 @@
-module APCE
+module ArbitraryPolynomialChaosExpansion
 using TestItems
 using LinearAlgebra.BLAS: gemv, gemv!, gemm!, trsm!, axpy!, ger!
 using LinearAlgebra: LinearAlgebra, BLAS, transpose
@@ -90,7 +90,7 @@ BLAS.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
 configdir(args...) = projectdir("configs", args...)
 outputdir(args...) = projectdir("output", args...)
 
-export create_basis!, aPCE_FullBasis, aPCE_MultivariatePolynomialDegrees, aPCE_PsiPolynomialMatrix, compose_Ψ, GaussianCollocation, partitionTrainTest, special_sort_two_arrays!, train!, evaluate_Ψ, aPCE, aPCE_MultivariatePolynomialDegrees, aPCE_OrthonormalBasis, create_basis, GaussianCollocation, normalization_functions, partitionTrainTest, predict, train!, UQ, aPCE_PsiPolynomialMatrix_zygote, reverse_columns!, get_orthogonal_basis, compute_moments!
+export aPCE_FullBasis, aPCE_MultivariatePolynomialDegrees, aPCE_PsiPolynomialMatrix, compose_Ψ, GaussianCollocation, partitionTrainTest, special_sort_two_arrays!, train!, evaluate_Ψ, aPCE, aPCE_OrthonormalBasis, create_basis, normalization_functions, predict, UQ, aPCE_PsiPolynomialMatrix_zygote, reverse_columns!, compute_moments!
 
 # Re-export the methods to ensure they're available
 export aPCE_OrthonormalBasis
@@ -118,13 +118,13 @@ include("APCEderivatives.jl")
     end
 end
 
-@testitem "APCE_module_test" begin
+@testitem "ArbitraryPolynomialChaosExpansion_module_test" begin
     # Test basic module functionality
-    @test isdefined(APCE, :aPCE)
-    @test isdefined(APCE, :train!)
-    @test isdefined(APCE, :predict)
-    @test isdefined(APCE, :UQ)
-    @test isdefined(APCE, :GaussianCollocation)
+    @test isdefined(ArbitraryPolynomialChaosExpansion, :aPCE)
+    @test isdefined(ArbitraryPolynomialChaosExpansion, :train!)
+    @test isdefined(ArbitraryPolynomialChaosExpansion, :predict)
+    @test isdefined(ArbitraryPolynomialChaosExpansion, :UQ)
+    @test isdefined(ArbitraryPolynomialChaosExpansion, :GaussianCollocation)
 end
 
 @testitem "APCE_full_workflow_test" begin
@@ -163,8 +163,8 @@ end
 
 @testitem "APCE_config_test" begin
     # Test configuration functions
-    @test isdefined(APCE, :configdir)
-    @test isdefined(APCE, :outputdir)
+    @test isdefined(ArbitraryPolynomialChaosExpansion, :configdir)
+    @test isdefined(ArbitraryPolynomialChaosExpansion, :outputdir)
 end
 
 @testitem "APCE_type_stability_test" begin
@@ -195,8 +195,8 @@ end
 @testitem "type_stability_tests" begin
     # Test type stability of normalization_functions
     x = rand(10, 2)
-    normalize, inverse_normalize = APCE.normalization_functions(x)
-    @inferred APCE.normalization_functions(x)
+    normalize, inverse_normalize = ArbitraryPolynomialChaosExpansion.normalization_functions(x)
+    @inferred ArbitraryPolynomialChaosExpansion.normalization_functions(x)
     @test typeof(normalize(x)) == typeof(x)
     @test typeof(inverse_normalize(x)) == typeof(x)
 
@@ -204,45 +204,45 @@ end
     TrainingInput = rand(10, 2)
     MultivariatePolynomialDegrees = [0 0; 0 1; 1 0]
     OrthonormalBasis = rand(3, 3, 2)
-    @inferred APCE.compute_Psi_element(1, 1, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, 2)
+    @inferred ArbitraryPolynomialChaosExpansion.compute_Psi_element(1, 1, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, 2)
 
     # Test type stability of evalpoly_two
     x = 2.0
     coeffs = [1.0, 2.0, 3.0]
-    @inferred APCE.evalpoly_two(x, coeffs)
-    @test typeof(APCE.evalpoly_two(x, coeffs)) == Float64
+    @inferred ArbitraryPolynomialChaosExpansion.evalpoly_two(x, coeffs)
+    @test typeof(ArbitraryPolynomialChaosExpansion.evalpoly_two(x, coeffs)) == Float64
 
     # Test type stability of evaluate_derivative_horner
-    @inferred APCE.evaluate_derivative_horner(x, coeffs)
-    @test typeof(APCE.evaluate_derivative_horner(x, coeffs)) == Float64
+    @inferred ArbitraryPolynomialChaosExpansion.evaluate_derivative_horner(x, coeffs)
+    @test typeof(ArbitraryPolynomialChaosExpansion.evaluate_derivative_horner(x, coeffs)) == Float64
 
     # Test type stability of evaluate_polynomial_horner_array
     x_array = [1.0, 2.0, 3.0]
-    @inferred APCE.evaluate_polynomial_horner_array(x_array, coeffs)
-    @test typeof(APCE.evaluate_polynomial_horner_array(x_array, coeffs)) == Vector{Float64}
+    @inferred ArbitraryPolynomialChaosExpansion.evaluate_polynomial_horner_array(x_array, coeffs)
+    @test typeof(ArbitraryPolynomialChaosExpansion.evaluate_polynomial_horner_array(x_array, coeffs)) == Vector{Float64}
 
     # Test type stability of train
     Ψ = rand(10, 5)
     y_rhs = rand(10, 2)
-    @inferred APCE.train(Ψ, y_rhs)
-    @test typeof(APCE.train(Ψ, y_rhs)) == Matrix{Float64}
+    @inferred ArbitraryPolynomialChaosExpansion.train(Ψ, y_rhs)
+    @test typeof(ArbitraryPolynomialChaosExpansion.train(Ψ, y_rhs)) == Matrix{Float64}
 
     # Test type stability of aPCE_FullBasis
     Data = rand(10)
     Degree = 2
-    @inferred APCE.aPCE_FullBasis(Data, Degree)
-    @test typeof(APCE.aPCE_FullBasis(Data, Degree)) == Matrix{Float64}
+    @inferred ArbitraryPolynomialChaosExpansion.aPCE_FullBasis(Data, Degree)
+    @test typeof(ArbitraryPolynomialChaosExpansion.aPCE_FullBasis(Data, Degree)) == Matrix{Float64}
 
     # Test type stability of GaussianCollocation
     input_dimensions = 2
     ExpansionDegree = 2
     # Create a proper orthonormal basis for testing
     Data = rand(100, input_dimensions)
-    OrthonormalBasis = APCE.create_basis(Data, ExpansionDegree)
+    OrthonormalBasis = ArbitraryPolynomialChaosExpansion.create_basis(Data, ExpansionDegree)
     InputDistribution = rand(10, input_dimensions)
     NumberOfTerms = 6
-    @inferred APCE.GaussianCollocation(input_dimensions, ExpansionDegree, OrthonormalBasis, InputDistribution, NumberOfTerms)
-    @test typeof(APCE.GaussianCollocation(input_dimensions, ExpansionDegree, OrthonormalBasis, InputDistribution, NumberOfTerms)) == Matrix{Float64}
+    @inferred ArbitraryPolynomialChaosExpansion.GaussianCollocation(input_dimensions, ExpansionDegree, OrthonormalBasis, InputDistribution, NumberOfTerms)
+    @test typeof(ArbitraryPolynomialChaosExpansion.GaussianCollocation(input_dimensions, ExpansionDegree, OrthonormalBasis, InputDistribution, NumberOfTerms)) == Matrix{Float64}
 end
 
 end

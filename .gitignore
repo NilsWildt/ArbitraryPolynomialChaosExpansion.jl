@@ -33,3 +33,16 @@ _research
 .vscode
 benchmark
 plots
+
+# macOS
+.DS_Store
+
+# Vim swap files
+*.swp
+*.swo
+
+# Jupyter
+.ipynb_checkpoints/
+
+# User-specific preferences
+LocalPreferences.toml

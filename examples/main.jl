@@ -3,7 +3,7 @@ module Main
     using DrWatson
     using PropDicts
     # using PProf
-    @quickactivate "APCE"
+    @quickactivate "ArbitraryPolynomialChaosExpansion"
     using Logging
     using TerminalLoggers: TerminalLogger
     using ProgressLogging

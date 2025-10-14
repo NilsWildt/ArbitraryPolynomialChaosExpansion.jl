@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: "Wildt"
+    given-names: "Nils"
+title: "ArbitraryPolynomialChaosExpansion.jl: A Julia Package for Arbitrary Polynomial Chaos Expansion"
+version: 0.2.4
+date-released: 2024-01-01
+url: "https://github.com/NilsWildt/ArbitraryPolynomialChaosExpansion.jl"
+license: MIT
+repository-code: "https://github.com/NilsWildt/ArbitraryPolynomialChaosExpansion.jl"
+keywords:
+  - polynomial-chaos
+  - uncertainty-quantification
+  - surrogate-modeling
+  - julia
+abstract: "ArbitraryPolynomialChaosExpansion.jl provides efficient tools for constructing polynomial chaos expansions with arbitrary polynomial bases, enabling uncertainty quantification and surrogate modeling for complex systems."
