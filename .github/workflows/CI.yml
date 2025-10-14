@@ -53,8 +53,8 @@ jobs:
   #             exit(1)
   #         end'
 
-  testAPCE:
-    name: APCE (${{ matrix.group }}) - ${{ matrix.version }}
+  testArbitraryPolynomialChaosExpansion:
+    name: ArbitraryPolynomialChaosExpansion (${{ matrix.group }}) - ${{ matrix.version }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions: # needed to allow julia-actions/cache to proactively delete old caches that it has created

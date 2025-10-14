@@ -1,4 +1,4 @@
-name = "APCE"
+name = "ArbitraryPolynomialChaosExpansion"
 uuid = "e0c64dd9-0151-4106-bdf9-1cf426dd9187"
 version = "0.2.4"
 authors = ["NilsWildt"]

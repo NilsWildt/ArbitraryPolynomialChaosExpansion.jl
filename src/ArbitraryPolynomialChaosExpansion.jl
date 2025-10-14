@@ -1,4 +1,4 @@
-module APCE
+module ArbitraryPolynomialChaosExpansion
 using TestItems
 using LinearAlgebra.BLAS: gemv, gemv!, gemm!, trsm!, axpy!, ger!
 using LinearAlgebra: LinearAlgebra, BLAS, transpose
@@ -118,13 +118,13 @@ include("APCEderivatives.jl")
     end
 end
 
-@testitem "APCE_module_test" begin
+@testitem "ArbitraryPolynomialChaosExpansion_module_test" begin
     # Test basic module functionality
-    @test isdefined(APCE, :aPCE)
-    @test isdefined(APCE, :train!)
-    @test isdefined(APCE, :predict)
-    @test isdefined(APCE, :UQ)
-    @test isdefined(APCE, :GaussianCollocation)
+    @test isdefined(ArbitraryPolynomialChaosExpansion, :aPCE)
+    @test isdefined(ArbitraryPolynomialChaosExpansion, :train!)
+    @test isdefined(ArbitraryPolynomialChaosExpansion, :predict)
+    @test isdefined(ArbitraryPolynomialChaosExpansion, :UQ)
+    @test isdefined(ArbitraryPolynomialChaosExpansion, :GaussianCollocation)
 end
 
 @testitem "APCE_full_workflow_test" begin

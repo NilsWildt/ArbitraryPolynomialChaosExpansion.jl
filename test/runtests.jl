@@ -13,15 +13,16 @@ using Revise
 using Suppressor
 using BenchmarkTools
 
-using APCE
+using ArbitraryPolynomialChaosExpansion
+const APCE = ArbitraryPolynomialChaosExpansion
 
-set_preferences!(APCE, "precompile_workload" => true; force = true)
+set_preferences!(ArbitraryPolynomialChaosExpansion, "precompile_workload" => true; force = true)
 
-DIT_PATH = joinpath(@__DIR__, "..", "..", "APCE.jl")
+DIT_PATH = joinpath(@__DIR__, "..", "..", "ArbitraryPolynomialChaosExpansion.jl")
 if isdir(DIT_PATH)
     Pkg.develop(; path = DIT_PATH)
 else
-    Pkg.add("APCE")
+    Pkg.add("ArbitraryPolynomialChaosExpansion")
 end
 
 ############################################################################################
