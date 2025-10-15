@@ -101,7 +101,7 @@ module Runner
 
         headers = ["Type", "aPCE", "Data"]
         # Display the table
-        pretty_table(data; header = headers)
+        pretty_table(data; column_labels = headers)
 
         gratio = (1.0 + sqrt(5.0)) / 2.0
         num_plots = size(TrainingOutput, 2) * 2 # Total number of plots (training + validation for each column)

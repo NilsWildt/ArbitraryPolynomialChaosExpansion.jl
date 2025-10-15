@@ -1,6 +1,7 @@
 using Revise
 using DrWatson
 @quickactivate "ArbitraryPolynomialChaosExpansion"
+@usingany UnPack
 module Runner
     using DrWatson
     using PrettyTables
@@ -9,7 +10,7 @@ module Runner
     using TerminalLoggers: TerminalLogger
     using ProgressLogging
     using Logging
-    using BenchmarkTools
+    # using BenchmarkTools
     using Makie
     using StaticArrays
     using CairoMakie
@@ -120,7 +121,7 @@ module Runner
         data = ["Mean" uq.OutputMean[1] mean(ValidationOutput); "Var" uq.OutputVar[1] var(ValidationOutput)]
         headers = ["Type", "aPCE", "Data"]
         # Display the table
-        pretty_table(data; header = headers)
+        pretty_table(data; column_labels = headers)
 
 
         gratio = (1.0 + sqrt(5.0)) / 2.0

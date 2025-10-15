@@ -103,7 +103,7 @@ module Runner
         data = ["Mean" uq.OutputMean[1] mean(ValidationOutput); "Var" uq.OutputVar[1] var(ValidationOutput)]
         headers = ["Type", "aPCE", "Data"]
         # Display the table
-        pretty_table(data; header = headers)
+        pretty_table(data; column_labels = headers)
 
 
         gratio = (1.0 + sqrt(5.0)) / 2.0

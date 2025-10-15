@@ -2,6 +2,7 @@ using Revise
 using DrWatson
 @quickactivate "ArbitraryPolynomialChaosExpansion"
 module Runner
+    using LightweightStats
     using DrWatson
     using PrettyTables
     # using PropDicts
@@ -9,6 +10,8 @@ module Runner
     using TerminalLoggers: TerminalLogger
     using ProgressLogging
     using Logging
+    using Makie
+    using CairoMakie
     # using BenchmarkTools
     # using Makie
     # using CairoMakie
@@ -104,7 +107,7 @@ module Runner
         headers = ["Type", "aPCE", "Data"]
 
         # Display the table
-        pretty_table(data; header = headers)
+        pretty_table(data; column_labels = headers)
 
 
         gratio = (1.0 + sqrt(5.0)) / 2.0
@@ -122,21 +125,21 @@ module Runner
         # Calculate total figure dimensions
         fig_width = subplot_width * num_columns
         fig_height = subplot_height * num_rows
-        fig = Figure(size = (fig_width, fig_height))
+        fig = Makie.Figure(size = (fig_width, fig_height))
 
         # Visualization of Training and Validation Performance
         plot_index = 1 # Track the plot index across both rows and columns
         for i in 1:size(TrainingOutput, 2)
             row, col = divrem(plot_index - 1, Int(num_columns)) .+ (1, 1)
             # Plot training performance
-            ax1 = Axis(fig[row, col], title = "Training Performance $i", xlabel = "Training Response", ylabel = "Prediction Response")
-            scatter!(ax1, TrainingOutput[:, i], PredictionOutput[:, i], color = :red, marker = :circle)
+            ax1 = Makie.Axis(fig[row, col], title = "Training Performance $i", xlabel = "Training Response", ylabel = "Prediction Response")
+            Makie.scatter!(ax1, TrainingOutput[:, i], PredictionOutput[:, i], color = :red, marker = :circle)
             plot_index += 1
 
             row, col = divrem(plot_index - 1, Int(num_columns)) .+ (1, 1)
             # Plot validation performance
-            ax2 = Axis(fig[row, col], title = "Validation Performance $i", xlabel = "Validation Reference", ylabel = "Validation Response")
-            scatter!(ax2, ValidationOutput[:, i], ValidationPredictionOutput[:, i], color = :blue, marker = :circle)
+            ax2 = Makie.Axis(fig[row, col], title = "Validation Performance $i", xlabel = "Validation Reference", ylabel = "Validation Response")
+            Makie.scatter!(ax2, ValidationOutput[:, i], ValidationPredictionOutput[:, i], color = :blue, marker = :circle)
             plot_index += 1
         end
         fig_path = normpath(plotsdir("maria_test2"))

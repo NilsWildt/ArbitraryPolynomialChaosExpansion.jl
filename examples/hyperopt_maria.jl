@@ -98,7 +98,7 @@ module Runner
             data = ["Mean" mean(ValidationPredictionOutput) mean(ValidationOutput); "Var" var(ValidationPredictionOutput) var(ValidationOutput)]
             headers = ["Type", "aPCE", "Data"]
             # Display the table
-            pretty_table(data; header = headers)
+            pretty_table(data; column_labels = headers)
 
 
             gratio = (1.0 + sqrt(5.0)) / 2.0

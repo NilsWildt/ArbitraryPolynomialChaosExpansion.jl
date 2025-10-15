@@ -1,10 +1,11 @@
 using Revise
 using DrWatson
 @quickactivate "ArbitraryPolynomialChaosExpansion"
+@usingany DifferentiationInterfaceTest
+
 module Runner
     using DrWatson
     using PrettyTables
-    using DifferentiationInterfaceTest
     using PropDicts
     using Logging
     using TerminalLoggers: TerminalLogger
@@ -188,7 +189,7 @@ module Runner
             String,
             df;
             backend = Val(:markdown),
-            header = names(df),
+            column_labels = names(df),
             formatters = formatter,
         )
         return Markdown.parse(table) |> display
