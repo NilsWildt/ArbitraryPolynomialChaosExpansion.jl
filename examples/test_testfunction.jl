@@ -1,6 +1,9 @@
 using Revise
 using DrWatson
 @quickactivate "ArbitraryPolynomialChaosExpansion"
+using ShareAdd
+@usingany Makie
+@usingany CairoMakie
 @usingany UnPack
 module Runner
     using DrWatson
@@ -11,13 +14,14 @@ module Runner
     using ProgressLogging
     using Logging
     # using BenchmarkTools
-    using Makie
     using StaticArrays
-    using CairoMakie
+
     using UnPack
     using MAT
     using Random
     using Distributions
+    using Makie
+    using CairoMakie
     loggingdir(args...) = projectdir("output", "logs", args...)
     mkpath(loggingdir())
     # io = open(loggingdir("debug.txt"), "w")
