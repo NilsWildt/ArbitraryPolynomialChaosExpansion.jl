@@ -2,7 +2,7 @@ using Pkg: Pkg
 using Chairmarks
 using DrWatson
 using ForwardDiff
-using JET
+# using JET
 using MethodAnalysis
 using Preferences
 using Random
@@ -91,19 +91,19 @@ end
     end
     ############################################################################################
 
-    @testset "JET.jl testset" begin
-        let
-            FT = Float64
-            TrainingInput = rand(10, 2) |> Array{FT}
-            TrainingOutput = rand(10, 2) |> Array{FT} |> Array{FT}
-            degree = 2
-            apc_instance = aPCE(TrainingInput, degree; outdim = size(TrainingOutput, 2), is_orthonormal = true, normalize_data = true)
-            JET.@test_opt target_modules = (@__MODULE__,) aPCE(TrainingInput, degree; outdim = size(TrainingOutput, 2), is_orthonormal = true, normalize_data = true)
-            JET.@test_opt target_modules = (@__MODULE__,) aPCE(TrainingInput, degree; outdim = size(TrainingOutput, 2), is_orthonormal = false, normalize_data = true)
-            JET.@test_opt target_modules = (@__MODULE__,) train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion = true, reg_order = 3)
-            JET.@test_opt target_modules = (@__MODULE__,) predict(apc_instance, TrainingInput)
-            JET.@test_opt target_modules = (@__MODULE__,) UQ(apc_instance)
-        end
-    end
+    # @testset "JET.jl testset" begin
+    #     let
+    #         FT = Float64
+    #         TrainingInput = rand(10, 2) |> Array{FT}
+    #         TrainingOutput = rand(10, 2) |> Array{FT} |> Array{FT}
+    #         degree = 2
+    #         apc_instance = aPCE(TrainingInput, degree; outdim = size(TrainingOutput, 2), is_orthonormal = true, normalize_data = true)
+    #         JET.@test_opt target_modules = (@__MODULE__,) aPCE(TrainingInput, degree; outdim = size(TrainingOutput, 2), is_orthonormal = true, normalize_data = true)
+    #         JET.@test_opt target_modules = (@__MODULE__,) aPCE(TrainingInput, degree; outdim = size(TrainingOutput, 2), is_orthonormal = false, normalize_data = true)
+    #         JET.@test_opt target_modules = (@__MODULE__,) train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion = true, reg_order = 3)
+    #         JET.@test_opt target_modules = (@__MODULE__,) predict(apc_instance, TrainingInput)
+    #         JET.@test_opt target_modules = (@__MODULE__,) UQ(apc_instance)
+    #     end
+    # end
 
 end

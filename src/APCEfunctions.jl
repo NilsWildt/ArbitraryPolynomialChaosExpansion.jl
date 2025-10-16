@@ -4,7 +4,9 @@
 # https://opensource.org/licenses/MIT
 
 using ChainRulesCore
-
+#    include(srcdir("ArbitraryPolynomialChaosExpansion.jl"))
+#     using .ArbitraryPolynomialChaosExpansion
+    # const APCE = ArbitraryPolynomialChaosExpansion
 
 """
 Custom sorting element for simultaneous sorting of mean and variance
@@ -953,11 +955,11 @@ end
 end
 
 @testitem "numberPolynomials" begin
-    @test APCE.numberPolynomials(3, 2) == 10
-    @test APCE.numberPolynomials(5, 3) == 56
-    @test APCE.numberPolynomials(0, 0) == 1
-    @test APCE.numberPolynomials(1, 1) == 2
-    @test typeof(APCE.numberPolynomials(3, 2)) == Int
+    @test ArbitraryPolynomialChaosExpansion.numberPolynomials(3, 2) == 10
+    @test ArbitraryPolynomialChaosExpansion.numberPolynomials(5, 3) == 56
+    @test ArbitraryPolynomialChaosExpansion.numberPolynomials(0, 0) == 1
+    @test ArbitraryPolynomialChaosExpansion.numberPolynomials(1, 1) == 2
+    @test typeof(ArbitraryPolynomialChaosExpansion.numberPolynomials(3, 2)) == Int
 end
 
 @testitem "aPCE_MultivariatePolynomialDegrees_test" begin
@@ -975,18 +977,18 @@ end
 end
 
 @testitem "numberPolynomials_test" begin
-    @test APCE.numberPolynomials(3, 2) == 10
-    @test APCE.numberPolynomials(5, 3) == 56
-    @test APCE.numberPolynomials(0, 0) == 1
-    @test APCE.numberPolynomials(1, 1) == 2
-    @test typeof(APCE.numberPolynomials(3, 2)) == Int
+    @test ArbitraryPolynomialChaosExpansion.numberPolynomials(3, 2) == 10
+    @test ArbitraryPolynomialChaosExpansion.numberPolynomials(5, 3) == 56
+    @test ArbitraryPolynomialChaosExpansion.numberPolynomials(0, 0) == 1
+    @test ArbitraryPolynomialChaosExpansion.numberPolynomials(1, 1) == 2
+    @test typeof(ArbitraryPolynomialChaosExpansion.numberPolynomials(3, 2)) == Int
 end
 
 @testitem "type_stability_tests" begin
     # Test type stability of normalization_functions
     x = rand(10, 2)
-    normalize, inverse_normalize = APCE.normalization_functions(x)
-    @inferred APCE.normalization_functions(x)
+    normalize, inverse_normalize = ArbitraryPolynomialChaosExpansion.normalization_functions(x)
+    @inferred ArbitraryPolynomialChaosExpansion.normalization_functions(x)
     @test typeof(normalize(x)) == typeof(x)
     @test typeof(inverse_normalize(x)) == typeof(x)
 
@@ -994,34 +996,34 @@ end
     TrainingInput = rand(10, 2)
     MultivariatePolynomialDegrees = [0 0; 0 1; 1 0]
     OrthonormalBasis = rand(3, 3, 2)
-    @inferred APCE.compute_Psi_element(1, 1, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, 2)
+    @inferred ArbitraryPolynomialChaosExpansion.compute_Psi_element(1, 1, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, 2)
 
     # Test type stability of evalpoly_two
     x = 2.0
     coeffs = [1.0, 2.0, 3.0]
-    @inferred APCE.evalpoly_two(x, coeffs)
-    @test typeof(APCE.evalpoly_two(x, coeffs)) == Float64
+    @inferred ArbitraryPolynomialChaosExpansion.evalpoly_two(x, coeffs)
+    @test typeof(ArbitraryPolynomialChaosExpansion.evalpoly_two(x, coeffs)) == Float64
 
     # Test type stability of evaluate_derivative_horner
-    @inferred APCE.evaluate_derivative_horner(x, coeffs)
-    @test typeof(APCE.evaluate_derivative_horner(x, coeffs)) == Float64
+    @inferred ArbitraryPolynomialChaosExpansion.evaluate_derivative_horner(x, coeffs)
+    @test typeof(ArbitraryPolynomialChaosExpansion.evaluate_derivative_horner(x, coeffs)) == Float64
 
     # Test type stability of evaluate_polynomial_horner_array
     x_array = [1.0, 2.0, 3.0]
-    @inferred APCE.evaluate_polynomial_horner_array(x_array, coeffs)
-    @test typeof(APCE.evaluate_polynomial_horner_array(x_array, coeffs)) == Vector{Float64}
+    @inferred ArbitraryPolynomialChaosExpansion.evaluate_polynomial_horner_array(x_array, coeffs)
+    @test typeof(ArbitraryPolynomialChaosExpansion.evaluate_polynomial_horner_array(x_array, coeffs)) == Vector{Float64}
 
     # Test type stability of train
     Ψ = rand(10, 5)
     y_rhs = rand(10, 2)
-    @inferred APCE.train(Ψ, y_rhs)
-    @test typeof(APCE.train(Ψ, y_rhs)) == Matrix{Float64}
+    @inferred ArbitraryPolynomialChaosExpansion.train(Ψ, y_rhs)
+    @test typeof(ArbitraryPolynomialChaosExpansion.train(Ψ, y_rhs)) == Matrix{Float64}
 
     # Test type stability of aPCE_FullBasis
     Data = rand(10)
     Degree = 2
-    @inferred APCE.aPCE_FullBasis(Data, Degree)
-    @test typeof(APCE.aPCE_FullBasis(Data, Degree)) == Matrix{Float64}
+    @inferred ArbitraryPolynomialChaosExpansion.aPCE_FullBasis(Data, Degree)
+    @test typeof(ArbitraryPolynomialChaosExpansion.aPCE_FullBasis(Data, Degree)) == Matrix{Float64}
 
     # Test type stability of GaussianCollocation
     input_dimensions = 2
@@ -1029,38 +1031,38 @@ end
     OrthonormalBasis = rand(3, 3, 2)
     InputDistribution = rand(10, 2)
     NumberOfTerms = 6
-    @inferred APCE.GaussianCollocation(input_dimensions, ExpansionDegree, OrthonormalBasis, InputDistribution, NumberOfTerms)
-    @test typeof(APCE.GaussianCollocation(input_dimensions, ExpansionDegree, OrthonormalBasis, InputDistribution, NumberOfTerms)) == Matrix{Float64}
+    @inferred ArbitraryPolynomialChaosExpansion.GaussianCollocation(input_dimensions, ExpansionDegree, OrthonormalBasis, InputDistribution, NumberOfTerms)
+    @test typeof(ArbitraryPolynomialChaosExpansion.GaussianCollocation(input_dimensions, ExpansionDegree, OrthonormalBasis, InputDistribution, NumberOfTerms)) == Matrix{Float64}
 end
 
 @testitem "edge_cases_tests" begin
     # Test edge cases for evalpoly_two
-    @test APCE.evalpoly_two(0.0, [1.0]) == 1.0  # Constant polynomial
-    @test APCE.evalpoly_two(1.0, [0.0, 0.0]) == 0.0  # Zero polynomial
-    @test APCE.evalpoly_two(Inf, [1.0, 2.0]) == Inf  # Infinity input
-    @test isnan(APCE.evalpoly_two(NaN, [1.0, 2.0]))  # NaN input
+    @test ArbitraryPolynomialChaosExpansion.evalpoly_two(0.0, [1.0]) == 1.0  # Constant polynomial
+    @test ArbitraryPolynomialChaosExpansion.evalpoly_two(1.0, [0.0, 0.0]) == 0.0  # Zero polynomial
+    @test ArbitraryPolynomialChaosExpansion.evalpoly_two(Inf, [1.0, 2.0]) == Inf  # Infinity input
+    @test isnan(ArbitraryPolynomialChaosExpansion.evalpoly_two(NaN, [1.0, 2.0]))  # NaN input
 
     # Test edge cases for evaluate_derivative_horner
-    @test APCE.evaluate_derivative_horner(0.0, [1.0]) == 0.0  # Constant polynomial
-    @test APCE.evaluate_derivative_horner(1.0, [0.0, 0.0]) == 0.0  # Zero polynomial
+    @test ArbitraryPolynomialChaosExpansion.evaluate_derivative_horner(0.0, [1.0]) == 0.0  # Constant polynomial
+    @test ArbitraryPolynomialChaosExpansion.evaluate_derivative_horner(1.0, [0.0, 0.0]) == 0.0  # Zero polynomial
 
     # Test edge cases for train
     Ψ = zeros(5, 3)
     y_rhs = zeros(5, 2)
-    @test all(iszero, APCE.train(Ψ, y_rhs))  # Zero inputs
-    @test size(APCE.train(Ψ, y_rhs)) == (3, 2)  # Correct output size
+    @test all(iszero, ArbitraryPolynomialChaosExpansion.train(Ψ, y_rhs))  # Zero inputs
+    @test size(ArbitraryPolynomialChaosExpansion.train(Ψ, y_rhs)) == (3, 2)  # Correct output size
 
     # Test edge cases for aPCE_FullBasis
-    @test size(APCE.aPCE_FullBasis([1.0], 0)) == (1, 1)  # Degree 0
-    @test size(APCE.aPCE_FullBasis([1.0], 1)) == (2, 2)  # Degree 1
+    @test size(ArbitraryPolynomialChaosExpansion.aPCE_FullBasis([1.0], 0)) == (1, 1)  # Degree 0
+    @test size(ArbitraryPolynomialChaosExpansion.aPCE_FullBasis([1.0], 1)) == (2, 2)  # Degree 1
 end
 
 
 @testitem "aPCE_OrthonormalBasis1" begin
-    @test APCE.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true)) ≈ [1.0 0.0; -0.5 1.5]
-    @test APCE.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false)) ≈ [1.0 0.0; -0.5 1.5]
-    @inferred APCE.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false))
-    @inferred APCE.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true))
+    @test ArbitraryPolynomialChaosExpansion.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true)) ≈ [1.0 0.0; -0.5 1.5]
+    @test ArbitraryPolynomialChaosExpansion.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false)) ≈ [1.0 0.0; -0.5 1.5]
+    @inferred ArbitraryPolynomialChaosExpansion.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false))
+    @inferred ArbitraryPolynomialChaosExpansion.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true))
 end
 
 @testitem "aPCE_OrthonormalBasis_comprehensive_test_true" begin
@@ -1149,38 +1151,38 @@ end
 @testitem "reverse_columns_test" begin
     mat1 = [1 2 3; 4 5 6; 7 8 9]
     expected1 = [3 2 1; 6 5 4; 9 8 7]
-    APCE.reverse_columns!(mat1)
+    ArbitraryPolynomialChaosExpansion.reverse_columns!(mat1)
     @test mat1 == expected1
 
     mat2 = [1 2; 3 4; 5 6]
     expected2 = [2 1; 4 3; 6 5]
-    APCE.reverse_columns!(mat2)
+    ArbitraryPolynomialChaosExpansion.reverse_columns!(mat2)
     @test mat2 == expected2
 
     mat3 = [1 2 3 4; 5 6 7 8]
     expected3 = [4 3 2 1; 8 7 6 5]
-    APCE.reverse_columns!(mat3)
+    ArbitraryPolynomialChaosExpansion.reverse_columns!(mat3)
     @test mat3 == expected3
 
-    @test typeof(APCE.reverse_columns!(mat1)) == Matrix{Int}
+    @test typeof(ArbitraryPolynomialChaosExpansion.reverse_columns!(mat1)) == Matrix{Int}
 end
 
 
 @testitem "evaluate_derivative_horner_test" begin
-    @test APCE.evaluate_derivative_horner(2.0, [1.0, 2.0, 3.0]) == 14.0  # Derivative of 1 + 2x + 3x^2 at x=2
-    @test APCE.evaluate_derivative_horner(0.0, [1.0, 2.0, 3.0]) == 2.0   # Derivative of 1 + 2x + 3x^2 at x=0
-    @test APCE.evaluate_derivative_horner(1.0, [0.0, 0.0, 0.0]) == 0.0   # Derivative of 0 polynomial at x=1
-    @test APCE.evaluate_derivative_horner(1.0, [5.0]) == 0.0             # Derivative of constant polynomial at x=1
-    @test typeof(APCE.evaluate_derivative_horner(2.0, [1.0, 2.0, 3.0])) == Float64
-    @inferred APCE.evaluate_derivative_horner(1.0, [5.0])
+    @test ArbitraryPolynomialChaosExpansion.evaluate_derivative_horner(2.0, [1.0, 2.0, 3.0]) == 14.0  # Derivative of 1 + 2x + 3x^2 at x=2
+    @test ArbitraryPolynomialChaosExpansion.evaluate_derivative_horner(0.0, [1.0, 2.0, 3.0]) == 2.0   # Derivative of 1 + 2x + 3x^2 at x=0
+    @test ArbitraryPolynomialChaosExpansion.evaluate_derivative_horner(1.0, [0.0, 0.0, 0.0]) == 0.0   # Derivative of 0 polynomial at x=1
+    @test ArbitraryPolynomialChaosExpansion.evaluate_derivative_horner(1.0, [5.0]) == 0.0             # Derivative of constant polynomial at x=1
+    @test typeof(ArbitraryPolynomialChaosExpansion.evaluate_derivative_horner(2.0, [1.0, 2.0, 3.0])) == Float64
+    @inferred ArbitraryPolynomialChaosExpansion.evaluate_derivative_horner(1.0, [5.0])
 end
 
 @testitem "evalpoly_two_test" begin
-    @test APCE.evalpoly_two(2.0, [1.0, 2.0, 3.0, 4.0]) == 49.0  # Polynomial 1 + 2x + 3x^2 + 4x^3 at x=2
-    @test APCE.evalpoly_two(0.0, [1.0, 2.0, 3.0, 4.0]) == 1.0   # Polynomial 1 + 2x + 3x^2 + 4x^3 at x=0
-    @test APCE.evalpoly_two(1.0, [0.0, 0.0, 0.0, 0.0]) == 0.0   # Zero polynomial at x=1
-    @test APCE.evalpoly_two(1.0, [5.0]) == 5.0                  # Constant polynomial at x=1
-    @test APCE.evalpoly_two(2.0, [1.0, -1.0, 1.0, -1.0]) == -5.0  # Polynomial 1 - x + x^2 - x^3 at x=2
+    @test ArbitraryPolynomialChaosExpansion.evalpoly_two(2.0, [1.0, 2.0, 3.0, 4.0]) == 49.0  # Polynomial 1 + 2x + 3x^2 + 4x^3 at x=2
+    @test ArbitraryPolynomialChaosExpansion.evalpoly_two(0.0, [1.0, 2.0, 3.0, 4.0]) == 1.0   # Polynomial 1 + 2x + 3x^2 + 4x^3 at x=0
+    @test ArbitraryPolynomialChaosExpansion.evalpoly_two(1.0, [0.0, 0.0, 0.0, 0.0]) == 0.0   # Zero polynomial at x=1
+    @test ArbitraryPolynomialChaosExpansion.evalpoly_two(1.0, [5.0]) == 5.0                  # Constant polynomial at x=1
+    @test ArbitraryPolynomialChaosExpansion.evalpoly_two(2.0, [1.0, -1.0, 1.0, -1.0]) == -5.0  # Polynomial 1 - x + x^2 - x^3 at x=2
 end
 
 @testitem "EstrinPoly_test" begin
@@ -1196,17 +1198,17 @@ end
 
 
 @testitem "derivative_coeffs_test" begin
-    @test APCE.derivative_coeffs([1.0, 2.0, 3.0]) == [2.0, 6.0]  # Derivative of 1 + 2x + 3x^2
-    @test APCE.derivative_coeffs([0.0, 0.0, 0.0]) == [0.0, 0.0]  # Derivative of 0 polynomial
-    @test APCE.derivative_coeffs([5.0]) == [0.0]                 # Derivative of constant polynomial
-    @test APCE.derivative_coeffs([1.0, -1.0, 1.0, -1.0]) == [-1.0, 2.0, -3.0]  # Derivative of 1 - x + x^2 - x^3
+    @test ArbitraryPolynomialChaosExpansion.derivative_coeffs([1.0, 2.0, 3.0]) == [2.0, 6.0]  # Derivative of 1 + 2x + 3x^2
+    @test ArbitraryPolynomialChaosExpansion.derivative_coeffs([0.0, 0.0, 0.0]) == [0.0, 0.0]  # Derivative of 0 polynomial
+    @test ArbitraryPolynomialChaosExpansion.derivative_coeffs([5.0]) == [0.0]                 # Derivative of constant polynomial
+    @test ArbitraryPolynomialChaosExpansion.derivative_coeffs([1.0, -1.0, 1.0, -1.0]) == [-1.0, 2.0, -3.0]  # Derivative of 1 - x + x^2 - x^3
 end
 
 @testitem "create_basis_orthonormal_true_test" begin
     # Test basic functionality
     x = rand(100, 2)
     degree = 3
-    basis = APCE.create_basis(x, degree, Val(true))
+    basis = ArbitraryPolynomialChaosExpansion.create_basis(x, degree, Val(true))
 
     @test size(basis) == (degree + 1, degree + 1, size(x, 2))
     @test eltype(basis) == eltype(x)
@@ -1214,17 +1216,17 @@ end
     @test all(!isinf, basis)
 
     # Test type stability
-    @inferred APCE.create_basis(x, degree, Val(true))
+    @inferred ArbitraryPolynomialChaosExpansion.create_basis(x, degree, Val(true))
 
     # Test with different input types
     x_float32 = rand(Float32, 50, 3)
-    basis_float32 = APCE.create_basis(x_float32, 2, Val(true))
+    basis_float32 = ArbitraryPolynomialChaosExpansion.create_basis(x_float32, 2, Val(true))
     @test eltype(basis_float32) == Float32
     @test size(basis_float32) == (3, 3, 3)
 
     # Test edge cases
     x_single = rand(10, 1)
-    basis_single = APCE.create_basis(x_single, 0, Val(true))
+    basis_single = ArbitraryPolynomialChaosExpansion.create_basis(x_single, 0, Val(true))
     @test size(basis_single) == (1, 1, 1)
     @test basis_single[1, 1, 1] ≈ 1.0 atol = 1.0e-10
 end
@@ -1233,7 +1235,7 @@ end
     # Test basic functionality
     x = rand(100, 2)
     degree = 3
-    basis = APCE.create_basis(x, degree, Val(false))
+    basis = ArbitraryPolynomialChaosExpansion.create_basis(x, degree, Val(false))
 
     @test size(basis) == (degree + 1, degree + 1, size(x, 2))
     @test eltype(basis) == eltype(x)
@@ -1241,7 +1243,7 @@ end
     @test all(!isinf, basis)
 
     # Test type stability
-    @inferred APCE.create_basis(x, degree, Val(false))
+    @inferred ArbitraryPolynomialChaosExpansion.create_basis(x, degree, Val(false))
 
     # Test that it produces the expected full basis structure
     # For degree 3, each dimension should have a (4,4) matrix with upper triangular structure
@@ -1261,18 +1263,18 @@ end
 
     # Test with different input types
     x_float32 = rand(Float32, 50, 3)
-    basis_float32 = APCE.create_basis(x_float32, 2, Val(false))
+    basis_float32 = ArbitraryPolynomialChaosExpansion.create_basis(x_float32, 2, Val(false))
     @test eltype(basis_float32) == Float32
     @test size(basis_float32) == (3, 3, 3)
 
     # Test edge cases
     x_single = rand(10, 1)
-    basis_single = APCE.create_basis(x_single, 0, Val(false))
+    basis_single = ArbitraryPolynomialChaosExpansion.create_basis(x_single, 0, Val(false))
     @test size(basis_single) == (1, 1, 1)
     @test basis_single[1, 1, 1] == 1.0
 
     # Test degree 1 case
-    basis_degree1 = APCE.create_basis(x_single, 1, Val(false))
+    basis_degree1 = ArbitraryPolynomialChaosExpansion.create_basis(x_single, 1, Val(false))
     @test size(basis_degree1) == (2, 2, 1)
     @test basis_degree1[:, :, 1] == [1.0 0.0; 1.0 1.0]
 end
@@ -1282,8 +1284,8 @@ end
     x = rand(50, 2)
     degree = 2
 
-    basis_ortho = APCE.create_basis(x, degree, Val(true))
-    basis_full = APCE.create_basis(x, degree, Val(false))
+    basis_ortho = ArbitraryPolynomialChaosExpansion.create_basis(x, degree, Val(true))
+    basis_full = ArbitraryPolynomialChaosExpansion.create_basis(x, degree, Val(false))
 
     @test size(basis_ortho) == size(basis_full)
     @test eltype(basis_ortho) == eltype(basis_full)
@@ -1319,14 +1321,14 @@ end
     degree = 2
 
     # Create both types of bases
-    basis_ortho = APCE.create_basis(x, degree, Val(true))
-    basis_full = APCE.create_basis(x, degree, Val(false))
+    basis_ortho = ArbitraryPolynomialChaosExpansion.create_basis(x, degree, Val(true))
+    basis_full = ArbitraryPolynomialChaosExpansion.create_basis(x, degree, Val(false))
 
     # Test that we can extract coefficients from both bases
     for dim in 1:size(x, 2)
         for d in 1:(degree + 1)
-            coeffs_ortho = APCE.coeffs_from_basis(basis_ortho, d, dim)
-            coeffs_full = APCE.coeffs_from_basis(basis_full, d, dim)
+            coeffs_ortho = ArbitraryPolynomialChaosExpansion.coeffs_from_basis(basis_ortho, d, dim)
+            coeffs_full = ArbitraryPolynomialChaosExpansion.coeffs_from_basis(basis_full, d, dim)
 
             @test length(coeffs_ortho) == d
             @test length(coeffs_full) == d
@@ -1340,8 +1342,8 @@ end
     multivar_degrees = [0 0; 0 1; 1 0; 0 2; 1 1; 2 0]  # 2D, degree 2
 
     # This should work without errors for both basis types
-    @test_nowarn APCE.aPCE_PsiPolynomialMatrix_zygote(test_point', multivar_degrees, basis_ortho)
-    @test_nowarn APCE.aPCE_PsiPolynomialMatrix_zygote(test_point', multivar_degrees, basis_full)
+    @test_nowarn ArbitraryPolynomialChaosExpansion.aPCE_PsiPolynomialMatrix_zygote(test_point', multivar_degrees, basis_ortho)
+    @test_nowarn ArbitraryPolynomialChaosExpansion.aPCE_PsiPolynomialMatrix_zygote(test_point', multivar_degrees, basis_full)
 end
 
 @testitem "create_basis_default_test" begin
@@ -1351,15 +1353,15 @@ end
     degree = 2
 
     # Test default behavior
-    basis_default = APCE.create_basis(x, degree)
-    basis_ortho = APCE.create_basis(x, degree, Val(true))
+    basis_default = ArbitraryPolynomialChaosExpansion.create_basis(x, degree)
+    basis_ortho = ArbitraryPolynomialChaosExpansion.create_basis(x, degree, Val(true))
 
     # Default should be the same as orthonormal
     @test isapprox(basis_default, basis_ortho, atol = 1.0e-10)
 
     # Test with center_data parameter
-    basis_default_centered = APCE.create_basis(x, degree, center_data = true)
-    basis_default_uncentered = APCE.create_basis(x, degree, center_data = false)
+    basis_default_centered = ArbitraryPolynomialChaosExpansion.create_basis(x, degree, center_data = true)
+    basis_default_uncentered = ArbitraryPolynomialChaosExpansion.create_basis(x, degree, center_data = false)
 
     # Debug: Check the data properties
     @info "Data mean" mean(x, dims = 1)
@@ -1379,9 +1381,9 @@ end
     @test isapprox(basis_default_centered, basis_default_uncentered, atol = 1.0e-8)
 
     # Test type stability
-    @inferred APCE.create_basis(x, degree)
-    @inferred APCE.create_basis(x, degree, center_data = true)
-    @inferred APCE.create_basis(x, degree, center_data = false)
+    @inferred ArbitraryPolynomialChaosExpansion.create_basis(x, degree)
+    @inferred ArbitraryPolynomialChaosExpansion.create_basis(x, degree, center_data = true)
+    @inferred ArbitraryPolynomialChaosExpansion.create_basis(x, degree, center_data = false)
 end
 
 @testitem "create_basis_centered_vs_uncentered_test" begin
@@ -1394,8 +1396,8 @@ end
     @info "Test data mean" mean(x, dims = 1)
     @info "Test data std" std(x, dims = 1)
 
-    basis_centered = APCE.create_basis(x, degree, center_data = true)
-    basis_uncentered = APCE.create_basis(x, degree, center_data = false)
+    basis_centered = ArbitraryPolynomialChaosExpansion.create_basis(x, degree, center_data = true)
+    basis_uncentered = ArbitraryPolynomialChaosExpansion.create_basis(x, degree, center_data = false)
 
     # These should be nearly identical due to the backward transformation
     diff_norm = norm(basis_centered - basis_uncentered)
@@ -1447,8 +1449,8 @@ end
     degree = 2
 
     # Both should work without numerical errors
-    basis_centered = APCE.create_basis(x_large, degree, center_data = true)
-    basis_uncentered = APCE.create_basis(x_large, degree, center_data = false)
+    basis_centered = ArbitraryPolynomialChaosExpansion.create_basis(x_large, degree, center_data = true)
+    basis_uncentered = ArbitraryPolynomialChaosExpansion.create_basis(x_large, degree, center_data = false)
 
     # Both should be valid
     @test all(!isnan, basis_centered)
@@ -1589,14 +1591,14 @@ end
     A = [3.0 2.0; 1.0 2.0]
     b = [5.0, 3.0]
     x_true = [1.0, 1.0]
-    x_refined = APCE.solve_levenberg_marquardt(A, b)
+    x_refined = ArbitraryPolynomialChaosExpansion.solve_levenberg_marquardt(A, b)
     @test isapprox(x_refined, x_true, atol = 1.0e-10)
 
     eps_val = 1.0e-8
     A_ill = [1.0 1.0; 1.0 1.0 + eps_val]
     b_ill = [2.0, 2.0 + eps_val]
     x_true_ill = [1.0, 1.0]
-    x_refined_ill = APCE.solve_levenberg_marquardt(A_ill, b_ill)
+    x_refined_ill = ArbitraryPolynomialChaosExpansion.solve_levenberg_marquardt(A_ill, b_ill)
     @test isapprox(x_refined_ill, x_true_ill, atol = 1.0e-6)
 
     x_single = A_ill \ b_ill

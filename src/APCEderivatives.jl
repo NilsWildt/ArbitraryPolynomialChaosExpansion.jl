@@ -549,63 +549,64 @@ end
     @test isapprox(grad_1d_fd, grad_1d_zyg, atol = 1.0e-8)
 end
 
-@testitem "comprehensive_ad_backend_test" begin
-    import Pkg
-    Pkg.add("Zygote")
-    Pkg.add("DifferentiationInterface")
-    Pkg.add("DifferentiationInterfaceTest")
-    Pkg.add("Mooncake")
-    Pkg.add("Enzyme")
-    Pkg.add("StableRNGs")
+# Currently borken at 1.12 bc of JET dependency.
+# @testitem "comprehensive_ad_backend_test" begin
+#     import Pkg
+#     Pkg.add("Zygote")
+#     Pkg.add("DifferentiationInterface")
+#     Pkg.add("DifferentiationInterfaceTest")
+#     Pkg.add("Mooncake")
+#     Pkg.add("Enzyme")
+#     Pkg.add("StableRNGs")
 
-    using DifferentiationInterface
-    using DifferentiationInterfaceTest
-    using StableRNGs
-    using ForwardDiff
-    using Zygote
-    using Mooncake
-    using Enzyme
+#     using DifferentiationInterface
+#     using DifferentiationInterfaceTest
+#     using StableRNGs
+#     using ForwardDiff
+#     using Zygote
+#     using Mooncake
+#     using Enzyme
 
-    # Setup test data
-    rng = StableRNG(1234)
-    N = 20
-    d_in = 2
-    x = rand(rng, N, d_in)
-    degree = 2
+#     # Setup test data
+#     rng = StableRNG(1234)
+#     N = 20
+#     d_in = 2
+#     x = rand(rng, N, d_in)
+#     degree = 2
 
-    # Define test functions
-    f_basis_true(x_in) = sum(create_basis(x_in, degree, Val(true); center_data = true))
-    f_basis_false(x_in) = sum(create_basis(x_in, degree, Val(false)))
-    f_basis_default(x_in) = sum(create_basis(x_in, degree))
+#     # Define test functions
+#     f_basis_true(x_in) = sum(create_basis(x_in, degree, Val(true); center_data = true))
+#     f_basis_false(x_in) = sum(create_basis(x_in, degree, Val(false)))
+#     f_basis_default(x_in) = sum(create_basis(x_in, degree))
 
-    # Reference gradients using ForwardDiff
-    ∇f_basis_true = x -> ForwardDiff.gradient(f_basis_true, x)
-    ∇f_basis_false = x -> ForwardDiff.gradient(f_basis_false, x)
-    ∇f_basis_default = x -> ForwardDiff.gradient(f_basis_default, x)
+#     # Reference gradients using ForwardDiff
+#     ∇f_basis_true = x -> ForwardDiff.gradient(f_basis_true, x)
+#     ∇f_basis_false = x -> ForwardDiff.gradient(f_basis_false, x)
+#     ∇f_basis_default = x -> ForwardDiff.gradient(f_basis_default, x)
 
-    # Define backends to test
-    backends = [AutoZygote(), AutoForwardDiff(), AutoMooncake(; config = nothing), AutoEnzyme()]
+#     # Define backends to test
+#     backends = [AutoZygote(), AutoForwardDiff(), AutoMooncake(; config = nothing), AutoEnzyme()]
 
-    # Define scenarios
-    scenarios = [
-        Scenario{:gradient, :out}(f_basis_true, x; res1 = ∇f_basis_true(x)),
-        Scenario{:gradient, :out}(f_basis_false, x; res1 = ∇f_basis_false(x)),
-        Scenario{:gradient, :out}(f_basis_default, x; res1 = ∇f_basis_default(x)),
-    ]
+#     # Define scenarios
+#     scenarios = [
+#         Scenario{:gradient, :out}(f_basis_true, x; res1 = ∇f_basis_true(x)),
+#         Scenario{:gradient, :out}(f_basis_false, x; res1 = ∇f_basis_false(x)),
+#         Scenario{:gradient, :out}(f_basis_default, x; res1 = ∇f_basis_default(x)),
+#     ]
 
-    # Run comprehensive tests
-    test_differentiation(
-        backends,
-        scenarios;
-        logging = false,
-        allocations = :none,
-        benchmark = :none,
-        correctness = true,
-        type_stability = :none,
-        detailed = true,
-        atol = 1.0e-3,
-        rtol = 1.0e-3,
-        count_calls = true,
-        scenario_intact = true
-    )
-end
+#     # Run comprehensive tests
+#     test_differentiation(
+#         backends,
+#         scenarios;
+#         logging = false,
+#         allocations = :none,
+#         benchmark = :none,
+#         correctness = true,
+#         type_stability = :none,
+#         detailed = true,
+#         atol = 1.0e-3,
+#         rtol = 1.0e-3,
+#         count_calls = true,
+#         scenario_intact = true
+#     )
+# end
