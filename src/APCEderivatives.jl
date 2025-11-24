@@ -55,7 +55,7 @@ end
 # ===== CHAINRULES FOR UTILITY FUNCTIONS =====
 
 """
-    rrule(::typeof(reverse_columns!), x)
+    frule((_, Δx), ::typeof(reverse_columns!), x)
 ChainRule for reverse_columns! function. Computes gradient by reversing the tangent matrix.
 """
 function ChainRulesCore.frule((_, Δx), ::typeof(reverse_columns!), x)
@@ -70,6 +70,15 @@ function ChainRulesCore.frule((_, Δx), ::typeof(reverse_columns!), x)
     end
     y = reverse_columns!(x)
     return y, Δx_reversed
+end
+
+"""
+    frule(::RuleConfig, ::typeof(reverse_columns!), x)
+More specific method to resolve ambiguity with ChainRulesCore's generic frule fallback.
+Returns nothing to indicate no special RuleConfig handling needed.
+"""
+function ChainRulesCore.frule(::ChainRulesCore.RuleConfig, ::typeof(reverse_columns!), x)
+    return nothing
 end
 
 
@@ -335,7 +344,10 @@ end
 
 
 ReverseDiff.@grad_from_chainrules create_basis(
-    x::ReverseDiff.TrackedArray, d::Integer, is_orthonormal::Val
+    x::ReverseDiff.TrackedArray, d::Integer, is_orthonormal::Val{true}
+);
+ReverseDiff.@grad_from_chainrules create_basis(
+    x::ReverseDiff.TrackedArray, d::Integer, is_orthonormal::Val{false}
 );
 
 

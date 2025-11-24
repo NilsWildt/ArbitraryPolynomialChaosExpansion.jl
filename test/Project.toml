@@ -1,5 +1,6 @@
 [deps]
 Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
+ArbitraryPolynomialChaosExpansion = "e0c64dd9-0151-4106-bdf9-1cf426dd9187"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 Chairmarks = "0ca39b1e-fe0b-4e98-acfc-b1656634c4de"
 DrWatson = "634d3b9d-ee7a-5ddf-bec9-22491ea816e1"
@@ -17,4 +18,4 @@ Suppressor = "fd094767-a336-5f1f-9728-57cf17d0bbfb"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
-julia= "1.12"
+julia = "1.11"

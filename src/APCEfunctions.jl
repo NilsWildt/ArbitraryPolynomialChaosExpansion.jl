@@ -240,15 +240,22 @@ function aPCE_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T, s_
     end
 
     function filter_by_percentage(array::AbstractArray, percentage)
-        try
-            if percentage < 0.0 || percentage > 1.0
-                @warn "Percentage must be between 0 and 1"
-            end
-            n = length(array)
-            num_to_keep = round(Int, percentage * n)
-            return @views array[1:num_to_keep]
-        catch
+        # Avoid try/catch for Mooncake compatibility - use conditional checks instead
+        if percentage < 0.0 || percentage > 1.0
+            @warn "Percentage must be between 0 and 1"
+            return array[:]  # Return full array if percentage is invalid
+        end
+        n = length(array)
+        if n == 0
             return array[:]
+        end
+        num_to_keep = round(Int, percentage * n)
+        if num_to_keep <= 0
+            return array[:]
+        elseif num_to_keep >= n
+            return array[:]
+        else
+            return @views array[1:num_to_keep]
         end
     end
 
@@ -359,10 +366,13 @@ function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::V
         Vc[degree+1] = one(T)
 
         # Solve linear system
-        try
+        # Use condition number check instead of try/catch for Mooncake compatibility
+        cond_Hankel = cond(Hankel)
+        if isfinite(cond_Hankel) && cond_Hankel < 1e12
+            # Matrix is well-conditioned, use direct solve
             OrthogonalBasis[degree+1, 1:(degree+1)] .= Hankel \ Vc
-        catch
-            # OrthogonalBasis[degree + 1, 1:(degree + 1)] .= pinv(Hankel) * Vc
+        else
+            # Matrix is ill-conditioned or singular, use robust solver
             OrthogonalBasis[degree+1, 1:(degree+1)] .= solve_levenberg_marquardt(Hankel, Vc)
         end
 
@@ -531,11 +541,14 @@ function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::V
         end
         Vc[degree+1] = one(T)
 
-        try
+        # Use condition number check instead of try/catch for Mooncake compatibility
+        cond_Hankel = cond(Hankel)
+        if isfinite(cond_Hankel) && cond_Hankel < 1e12
+            # Matrix is well-conditioned, use direct solve
             OrthogonalBasis[degree+1, 1:(degree+1)] .= Hankel \ Vc
-        catch
+        else
+            # Matrix is ill-conditioned or singular, use robust solver
             OrthogonalBasis[degree+1, 1:(degree+1)] .= solve_levenberg_marquardt(Hankel, Vc)
-            # OrthogonalBasis[degree + 1, 1:(degree + 1)] .= pinv(Hankel) * Vc
         end
 
         # Normalization using original data

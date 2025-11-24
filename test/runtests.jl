@@ -16,14 +16,14 @@ using BenchmarkTools
 using ArbitraryPolynomialChaosExpansion
 const APCE = ArbitraryPolynomialChaosExpansion
 
-set_preferences!(ArbitraryPolynomialChaosExpansion, "precompile_workload" => true; force = true)
+set_preferences!(ArbitraryPolynomialChaosExpansion, "precompile_workload" => true; force=true)
 
-DIT_PATH = joinpath(@__DIR__, "..", "..", "ArbitraryPolynomialChaosExpansion.jl")
-if isdir(DIT_PATH)
-    Pkg.develop(; path = DIT_PATH)
-else
-    Pkg.add("ArbitraryPolynomialChaosExpansion")
-end
+# DIT_PATH = joinpath(@__DIR__, "..", "..", "ArbitraryPolynomialChaosExpansion.jl")
+# if isdir(DIT_PATH)
+#     Pkg.develop(; path=DIT_PATH)
+# else
+#     Pkg.add("ArbitraryPolynomialChaosExpansion")
+# end
 
 ############################################################################################
 #############################classical tests################################################
@@ -79,13 +79,13 @@ end
     @testset "Aqua.jl testset" begin
         Aqua.test_all(
             APCE;
-            ambiguities = true,      # TODO: fix ambiguities
-            stale_deps = false,
-            unbound_args = true,     # TODO: fix unbound type parameters
-            piracies = true,         # TODO: check the reported methods to be moved upstream
-            deps_compat = false,
-            project_extras = false,
-            persistent_tasks = false,
+            ambiguities=true,      # TODO: fix ambiguities
+            stale_deps=false,
+            unbound_args=true,     # TODO: fix unbound type parameters
+            piracies=true,         # TODO: check the reported methods to be moved upstream
+            deps_compat=false,
+            project_extras=false,
+            persistent_tasks=false,
         )
         @test length(Aqua.detect_unbound_args_recursively(APCE)) <= 16
     end
