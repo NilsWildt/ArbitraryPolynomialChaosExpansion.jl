@@ -1,7 +1,7 @@
 name = "ArbitraryPolynomialChaosExpansion"
 uuid = "e0c64dd9-0151-4106-bdf9-1cf426dd9187"
-version = "0.2.4"
 authors = ["NilsWildt"]
+version = "0.2.4"
 
 [deps]
 AddPackage = "70d26913-0580-4037-ad67-7d2c365cf5c5"
@@ -43,6 +43,7 @@ MAT = "23992714-dd62-5051-b70f-ba57cb901cac"
 MKL = "33e6dc65-8f57-5167-99aa-e5a354878fb2"
 MLUtils = "f1d291b0-491e-4a28-83b9-f70985020b54"
 MakieThemes = "e296ed71-da82-5faf-88ab-0034a9761098"
+Mooncake = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
 OMEinsum = "ebe7aa44-baf0-506c-a96f-8464559b3922"
 OnlineStats = "a15396b6-48d5-5d58-9928-6d29437db91e"
 Optim = "429524aa-4258-5aef-a3af-852621145aeb"
@@ -80,5 +81,6 @@ AddPackage = "0.1.1"
 Estrin = "0.1.0"
 LightweightStats = "0.1.0"
 LoopVectorization = "0.12.173"
+Mooncake = "0.4.180"
 PropDicts = "0.2.9"
 Revise = "3.10.0"
