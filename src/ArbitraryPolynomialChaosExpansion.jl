@@ -1,13 +1,17 @@
 module ArbitraryPolynomialChaosExpansion
 using TestItems
 using LinearAlgebra.BLAS: gemv, gemv!, gemm!, trsm!, axpy!, ger!
-using LinearAlgebra: LinearAlgebra, BLAS, transpose
+using LinearAlgebra: LinearAlgebra, BLAS, transpose, cond
 using LinearAlgebra: checksquare
 using LazyArrays
 using ReverseDiff: ReverseDiff
 using LinearAlgebra: svd, norm, pinv, Diagonal, tr
+using TypeUtils: as
+using ChainRulesCore
+using ErrorTypes
+using ImplicitDifferentiation
 # using Enzyme
-# using Mooncake: @from_rrule, DefaultCtx
+using Mooncake: @from_rrule, DefaultCtx
 
 # Define CPU_MODEL safely with fallback
 const CPU_MODEL = get(

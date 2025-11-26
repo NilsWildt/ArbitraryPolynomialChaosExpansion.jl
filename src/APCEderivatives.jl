@@ -339,6 +339,29 @@ function ChainRulesCore.rrule(::typeof(create_basis), x::AbstractArray, degree::
     return rrule(create_basis, x, degree, Val(is_orthonormal); center_data=center_data)
 end
 
+"""
+    rrule(::typeof(aPCE_OrthonormalBasis), Data, Degree, ::Val{center_data})
+
+ChainRule for aPCE_OrthonormalBasis.
+Uses ForwardDiff for gradient computation since this involves complex numerical operations.
+"""
+function ChainRulesCore.rrule(::typeof(aPCE_OrthonormalBasis), Data::AbstractArray{T}, Degree::Integer, center_data::Val{C}) where {T,C}
+    basis = aPCE_OrthonormalBasis(Data, Degree, center_data)
+
+    function aPCE_OrthonormalBasis_pullback(Δbasis)
+        function basis_wrapper(data_vec)
+            data_reshaped = reshape(data_vec, size(Data))
+            basis_val = aPCE_OrthonormalBasis(data_reshaped, Degree, center_data)
+            return sum(basis_val .* unthunk(Δbasis))
+        end
+        grad = ForwardDiff.gradient(basis_wrapper, vec(Data))
+        grad_reshaped = reshape(grad, size(Data))
+        return (NoTangent(), grad_reshaped, NoTangent(), NoTangent())
+    end
+
+    return basis, aPCE_OrthonormalBasis_pullback
+end
+
 
 # Enzyme.@import_rrule(typeof(create_basis), AbstractArray, Integer, Val)
 
@@ -349,7 +372,6 @@ ReverseDiff.@grad_from_chainrules create_basis(
 ReverseDiff.@grad_from_chainrules create_basis(
     x::ReverseDiff.TrackedArray, d::Integer, is_orthonormal::Val{false}
 );
-
 
 @from_rrule DefaultCtx Tuple{
     typeof(create_basis),
@@ -366,12 +388,33 @@ ReverseDiff.@grad_from_chainrules create_basis(
     AbstractArray,Integer,Bool,
 }
 
+@from_rrule DefaultCtx Tuple{
+    typeof(aPCE_OrthonormalBasis),
+    AbstractArray,Integer,Val,
+}
+
+
+function ChainRulesCore.rrule(::typeof(solve_linear_robust), A, b; kwargs...)
+    x = solve_linear_robust(A, b; kwargs...)
+    function solve_linear_robust_pullback(dy)
+        dy_unthunked = ChainRulesCore.unthunk(dy)
+        λ = pinv(A') * dy_unthunked
+        dA = -λ * x'
+        db = λ
+        return (ChainRulesCore.NoTangent(), dA, db)
+    end
+    return x, solve_linear_robust_pullback
+end
+
+@from_rrule DefaultCtx Tuple{typeof(solve_linear_robust),Any,Any} true
+@from_rrule DefaultCtx Tuple{typeof(pinv),AbstractMatrix}
+
+
+
 # ===== TESTS =====
 
 @testitem "create_basis_chainrules_consistency" begin
-    import Pkg
-    Pkg.add("Zygote")
-    using ForwardDiff, Zygote
+    using ForwardDiff, Zygote, StatsBase
 
     x = rand(20, 2)
     degree = 2
@@ -400,9 +443,7 @@ ReverseDiff.@grad_from_chainrules create_basis(
 end
 
 @testitem "create_basis_differentiation_val_dispatch" begin
-    import Pkg
-    Pkg.add("Zygote")
-    using ForwardDiff, Zygote
+    using ForwardDiff, Zygote, StatsBase
 
     x = rand(15, 2)
     degree = 2
@@ -430,9 +471,7 @@ end
 end
 
 @testitem "create_basis_differentiation_bool_dispatch" begin
-    import Pkg
-    Pkg.add("Zygote")
-    using ForwardDiff, Zygote
+    using ForwardDiff, Zygote, StatsBase
 
     x = rand(12, 3)
     degree = 2
@@ -462,10 +501,7 @@ end
 end
 
 @testitem "psi_matrix_chainrules" begin
-    import Pkg
-    Pkg.add("Zygote")
-    using ForwardDiff, Zygote
-
+    using ForwardDiff, Zygote, StatsBase
     # Setup test data
     x = rand(10, 2)
     degree = 2
@@ -477,7 +513,7 @@ end
 
     grad_psi_fd = ForwardDiff.gradient(f_psi, x)
     grad_psi_zyg = Zygote.gradient(f_psi, x)[1]
-    @info "compare gradients aPCE_PsiPolynomialMatrix" mean(abs.(grad_psi_fd .- grad_psi_zyg))
+    @info "compare gradients aPCE_PsiPolynomialMatrix" StatsBase.mean(abs.(grad_psi_fd .- grad_psi_zyg))
     @test isapprox(grad_psi_fd, grad_psi_zyg, atol=1.0e-6)
 
     # Test aPCE_PsiPolynomialMatrix_zygote
@@ -485,7 +521,7 @@ end
 
     grad_psi_zyg_fd = ForwardDiff.gradient(f_psi_zyg, x)
     grad_psi_zyg_zyg = Zygote.gradient(f_psi_zyg, x)[1]
-    @info "compare gradients aPCE_PsiPolynomialMatrix_zygote" mean(abs.(grad_psi_zyg_fd .- grad_psi_zyg_zyg))
+    @info "compare gradients aPCE_PsiPolynomialMatrix_zygote" StatsBase.mean(abs.(grad_psi_zyg_fd .- grad_psi_zyg_zyg))
 
     @test isapprox(grad_psi_zyg_fd, grad_psi_zyg_zyg, atol=1.0e-6)
 
@@ -495,9 +531,6 @@ end
 
 
 @testitem "reverse_columns_chainrules" begin
-    import Pkg
-    Pkg.add("Zygote")
-    Pkg.add("ChainRulesCore")
     using ChainRulesCore
     using ForwardDiff
 
@@ -530,9 +563,7 @@ end
 
 
 @testitem "edge_cases_chainrules" begin
-    import Pkg
-    Pkg.add("Zygote")
-    using ForwardDiff, Zygote
+    using ForwardDiff, Zygote, StatsBase
 
     # Test with minimal data
     x_small = rand(2, 1)
@@ -541,7 +572,7 @@ end
     f_small(x) = sum(create_basis(x, degree, Val(true)))
     grad_small_fd = ForwardDiff.gradient(f_small, x_small)
     grad_small_zyg = Zygote.gradient(f_small, x_small)[1]
-    @info "compare gradients edge_cases_chainrules" mean(abs.(grad_small_fd .- grad_small_zyg))
+    @info "compare gradients edge_cases_chainrules" StatsBase.mean(abs.(grad_small_fd .- grad_small_zyg))
     @test isapprox(grad_small_fd, grad_small_zyg, atol=1.0e-8)
 
     # Test with degree 0
@@ -560,6 +591,396 @@ end
 
     @test isapprox(grad_1d_fd, grad_1d_zyg, atol=1.0e-8)
 end
+
+
+@testitem "Mooncake autodiff - create_basis orthonormal" begin
+    using DifferentiationInterface
+    using ComponentArrays: ComponentArray
+    using ArbitraryPolynomialChaosExpansion
+
+    # Test gradient through orthonormal basis creation
+    function loss_with_basis(x_flat, degree)
+        x = reshape(x_flat, :, 2)
+        basis = ArbitraryPolynomialChaosExpansion.create_basis(x, degree, Val(true))
+        return sum(abs2, basis)
+    end
+
+    backend = AutoMooncake()
+    x = rand(Float32, 20)  # 10 samples × 2 dimensions
+    degree = 3
+
+    # Test type stability of gradient preparation
+    # @test_nowarn @inferred prepare_gradient(loss_with_basis, backend, x, Constant(degree))
+
+    # Prepare gradient
+    extras = prepare_gradient(loss_with_basis, backend, x, Constant(degree))
+
+    # Test gradient computation
+    grad = similar(x)
+    @test_nowarn gradient!(loss_with_basis, grad, extras, backend, x, Constant(degree))
+
+    # Check gradient properties
+    @test eltype(grad) == Float32
+    @test length(grad) == length(x)
+    @test all(isfinite, grad)
+    @test !all(iszero, grad)  # Should have non-zero gradients
+
+    # Test with Float64
+    x64 = rand(Float64, 20)
+    extras64 = prepare_gradient(loss_with_basis, backend, x64, Constant(degree))
+    grad64 = similar(x64)
+    gradient!(loss_with_basis, grad64, extras64, backend, x64, Constant(degree))
+
+    @test eltype(grad64) == Float64
+    @test all(isfinite, grad64)
+end
+
+@testitem "Mooncake autodiff - closed form basis degrees 0-4" begin
+    using DifferentiationInterface
+    using ArbitraryPolynomialChaosExpansion
+
+    backend = AutoMooncake()
+
+    # Test each closed-form degree separately
+    for degree in 0:4
+        x = rand(Float32, 50, 2)
+
+        function loss_degree(x_mat)
+            basis = ArbitraryPolynomialChaosExpansion.create_basis(x_mat, degree, Val(true))
+            return sum(abs2, basis)
+        end
+
+        # Test type inference
+        # @test_nowarn @inferred prepare_gradient(loss_degree, backend, x)
+
+        # Compute gradient
+        extras = prepare_gradient(loss_degree, backend, x)
+        grad = similar(x)
+        @test_nowarn gradient!(loss_degree, grad, extras, backend, x)
+
+        # Verify gradient properties
+        @test size(grad) == size(x)
+        @test eltype(grad) == Float32
+        @test all(isfinite, grad)
+
+        # Test value and gradient together
+        val, grad2 = value_and_gradient(loss_degree, extras, backend, x)
+        @test val isa Float32
+        @test isfinite(val)
+        @test grad2 ≈ grad
+    end
+end
+
+@testitem "Mooncake autodiff - numerical basis degree > 4" begin
+    using DifferentiationInterface
+    using ArbitraryPolynomialChaosExpansion
+
+    backend = AutoMooncake()
+
+    # Test higher degrees that use numerical solver
+    for degree in [5, 6, 7]
+        x = rand(Float32, 100, 2)  # Need more samples for higher degrees
+
+        function loss_high_degree(x_mat)
+            basis = ArbitraryPolynomialChaosExpansion.create_basis(x_mat, degree, Val(true))
+            return sum(abs2, basis)
+        end
+
+        # Test type inference
+        # @test_nowarn @inferred prepare_gradient(loss_high_degree, backend, x)
+
+        # Compute gradient
+        extras = prepare_gradient(loss_high_degree, backend, x)
+        grad = similar(x)
+        @test_nowarn gradient!(loss_high_degree, grad, extras, backend, x)
+
+        # Verify gradient properties
+        @test size(grad) == size(x)
+        @test eltype(grad) == Float32
+        @test all(isfinite, grad)
+        @test !all(iszero, grad)
+    end
+end
+
+@testitem "Mooncake autodiff - full basis (non-orthonormal)" begin
+    using DifferentiationInterface
+    using ArbitraryPolynomialChaosExpansion
+
+    backend = AutoMooncake()
+    x = rand(Float32, 30, 3)
+    degree = 3
+
+    function loss_full_basis(x_mat)
+        basis = ArbitraryPolynomialChaosExpansion.create_basis(x_mat, degree, Val(false))
+        return sum(abs2, basis)
+    end
+
+    # Test type inference
+    # @test_nowarn @inferred prepare_gradient(loss_full_basis, backend, x)
+
+    # Compute gradient
+    extras = prepare_gradient(loss_full_basis, backend, x)
+    grad = similar(x)
+    @test_nowarn gradient!(loss_full_basis, grad, extras, backend, x)
+
+    # Full basis is constant (all 1s and 0s), so gradients should be zero
+    @test all(iszero, grad)
+
+    # Verify value computation works
+    val = loss_full_basis(x)
+    @test val isa Float32
+    @test isfinite(val)
+end
+
+@testitem "Mooncake autodiff - type stability across types" begin
+    using DifferentiationInterface
+    using ArbitraryPolynomialChaosExpansion
+    backend = AutoMooncake()
+    degree = 3
+
+    function make_loss(T)
+        function loss(x_flat)
+            x = reshape(x_flat, :, 2)
+            basis = ArbitraryPolynomialChaosExpansion.create_basis(x, degree, Val(true))
+            return sum(abs2, basis)
+        end
+        return loss
+    end
+
+    # Test Float32
+    loss32 = make_loss(Float32)
+    x32 = rand(Float32, 20)
+    extras32 = prepare_gradient(loss32, backend, x32)
+    grad32 = similar(x32)
+
+    gradient!(loss32, grad32, extras32, backend, x32)
+    @test eltype(grad32) == Float32
+
+    # Test Float64
+    loss64 = make_loss(Float64)
+    x64 = rand(Float64, 20)
+    extras64 = prepare_gradient(loss64, backend, x64)
+    grad64 = similar(x64)
+
+    # @test_nowarn @inferred gradient!(loss64, grad64, extras64, backend, x64)
+    @test eltype(grad64) == Float64
+end
+
+@testitem "Zygote autodiff - solve_levenberg_marquardt" begin
+    using DifferentiationInterface
+    using LinearAlgebra
+    using ErrorTypes
+
+    backend = AutoZygote()
+
+    # Test gradient through Levenberg-Marquardt solver
+    function loss_with_lm(A_flat, b)
+        n = 4
+        A = reshape(A_flat, n, n)
+        A_symm = A' * A + I  # Make positive definite
+        x = unwrap(ArbitraryPolynomialChaosExpansion.solve_levenberg_marquardt(A_symm, b))
+        return sum(abs2, x)
+    end
+
+    A_flat = rand(Float32, 16)
+    b = rand(Float32, 4)
+
+    # Test type inference
+    # @test_nowarn @inferred prepare_gradient(loss_with_lm, backend, A_flat, Constant(b))
+
+    # Compute gradient
+    extras = prepare_gradient(loss_with_lm, backend, A_flat, Constant(b))
+    grad = similar(A_flat)
+    @test_nowarn gradient!(loss_with_lm, grad, extras, backend, A_flat, Constant(b))
+
+    # Verify gradient properties
+    @test eltype(grad) == Float32
+    @test length(grad) == 16
+    @test all(isfinite, grad)
+
+    # Test value and gradient
+    val, grad2 = value_and_gradient(loss_with_lm, extras, backend, A_flat, Constant(b))
+    @test val isa Float32
+    @test grad2 ≈ grad
+end
+
+
+@testitem "Mooncake autodiff - solve_levenberg_marquardt" begin
+    using DifferentiationInterface
+    using LinearAlgebra
+    using ErrorTypes
+    using ArbitraryPolynomialChaosExpansion
+
+    backend = AutoMooncake()
+
+    # Test gradient through Levenberg-Marquardt solver
+    function loss_with_lm(A_flat, b)
+        n = 4
+        A = reshape(A_flat, n, n)
+        A_symm = A' * A + I  # Make positive definite
+        x = unwrap(ArbitraryPolynomialChaosExpansion.solve_levenberg_marquardt(A_symm, b))
+        return sum(abs2, x)
+    end
+
+    A_flat = rand(Float32, 16)
+    b = rand(Float32, 4)
+
+    # Test type inference
+    # @test_nowarn @inferred prepare_gradient(loss_with_lm, backend, A_flat, Constant(b))
+
+    # Compute gradient
+    extras = prepare_gradient(loss_with_lm, backend, A_flat, Constant(b))
+    grad = similar(A_flat)
+    @test_nowarn gradient!(loss_with_lm, grad, extras, backend, A_flat, Constant(b))
+
+    # Verify gradient properties
+    @test eltype(grad) == Float32
+    @test length(grad) == 16
+    @test all(isfinite, grad)
+
+    # Test value and gradient
+    val, grad2 = value_and_gradient(loss_with_lm, extras, backend, A_flat, Constant(b))
+    @test val isa Float32
+    @test grad2 ≈ grad
+end
+
+@testitem "Mooncake autodiff - gradient numerical accuracy" begin
+    using DifferentiationInterface
+    using FiniteDifferences
+    using ArbitraryPolynomialChaosExpansion
+
+    backend_mooncake = AutoMooncake()
+    backend_fd = AutoFiniteDifferences(; fdm=FiniteDifferences.central_fdm(5, 1))
+
+    x = rand(Float64, 30, 2)
+    degree = 3
+
+    function loss(x_mat)
+        basis = ArbitraryPolynomialChaosExpansion.create_basis(x_mat, degree, Val(true))
+        return sum(abs2, basis)
+    end
+
+    # Compute Mooncake gradient
+    extras_moon = prepare_gradient(loss, backend_mooncake, x)
+    grad_moon = gradient(loss, extras_moon, backend_mooncake, x)
+
+    # Compute finite differences gradient
+    extras_fd = prepare_gradient(loss, backend_fd, x)
+    grad_fd = gradient(loss, extras_fd, backend_fd, x)
+
+    # Should match within reasonable tolerance
+    @test grad_moon ≈ grad_fd rtol = 1e-4
+end
+
+@testitem "Mooncake autodiff - center_data parameter" begin
+    using DifferentiationInterface
+    using ArbitraryPolynomialChaosExpansion
+
+    backend = AutoMooncake()
+    x = rand(Float32, 50, 2)
+    degree = 6  # Use numerical solver
+
+    # Test with center_data=true
+    function loss_centered(x_mat)
+        basis = ArbitraryPolynomialChaosExpansion.create_basis(
+            x_mat, degree, Val(true); center_data=true
+        )
+        return sum(abs2, basis)
+    end
+
+    extras_centered = prepare_gradient(loss_centered, backend, x)
+    grad_centered = gradient(loss_centered, extras_centered, backend, x)
+
+    @test all(isfinite, grad_centered)
+
+    # Test with center_data=false
+    function loss_not_centered(x_mat)
+        basis = ArbitraryPolynomialChaosExpansion.create_basis(
+            x_mat, degree, Val(true); center_data=false
+        )
+        return sum(abs2, basis)
+    end
+
+    extras_not_centered = prepare_gradient(loss_not_centered, backend, x)
+    grad_not_centered = gradient(loss_not_centered, extras_not_centered, backend, x)
+
+    @test all(isfinite, grad_not_centered)
+
+    # Gradients should be different
+    @test !isapprox(grad_centered, grad_not_centered, rtol=1e-3)
+end
+
+@testitem "Mooncake autodiff - edge cases" begin
+    using DifferentiationInterface
+    using ArbitraryPolynomialChaosExpansion
+
+    backend = AutoMooncake()
+
+    # Test degree 0 (should be trivial)
+    x0 = rand(Float32, 10, 1)
+    function loss_deg0(x_mat)
+        basis = ArbitraryPolynomialChaosExpansion.create_basis(x_mat, 0, Val(true))
+        return sum(abs2, basis)
+    end
+
+    extras0 = prepare_gradient(loss_deg0, backend, x0)
+    grad0 = gradient(loss_deg0, extras0, backend, x0)
+    @test all(iszero, grad0)  # Constant basis → zero gradient
+
+    # Test single dimension
+    x1d = rand(Float32, 50, 1)
+    function loss_1d(x_mat)
+        basis = ArbitraryPolynomialChaosExpansion.create_basis(x_mat, 3, Val(true))
+        return sum(abs2, basis)
+    end
+
+    extras1d = prepare_gradient(loss_1d, backend, x1d)
+    grad1d = gradient(loss_1d, extras1d, backend, x1d)
+    @test size(grad1d) == size(x1d)
+    @test all(isfinite, grad1d)
+
+    # Test many dimensions
+    x_multi = rand(Float32, 30, 5)
+    function loss_multi(x_mat)
+        basis = ArbitraryPolynomialChaosExpansion.create_basis(x_mat, 2, Val(true))
+        return sum(abs2, basis)
+    end
+
+    extras_multi = prepare_gradient(loss_multi, backend, x_multi)
+    grad_multi = gradient(loss_multi, extras_multi, backend, x_multi)
+    @test size(grad_multi) == size(x_multi)
+    @test all(isfinite, grad_multi)
+end
+
+@testitem "Mooncake autodiff - check_mode compatibility" begin
+    using DifferentiationInterface
+    using ArbitraryPolynomialChaosExpansion
+
+    backend = AutoMooncake()
+    x = rand(Float32, 40, 2)
+    degree = 4
+
+    function loss(x_mat)
+        basis = ArbitraryPolynomialChaosExpansion.create_basis(x_mat, degree, Val(true))
+        return sum(abs2, basis)
+    end
+
+    # Verify mode support
+    @test check_available(backend)
+
+    # Test gradient mode
+    @test gradient(loss, backend, x) isa typeof(x)
+
+    # Test value_and_gradient mode
+    val, grad = value_and_gradient(loss, backend, x)
+    @test val isa Float32
+    @test grad isa typeof(x)
+    @test all(isfinite, grad)
+end
+
+
+
+
 
 # Currently borken at 1.12 bc of JET dependency.
 # @testitem "comprehensive_ad_backend_test" begin

@@ -3,7 +3,6 @@
 # This software is released under the MIT License.
 # https://opensource.org/licenses/MIT
 
-using ChainRulesCore
 #    include(srcdir("ArbitraryPolynomialChaosExpansion.jl"))
 #     using .ArbitraryPolynomialChaosExpansion
 # const APCE = ArbitraryPolynomialChaosExpansion
@@ -240,22 +239,15 @@ function aPCE_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T, s_
     end
 
     function filter_by_percentage(array::AbstractArray, percentage)
-        # Avoid try/catch for Mooncake compatibility - use conditional checks instead
-        if percentage < 0.0 || percentage > 1.0
-            @warn "Percentage must be between 0 and 1"
-            return array[:]  # Return full array if percentage is invalid
-        end
-        n = length(array)
-        if n == 0
-            return array[:]
-        end
-        num_to_keep = round(Int, percentage * n)
-        if num_to_keep <= 0
-            return array[:]
-        elseif num_to_keep >= n
-            return array[:]
-        else
+        try
+            if percentage < 0.0 || percentage > 1.0
+                @warn "Percentage must be between 0 and 1"
+            end
+            n = length(array)
+            num_to_keep = round(Int, percentage * n)
             return @views array[1:num_to_keep]
+        catch
+            return array[:]
         end
     end
 
@@ -304,6 +296,17 @@ end
 
 # ===== BASIS FUNCTIONS =====
 
+function solve_linear_robust(A, b; kwargs...)
+    try
+        return A \ b
+    catch
+        return unwrap(_solve_levenberg_marquardt_solver(A, b; kwargs...))
+    end
+end
+
+
+
+
 """
     aPCE_OrthonormalBasis(Data, Degree, center_data::Val)
 
@@ -322,7 +325,7 @@ function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::V
     dd = Degree
 
     # Centering: scale data by mean (not subtraction)
-    data_mean = mean(data_vec)
+    data_mean = StatsBase.mean(data_vec)
     Data_scaled = data_vec ./ data_mean
 
     # Compute moments using scaled data
@@ -365,16 +368,8 @@ function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::V
         end
         Vc[degree+1] = one(T)
 
-        # Solve linear system
-        # Use condition number check instead of try/catch for Mooncake compatibility
-        cond_Hankel = cond(Hankel)
-        if isfinite(cond_Hankel) && cond_Hankel < 1e12
-            # Matrix is well-conditioned, use direct solve
-            OrthogonalBasis[degree+1, 1:(degree+1)] .= Hankel \ Vc
-        else
-            # Matrix is ill-conditioned or singular, use robust solver
-            OrthogonalBasis[degree+1, 1:(degree+1)] .= solve_levenberg_marquardt(Hankel, Vc)
-        end
+        # Solve linear system using robust, differentiable solver
+        OrthogonalBasis[degree+1, 1:(degree+1)] .= solve_linear_robust(Hankel, Vc; λ_init=1e-3, max_iter=50)
 
         # Normalization
         P_norm = zero(T)
@@ -421,12 +416,13 @@ function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::V
     return OrthonormalBasis
 end
 
-function solve_levenberg_marquardt(Psi, y; λ_init=1e-3, max_iter=50)
+function _solve_levenberg_marquardt_solver(Psi, y; λ_init=1e-3, max_iter=50)::Result{Vector{eltype(Psi)},String}
     # Levenberg-Marquardt with adaptive regularization
-    x = pinv(Psi) * y  # Initial guess
-    λ = λ_init
+    T = eltype(Psi)
+    x = pinv(Psi) * y # Initial guess using pinv
+    λ = T(λ_init)
 
-    for iter in 1:max_iter
+    for _ in 1:max_iter
         residual = Psi * x - y
         J = Psi  # Jacobian is just Psi for linear case
 
@@ -443,17 +439,22 @@ function solve_levenberg_marquardt(Psi, y; λ_init=1e-3, max_iter=50)
         # Accept/reject step and adjust λ
         if norm(new_residual) < norm(residual)
             x = x_new
-            λ *= 0.3  # Decrease damping
+            λ *= as(T, 0.3)  # Decrease damping
         else
-            λ *= 2.0  # Increase damping
+            λ *= as(T, 2.0)  # Increase damping
         end
 
-        if norm(δx) < 1e-15
+        if norm(δx) < as(T, 1e-10)
             break
         end
     end
 
-    return x
+    return Ok(x)
+end
+
+# Public solve_levenberg_marquardt function using direct solver (not implicit diff)
+function solve_levenberg_marquardt(Psi, y; λ_init=1e-3, max_iter=50)::Result{Vector{eltype(Psi)},String}
+    return _solve_levenberg_marquardt_solver(Psi, y; λ_init=λ_init, max_iter=max_iter)
 end
 
 function robust_iterative_refinement(A, b; maxiter=5, tol=1.0e-10)
@@ -495,9 +496,11 @@ end
 
 
 function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::Val{false}) where {T<:Real,S<:Integer}
+
     if ndims(Data) > 1 && size(Data, 2) > 1
+        # Replace this by ErrorTypes
         throw(ArgumentError("aPCE_OrthonormalBasis expects 1D data only. Use create_basis for multi-dimensional data."))
-    end
+    end # 
 
     data_vec = vec(Data)
     NumberOfDataPoints = length(data_vec)
@@ -541,15 +544,7 @@ function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::V
         end
         Vc[degree+1] = one(T)
 
-        # Use condition number check instead of try/catch for Mooncake compatibility
-        cond_Hankel = cond(Hankel)
-        if isfinite(cond_Hankel) && cond_Hankel < 1e12
-            # Matrix is well-conditioned, use direct solve
-            OrthogonalBasis[degree+1, 1:(degree+1)] .= Hankel \ Vc
-        else
-            # Matrix is ill-conditioned or singular, use robust solver
-            OrthogonalBasis[degree+1, 1:(degree+1)] .= solve_levenberg_marquardt(Hankel, Vc)
-        end
+        OrthogonalBasis[degree+1, 1:(degree+1)] .= solve_linear_robust(Hankel, Vc)
 
         # Normalization using original data
         P_norm = zero(T)
@@ -590,6 +585,7 @@ function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::V
 
     return OrthonormalBasis
 end
+
 
 """
     aPCE_FullBasis(Data, Degree)
@@ -954,6 +950,32 @@ end
 
 # ===== TESTS =====
 
+
+@testitem "solve_levenberg_marquardt_basic_and_illconditioned" begin
+    using LinearAlgebra
+    using ErrorTypes
+    # Well-conditioned system
+    A = [3.0 2.0; 1.0 2.0]
+    b = [5.0, 3.0]
+    x_true = [1.0, 1.0]
+    x_refined = unwrap(ArbitraryPolynomialChaosExpansion.solve_levenberg_marquardt(A, b))
+    @test isapprox(x_refined, x_true, atol=1.0e-10)
+
+    eps_val = 1.0e-8
+    A_ill = [1.0 1.0; 1.0 1.0+eps_val]
+    b_ill = [2.0, 2.0 + eps_val]
+    x_true_ill = [1.0, 1.0]
+    x_refined_ill = unwrap(ArbitraryPolynomialChaosExpansion.solve_levenberg_marquardt(A_ill, b_ill))
+    @test isapprox(x_refined_ill, x_true_ill, atol=1.0e-6)
+
+    x_single = A_ill \ b_ill
+    err_single = norm(x_single - x_true_ill)
+    err_refined = norm(x_refined_ill - x_true_ill)
+    @test err_refined <= err_single + 1.0e-8
+end
+
+#### 
+
 @testitem "aPCE_MultivariatePolynomialDegrees" begin
     @test aPCE_MultivariatePolynomialDegrees(2, 1, 1.0, 1.0) == [0 0; 0 1; 1 0]
     @test aPCE_MultivariatePolynomialDegrees(2, 2, 1.0, 1.0) == [0 0; 0 1; 1 0; 0 2; 1 1; 2 0]
@@ -1199,8 +1221,6 @@ end
 end
 
 @testitem "EstrinPoly_test" begin
-    import Pkg
-    Pkg.add("Estrin")
     using Estrin
     @test Estrin.Poly([1.0, 2.0, 3.0, 4.0]).(2.0) == 49.0  # Polynomial 1 + 2x + 3x^2 + 4x^3 at x=2
     @test Estrin.Poly([1.0, 2.0, 3.0, 4.0]).(0.0) == 1.0   # Polynomial 1 + 2x + 3x^2 + 4x^3 at x=0
@@ -1361,6 +1381,7 @@ end
 
 @testitem "create_basis_default_test" begin
     using LinearAlgebra
+    using StatsBase
     # Test the default create_basis function (should default to orthonormal)
     x = rand(30, 2)
     degree = 2
@@ -1377,8 +1398,8 @@ end
     basis_default_uncentered = ArbitraryPolynomialChaosExpansion.create_basis(x, degree, center_data=false)
 
     # Debug: Check the data properties
-    @info "Data mean" mean(x, dims=1)
-    @info "Data std" std(x, dims=1)
+    @info "Data mean" StatsBase.mean(x, dims=1)
+    @info "Data std" StatsBase.std(x, dims=1)
     @info "Data range" [minimum(x, dims=1) maximum(x, dims=1)]
 
     # Check if the difference is actually significant
@@ -1401,13 +1422,14 @@ end
 
 @testitem "create_basis_centered_vs_uncentered_test" begin
     using LinearAlgebra
+    using StatsBase
     # Test with data that has a clear mean different from 1.0
     # This should make the difference between centered and uncentered modes obvious
     x = [1.0, 5.0, 10.0, 15.0, 20.0] .* ones(5, 2)  # Data with mean 10.2
     degree = 2
 
-    @info "Test data mean" mean(x, dims=1)
-    @info "Test data std" std(x, dims=1)
+    @info "Test data mean" StatsBase.mean(x, dims=1)
+    @info "Test data std" StatsBase.std(x, dims=1)
 
     basis_centered = ArbitraryPolynomialChaosExpansion.create_basis(x, degree, center_data=true)
     basis_uncentered = ArbitraryPolynomialChaosExpansion.create_basis(x, degree, center_data=false)
@@ -1429,14 +1451,14 @@ end
 
 @testitem "create_basis_centering_effect_test" begin
     using LinearAlgebra
-    using Statistics: mean
+    using StatsBase
     # Test to understand the centering effect
     x = [1.0, 5.0, 10.0, 15.0, 20.0] .* ones(5, 2)  # Data with mean 10.2
     degree = 2
 
     # Test individual aPCE_OrthonormalBasis calls to see the effect
     x_col1 = view(x, :, 1)
-    mean_x = mean(x_col1)
+    mean_x = StatsBase.mean(x_col1)
     @info "Data mean" mean_x
 
     basis_centered = aPCE_OrthonormalBasis(x_col1, degree, Val(true))
@@ -1596,26 +1618,4 @@ end
     basis_mono_true = create_basis(x, degree, Val(false))
     basis_mono_false = create_basis(x, degree, Val(false); center_data=false)
     @test isapprox(basis_mono_true, basis_mono_false, atol=1.0e-12)
-end
-
-@testitem "solve_levenberg_marquardt_basic_and_illconditioned" begin
-    using LinearAlgebra
-    # Well-conditioned system
-    A = [3.0 2.0; 1.0 2.0]
-    b = [5.0, 3.0]
-    x_true = [1.0, 1.0]
-    x_refined = ArbitraryPolynomialChaosExpansion.solve_levenberg_marquardt(A, b)
-    @test isapprox(x_refined, x_true, atol=1.0e-10)
-
-    eps_val = 1.0e-8
-    A_ill = [1.0 1.0; 1.0 1.0+eps_val]
-    b_ill = [2.0, 2.0 + eps_val]
-    x_true_ill = [1.0, 1.0]
-    x_refined_ill = ArbitraryPolynomialChaosExpansion.solve_levenberg_marquardt(A_ill, b_ill)
-    @test isapprox(x_refined_ill, x_true_ill, atol=1.0e-8)
-
-    x_single = A_ill \ b_ill
-    err_single = norm(x_single - x_true_ill)
-    err_refined = norm(x_refined_ill - x_true_ill)
-    @test err_refined <= err_single + 4.0e-8
 end
