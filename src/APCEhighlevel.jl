@@ -266,11 +266,11 @@ function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion=:true, reg_order=
 
     # Continue with bayesian inversion if enabled
     if bayesian_inversion
-        @info "Using bayesian regularization to find the expansion coefficients"
+        # @info "Using bayesian regularization to find the expansion coefficients"
         x₀ = copy(aPCE.ExpansionCoefficients)
 
         for i in axes(y_rhs, 2)
-            @info "Bayesian regularization for axis $i"
+            # @info "Bayesian regularization for axis $i"
             aPCE.ExpansionCoefficients[:, i] .= invert(
                 Psi, y_rhs[:, i], Lₖx₀(reg_order, view(x₀, :, i));
                 alg=:gcv_svd,
@@ -282,7 +282,7 @@ function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion=:true, reg_order=
     # Compute and report errors
     for k in axes(aPCE.ExpansionCoefficients, 2)
         res = (@views sqrt(mean((Psi * aPCE.ExpansionCoefficients[:, k] .- y_rhs[:, k]) .^ 2)))
-        @info "Error for axis $k" res
+        # @info "Error for axis $k" res
     end
     return nothing
 end

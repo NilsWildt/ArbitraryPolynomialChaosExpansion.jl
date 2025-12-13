@@ -315,110 +315,591 @@ Compute orthonormal polynomial basis for 1D data using moment-based approach.
 - `Degree`: Maximum polynomial degree
 - `center_data`: Val{true} for centered basis, Val{false} for uncentered
 """
-function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::Val{true}) where {T<:Real,S<:Integer}
-    if ndims(Data) > 1 && size(Data, 2) > 1
-        throw(ArgumentError("aPCE_OrthonormalBasis expects 1D data only. Use create_basis for multi-dimensional data."))
+# function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::Val{true}) where {T<:Real,S<:Integer}
+#     if ndims(Data) > 1 && size(Data, 2) > 1
+#         throw(ArgumentError("aPCE_OrthonormalBasis expects 1D data only. Use create_basis for multi-dimensional data."))
+#     end
+
+#     data_vec = vec(Data)
+#     NumberOfDataPoints = length(data_vec)
+#     dd = Degree
+
+#     # Centering: scale data by mean (not subtraction)
+#     data_mean = StatsBase.mean(data_vec)
+#     Data_scaled = data_vec ./ data_mean
+
+#     # Compute moments using scaled data
+#     m = zeros(T, 2 * dd + 2)
+#     for i in 0:(2*dd+1)
+#         m[i+1] = sum(Data_scaled .^ i) / NumberOfDataPoints
+#     end
+
+#     OrthonormalBasis = zeros(T, dd + 1, dd + 1)
+#     OrthogonalBasis = zeros(T, dd + 1, dd + 1)
+
+#     for degree in 0:dd
+#         Hankel = @views OrthogonalBasis[1:(degree+1), 1:(degree+1)]
+#         Vc = zeros(T, degree + 1)
+
+#         # Build Hankel matrix
+#         for i in 0:(degree-1)
+#             for j in 0:degree
+#                 Hankel[i+1, j+1] = m[i+j+1]
+#             end
+#             max_val = maximum(abs.(@views Hankel[i+1, :]))
+#             if max_val > eps(T) # zero(T)
+#                 Hankel[i+1, :] = @views Hankel[i+1, :] / max_val
+#             end
+#         end
+
+#         # Last row setup
+#         for j in 0:(degree-1)
+#             Hankel[degree+1, j+1] = zero(T)
+#         end
+#         Hankel[degree+1, degree+1] = one(T)
+#         max_val = maximum(abs.(@views Hankel[degree+1, :]))
+#         if max_val > eps(T)
+#             Hankel[degree+1, :] = @views Hankel[degree+1, :] / max_val
+#         end
+
+#         # Right-hand side vector
+#         for i in 0:(degree-1)
+#             Vc[i+1] = zero(T)
+#         end
+#         Vc[degree+1] = one(T)
+
+#         # Solve linear system using robust, differentiable solver
+#         OrthogonalBasis[degree+1, 1:(degree+1)] .= solve_linear_robust(Hankel, Vc; λ_init=1e-3, max_iter=100)
+
+#         # Normalization
+#         P_norm = zero(T)
+#         for i in 1:NumberOfDataPoints
+#             Poly = zero(T)
+#             for k in 0:degree
+#                 Poly += @views OrthogonalBasis[degree+1, k+1] * Data_scaled[i]^k
+#             end
+#             P_norm += Poly^2 / NumberOfDataPoints
+#         end
+
+#         # Improved numerical stability check
+#         eps_val = eps(T) * 1.0e10 # More conservative epsilon
+#         if P_norm <= eps_val
+#             # Fallback: use standard monomial basis for this degree
+#             for i in 1:(degree+1)
+#                 for j in 1:(degree+1)
+#                     if i == degree + 1 && j == degree + 1
+#                         OrthonormalBasis[i, j] = one(T)
+#                     elseif i >= j && i <= degree
+#                         OrthonormalBasis[i, j] = one(T)
+#                     else
+#                         OrthonormalBasis[i, j] = zero(T)
+#                     end
+#                 end
+#             end
+#         else
+#             # Normal normalization with safety check
+#             norm_factor = sqrt(P_norm)
+#             if norm_factor <= eps_val
+#                 norm_factor = eps_val
+#             end
+#             for k in 0:degree
+#                 OrthonormalBasis[degree+1, k+1] = @views OrthogonalBasis[degree+1, k+1] / norm_factor
+#             end
+#         end
+#     end
+
+#     # Backward transformation to data space
+#     for k in 1:size(OrthonormalBasis, 2)
+#         OrthonormalBasis[:, k] ./= (data_mean^(k - 1))
+#     end
+
+#     return OrthonormalBasis
+# end
+
+# function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::Val{false}) where {T<:Real,S<:Integer}
+
+#     if ndims(Data) > 1 && size(Data, 2) > 1
+#         # Replace this by ErrorTypes
+#         throw(ArgumentError("aPCE_OrthonormalBasis expects 1D data only. Use create_basis for multi-dimensional data."))
+#     end # 
+
+#     data_vec = vec(Data)
+#     NumberOfDataPoints = length(data_vec)
+#     dd = Degree
+
+#     # Compute raw moments (no centering)
+#     m = zeros(T, 2 * dd + 2)
+#     for i in 0:(2*dd+1)
+#         m[i+1] = sum(data_vec .^ i) / NumberOfDataPoints
+#     end
+
+#     OrthonormalBasis = zeros(T, dd + 1, dd + 1)
+#     OrthogonalBasis = zeros(T, dd + 1, dd + 1)
+
+#     # Same algorithm as centered version but without scaling
+#     for degree in 0:dd
+#         Hankel = @views OrthogonalBasis[1:(degree+1), 1:(degree+1)]
+#         Vc = zeros(T, degree + 1)
+
+#         for i in 0:(degree-1)
+#             for j in 0:degree
+#                 Hankel[i+1, j+1] = m[i+j+1]
+#             end
+#             max_val = maximum(abs.(@views Hankel[i+1, :]))
+#             if max_val > zero(T)
+#                 Hankel[i+1, :] = @views Hankel[i+1, :] / max_val
+#             end
+#         end
+
+#         for j in 0:(degree-1)
+#             Hankel[degree+1, j+1] = zero(T)
+#         end
+#         Hankel[degree+1, degree+1] = one(T)
+#         max_val = maximum(abs.(@views Hankel[degree+1, :]))
+#         if max_val > zero(T)
+#             Hankel[degree+1, :] = @views Hankel[degree+1, :] / max_val
+#         end
+
+#         for i in 0:(degree-1)
+#             Vc[i+1] = zero(T)
+#         end
+#         Vc[degree+1] = one(T)
+
+#         OrthogonalBasis[degree+1, 1:(degree+1)] .= solve_linear_robust(Hankel, Vc)
+
+#         # Normalization using original data
+#         P_norm = zero(T)
+#         for i in 1:NumberOfDataPoints
+#             Poly = zero(T)
+#             for k in 0:degree
+#                 Poly += @views OrthogonalBasis[degree+1, k+1] * data_vec[i]^k
+#             end
+#             P_norm += Poly^2 / NumberOfDataPoints
+#         end
+
+#         # Improved numerical stability check
+#         eps_val = eps(T) * 1.0e4 # More conservative epsilon
+#         if P_norm <= eps_val
+#             # Fallback: use standard monomial basis for this degree
+#             for i in 1:(degree+1)
+#                 for j in 1:(degree+1)
+#                     if i == degree + 1 && j == degree + 1
+#                         OrthonormalBasis[i, j] = one(T)
+#                     elseif i >= j && i <= degree
+#                         OrthonormalBasis[i, j] = one(T)
+#                     else
+#                         OrthonormalBasis[i, j] = zero(T)
+#                     end
+#                 end
+#             end
+#         else
+#             # Normal normalization with safety check
+#             norm_factor = sqrt(P_norm)
+#             if norm_factor <= eps_val
+#                 norm_factor = eps_val
+#             end
+#             for k in 0:degree
+#                 OrthonormalBasis[degree+1, k+1] = @views OrthogonalBasis[degree+1, k+1] / norm_factor
+#             end
+#         end
+#     end
+
+#     return OrthonormalBasis
+# end
+# using LinearAlgebra
+# using Statistics
+
+# """
+#     aPCE_OrthonormalBasis(Data, Degree, [center_data])
+
+# Constructs orthonormal polynomial basis coefficients using the Discretized Stieltjes procedure.
+
+# # Arguments
+# - `Data::AbstractArray{T}`: 1D array of data samples.
+# - `Degree::Integer`: Maximum polynomial degree.
+# - `center_data::Val{Bool}`: If `Val{true}`, data is standardized internally (recommended).
+
+# # Returns
+# - Matrix `Coeffs` where `Coeffs[i, :]` are the coefficients for the polynomial of degree `i-1`.
+#   Coefficients are in the monomial basis: P_k(x) = sum_j Coeffs[k+1, j+1] * x^j
+# """
+# function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::Integer, ::Val{CenterData}=Val(true)) where {T<:Real,CenterData}
+#     if ndims(Data) > 1 && size(Data, 2) > 1
+#         throw(ArgumentError("aPCE_OrthonormalBasis expects 1D data. Flatten your input."))
+#     end
+
+#     x_raw = vec(Data)
+#     N = length(x_raw)
+#     D = Degree
+
+#     # Standardization
+#     if CenterData
+#         μ = mean(x_raw)
+#         σ_val = std(x_raw; mean=μ)
+#         σ = σ_val > 10 * eps(T) ? σ_val : one(T)
+#     else
+#         μ = zero(T)
+#         σ = one(T)
+#     end
+
+#     x = (x_raw .- μ) ./ σ
+
+#     # Storage for polynomial evaluations at all data points
+#     # P_evals[k+1, i] = P_k(x[i])
+#     P_evals = zeros(T, D + 1, N)
+#     P_evals[1, :] .= one(T)  # P_0 = 1
+
+#     # Storage for monic polynomial coefficients in transformed variable
+#     # MonicCoeffs[k+1, j+1] = coefficient of x^j in monic P_k
+#     MonicCoeffs = zeros(T, D + 1, D + 1)
+#     MonicCoeffs[1, 1] = one(T)  # P_0 = 1
+
+#     # Recurrence coefficients
+#     α = zeros(T, D)
+#     β = zeros(T, D)
+#     norms_sq = zeros(T, D + 1)  # <P_k, P_k>
+
+#     norms_sq[1] = T(N)  # <P_0, P_0> = N
+
+#     # Stieltjes recurrence: P_{k+1}(x) = (x - α_k) P_k(x) - β_k P_{k-1}(x)
+#     for k in 0:(D-1)
+#         p_k = @view P_evals[k+1, :]
+
+#         # α_k = <x P_k, P_k> / <P_k, P_k>
+#         pk_sq_norm = dot(p_k, p_k)
+#         norms_sq[k+1] = pk_sq_norm
+
+#         α[k+1] = dot(x .* p_k, p_k) / pk_sq_norm
+
+#         # β_k = <P_k, P_k> / <P_{k-1}, P_{k-1}>
+#         if k == 0
+#             β[k+1] = pk_sq_norm  # β_0 not used in recurrence but store for reference
+#         else
+#             β[k+1] = pk_sq_norm / norms_sq[k]
+#         end
+
+#         # Compute P_{k+1} evaluations
+#         p_kp1 = @view P_evals[k+2, :]
+#         @. p_kp1 = (x - α[k+1]) * p_k
+#         if k > 0
+#             p_km1 = @view P_evals[k, :]
+#             @. p_kp1 -= β[k+1] * p_km1
+#         end
+
+#         # Update coefficient matrix: P_{k+1} = x*P_k - α_k*P_k - β_k*P_{k-1}
+#         # x * P_k: shift coefficients right
+#         for j in 0:k
+#             MonicCoeffs[k+2, j+2] += MonicCoeffs[k+1, j+1]
+#         end
+#         # -α_k * P_k
+#         for j in 0:k
+#             MonicCoeffs[k+2, j+1] -= α[k+1] * MonicCoeffs[k+1, j+1]
+#         end
+#         # -β_k * P_{k-1}
+#         if k > 0
+#             for j in 0:(k-1)
+#                 MonicCoeffs[k+2, j+1] -= β[k+1] * MonicCoeffs[k, j+1]
+#             end
+#         end
+#     end
+
+#     # Final norm
+#     norms_sq[D+1] = dot(P_evals[D+1, :], P_evals[D+1, :])
+
+#     # Transform coefficients back to original variable and normalize
+#     # If P_k(x') with x' = (x - μ)/σ, then in terms of x:
+#     # (x')^p = ((x - μ)/σ)^p = σ^{-p} * sum_{j=0}^p binom(p,j) * x^j * (-μ)^{p-j}
+
+#     OrthonormalBasis = zeros(T, D + 1, D + 1)
+
+#     for k in 0:D
+#         # Normalization factor: 1/sqrt(<P_k, P_k>/N)
+#         norm_factor = sqrt(norms_sq[k+1] / N)
+#         norm_factor = norm_factor < eps(T) ? one(T) : norm_factor
+
+#         # For each power p in the monic polynomial
+#         for p in 0:k
+#             c = MonicCoeffs[k+1, p+1] / norm_factor
+
+#             # Expand (x')^p = ((x - μ)/σ)^p using binomial theorem
+#             inv_σ_p = one(T) / (σ^p)
+#             for j in 0:p
+#                 binom_coeff = binomial(p, j)
+#                 OrthonormalBasis[k+1, j+1] += c * inv_σ_p * binom_coeff * ((-μ)^(p - j))
+#             end
+#         end
+#     end
+
+#     return OrthonormalBasis
+# end
+
+
+### VERSION 1 
+
+# using LinearAlgebra
+# using Statistics
+
+# """
+#     aPCE_OrthonormalBasis(Data, Degree, center_data)
+
+# Constructs orthonormal polynomial basis exactly as in Oladyshkin & Nowak (2012).
+# Uses Hankel matrix solve (Eq. 14) and Hankel inner product normalization (Eq. 22-23).
+# """
+# function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::Integer, ::Val{true}) where {T<:Real}
+#     x_raw = vec(Data)
+
+#     # Standardize (paper Eq. 15)
+#     μ = mean(x_raw)
+#     σ_val = std(x_raw; mean=μ)
+#     σ = σ_val > eps(T) ? σ_val : one(T)
+#     x = (x_raw .- μ) ./ σ
+
+#     # Build basis in transformed space
+#     OrthonormalCoeffs = _build_orthonormal_basis(x, Degree)
+
+#     # Back-transform via binomial expansion
+#     return _backtransform(OrthonormalCoeffs, μ, σ, Degree)
+# end
+
+# function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::Integer, ::Val{false}) where {T<:Real}
+#     x = vec(Data)
+#     return _build_orthonormal_basis(x, Degree)
+# end
+
+# function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::Integer) where {T<:Real}
+#     return aPCE_OrthonormalBasis(Data, Degree, Val(true))
+# end
+
+# """
+# Build orthonormal basis using Hankel method (paper Eq. 14, 22-23).
+# """
+# function _build_orthonormal_basis(x::AbstractVector{T}, D::Integer) where {T<:Real}
+#     # Compute moments: m[k+1] = E[x^k]
+#     m = zeros(T, 2D + 1)
+#     for k in 0:2D
+#         m[k+1] = mean(x .^ k)
+#     end
+
+#     # Monic orthogonal polynomials via Hankel solve (Eq. 14)
+#     MonicCoeffs = zeros(T, D + 1, D + 1)
+#     MonicCoeffs[1, 1] = one(T)  # P_0 = 1
+
+#     for k in 1:D
+#         # Build moment matrix
+#         M = zeros(T, k + 1, k + 1)
+#         rhs = zeros(T, k + 1)
+
+#         # Orthogonality conditions: Σᵢ pᵢ m_{i+j} = 0 for j = 0..k-1
+#         for row in 0:(k-1)
+#             for col in 0:k
+#                 M[row+1, col+1] = m[row+col+1]
+#             end
+#         end
+
+#         # Monic constraint: p_k = 1
+#         M[k+1, k+1] = one(T)
+#         rhs[k+1] = one(T)
+
+#         MonicCoeffs[k+1, 1:(k+1)] = M \ rhs
+#     end
+
+#     # Normalize via Hankel inner product (Eq. 22-23)
+#     # ‖P_k‖² = Σᵢ Σⱼ pᵢ pⱼ m_{i+j}
+#     OrthonormalCoeffs = zeros(T, D + 1, D + 1)
+
+#     for k in 0:D
+#         norm_sq = zero(T)
+#         for i in 0:k
+#             for j in 0:k
+#                 norm_sq += MonicCoeffs[k+1, i+1] * MonicCoeffs[k+1, j+1] * m[i+j+1]
+#             end
+#         end
+
+#         norm_factor = sqrt(max(norm_sq, eps(T)))
+
+#         for j in 0:k
+#             OrthonormalCoeffs[k+1, j+1] = MonicCoeffs[k+1, j+1] / norm_factor
+#         end
+#     end
+
+#     return OrthonormalCoeffs
+# end
+
+# """
+# Back-transform from standardized variable x' = (x-μ)/σ to original x.
+# """
+# function _backtransform(Coeffs::AbstractMatrix{T}, μ::T, σ::T, D::Integer) where {T<:Real}
+#     Result = zeros(T, D + 1, D + 1)
+
+#     for k in 0:D
+#         for j in 0:k
+#             c = Coeffs[k+1, j+1]
+#             inv_σ_j = one(T) / (σ^j)
+#             for l in 0:j
+#                 Result[k+1, l+1] += c * inv_σ_j * binomial(j, l) * ((-μ)^(j - l))
+#             end
+#         end
+#     end
+
+#     return Result
+# end
+
+#### Version2
+"""
+    aPCE_OrthonormalBasis(Data, Degree, center_data)
+
+Constructs orthonormal polynomial basis using the Stieltjes procedure.
+Mathematically equivalent to Oladyshkin & Nowak (2012) Hankel method.
+"""
+function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::Integer, ::Val{true}) where {T<:Real}
+    x_raw = vec(Data)
+    N = length(x_raw)
+    D = Degree
+
+    # Standardize: zero mean, unit variance (paper Eq. 15)
+    μ = StatsBase.mean(x_raw)
+    σ_val = StatsBase.std(x_raw; mean=μ)
+    σ = σ_val > eps(T) ? σ_val : one(T)
+    x = (x_raw .- μ) ./ σ
+
+    # Compute moments and build basis in transformed space
+    m, MonicCoeffs = _stieltjes_core(x, D)
+
+    # Normalize via Hankel inner product: ‖P‖² = pᵀHp
+    OrthonormalCoeffs = _normalize_hankel(MonicCoeffs, m, D)
+
+    # Back-transform to original variable via binomial expansion
+    FinalBasis = zeros(T, D + 1, D + 1)
+
+    for k in 0:D
+        for j in 0:k
+            c = OrthonormalCoeffs[k+1, j+1]
+            inv_σ_j = one(T) / (σ^j)
+            for l in 0:j
+                FinalBasis[k+1, l+1] += c * inv_σ_j * binomial(j, l) * ((-μ)^(j - l))
+            end
+        end
     end
 
-    data_vec = vec(Data)
-    NumberOfDataPoints = length(data_vec)
-    dd = Degree
-
-    # Centering: scale data by mean (not subtraction)
-    data_mean = StatsBase.mean(data_vec)
-    Data_scaled = data_vec ./ data_mean
-
-    # Compute moments using scaled data
-    m = zeros(T, 2 * dd + 2)
-    for i in 0:(2*dd+1)
-        m[i+1] = sum(Data_scaled .^ i) / NumberOfDataPoints
-    end
-
-    OrthonormalBasis = zeros(T, dd + 1, dd + 1)
-    OrthogonalBasis = zeros(T, dd + 1, dd + 1)
-
-    for degree in 0:dd
-        Hankel = @views OrthogonalBasis[1:(degree+1), 1:(degree+1)]
-        Vc = zeros(T, degree + 1)
-
-        # Build Hankel matrix
-        for i in 0:(degree-1)
-            for j in 0:degree
-                Hankel[i+1, j+1] = m[i+j+1]
-            end
-            max_val = maximum(abs.(@views Hankel[i+1, :]))
-            if max_val > zero(T)
-                Hankel[i+1, :] = @views Hankel[i+1, :] / max_val
-            end
-        end
-
-        # Last row setup
-        for j in 0:(degree-1)
-            Hankel[degree+1, j+1] = zero(T)
-        end
-        Hankel[degree+1, degree+1] = one(T)
-        max_val = maximum(abs.(@views Hankel[degree+1, :]))
-        if max_val > zero(T)
-            Hankel[degree+1, :] = @views Hankel[degree+1, :] / max_val
-        end
-
-        # Right-hand side vector
-        for i in 0:(degree-1)
-            Vc[i+1] = zero(T)
-        end
-        Vc[degree+1] = one(T)
-
-        # Solve linear system using robust, differentiable solver
-        OrthogonalBasis[degree+1, 1:(degree+1)] .= solve_linear_robust(Hankel, Vc; λ_init=1e-3, max_iter=50)
-
-        # Normalization
-        P_norm = zero(T)
-        for i in 1:NumberOfDataPoints
-            Poly = zero(T)
-            for k in 0:degree
-                Poly += @views OrthogonalBasis[degree+1, k+1] * Data_scaled[i]^k
-            end
-            P_norm += Poly^2 / NumberOfDataPoints
-        end
-
-        # Improved numerical stability check
-        eps_val = eps(T) * 1.0e6  # More conservative epsilon
-        if P_norm <= eps_val
-            # Fallback: use standard monomial basis for this degree
-            for i in 1:(degree+1)
-                for j in 1:(degree+1)
-                    if i == degree + 1 && j == degree + 1
-                        OrthonormalBasis[i, j] = one(T)
-                    elseif i >= j && i <= degree
-                        OrthonormalBasis[i, j] = one(T)
-                    else
-                        OrthonormalBasis[i, j] = zero(T)
-                    end
-                end
-            end
-        else
-            # Normal normalization with safety check
-            norm_factor = sqrt(P_norm)
-            if norm_factor <= eps_val
-                norm_factor = eps_val
-            end
-            for k in 0:degree
-                OrthonormalBasis[degree+1, k+1] = @views OrthogonalBasis[degree+1, k+1] / norm_factor
-            end
-        end
-    end
-
-    # Backward transformation to data space
-    for k in 1:size(OrthonormalBasis, 2)
-        OrthonormalBasis[:, k] ./= (data_mean^(k - 1))
-    end
-
-    return OrthonormalBasis
+    return FinalBasis
 end
 
-function _solve_levenberg_marquardt_solver(Psi, y; λ_init=1e-3, max_iter=50)::Result{Vector{eltype(Psi)},String}
+function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::Integer, ::Val{false}) where {T<:Real}
+    x = vec(Data)
+    D = Degree
+
+    # No centering - work directly with raw data
+    m, MonicCoeffs = _stieltjes_core(x, D)
+
+    # Normalize via Hankel inner product
+    return _normalize_hankel(MonicCoeffs, m, D)
+end
+
+# Default: centered
+function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::Integer) where {T<:Real}
+    return aPCE_OrthonormalBasis(Data, Degree, Val(true))
+end
+
+"""
+Core Stieltjes three-term recurrence. Returns moments and monic coefficients.
+"""
+function _stieltjes_core(x::AbstractVector{T}, D::Integer) where {T<:Real}
+    N = length(x)
+
+    # Precompute moments: m[k+1] = E[x^k]
+    m = zeros(T, 2D + 1)
+    for k in 0:2D
+        m[k+1] = mean(x .^ k)
+    end
+
+    # Polynomial evaluations
+    P_prev = zeros(T, N)
+    P_curr = ones(T, N)
+
+    # Monic polynomial coefficients
+    MonicCoeffs = zeros(T, D + 1, D + 1)
+    MonicCoeffs[1, 1] = one(T)
+
+    # Track inner products directly
+    inner_prev = one(T)  # <P_{k-1}, P_{k-1}>, initialized for k=0
+
+    for k in 0:(D-1)
+        # <P_k, P_k>
+        inner_curr = LinearAlgebra.dot(P_curr, P_curr) / N
+
+        # α_k = <x P_k, P_k> / <P_k, P_k>
+        α_k = LinearAlgebra.dot(x .* P_curr, P_curr) / N / inner_curr
+
+        # β_k = <P_k, P_k> / <P_{k-1}, P_{k-1}>
+        β_k = inner_curr / inner_prev
+
+        # P_{k+1} = (x - α_k) P_k - β_k P_{k-1}
+        P_next = (x .- α_k) .* P_curr
+        if k > 0
+            P_next .-= β_k .* P_prev
+        end
+
+        # Coefficient recurrence: P_{k+1} = x·P_k - α_k·P_k - β_k·P_{k-1}
+
+        # x · P_k (shift right)
+        for j in 0:k
+            MonicCoeffs[k+2, j+2] += MonicCoeffs[k+1, j+1]
+        end
+
+        # -α_k · P_k
+        for j in 0:k
+            MonicCoeffs[k+2, j+1] -= α_k * MonicCoeffs[k+1, j+1]
+        end
+
+        # -β_k · P_{k-1}
+        if k > 0
+            for j in 0:(k-1)
+                MonicCoeffs[k+2, j+1] -= β_k * MonicCoeffs[k, j+1]
+            end
+        end
+
+        # Advance
+        P_prev = P_curr
+        P_curr = P_next
+        inner_prev = inner_curr
+    end
+
+    return m, MonicCoeffs
+end
+
+"""
+Normalize monic polynomials using Hankel inner product (paper Eq. 22).
+‖P_k‖² = Σᵢ Σⱼ pᵢ pⱼ m_{i+j}
+"""
+function _normalize_hankel(MonicCoeffs::AbstractMatrix{T}, m::AbstractVector{T}, D::Integer) where {T<:Real}
+    OrthonormalCoeffs = zeros(T, D + 1, D + 1)
+
+    for k in 0:D
+        p = @view MonicCoeffs[k+1, 1:(k+1)]
+
+        # ‖P_k‖² = pᵀ H p where H[i,j] = m_{i+j}
+        norm_sq = zero(T)
+        for i in 0:k
+            for j in 0:k
+                norm_sq += p[i+1] * p[j+1] * m[i+j+1]
+            end
+        end
+
+        norm_factor = sqrt(max(norm_sq, eps(T)))
+
+        for j in 0:k
+            OrthonormalCoeffs[k+1, j+1] = MonicCoeffs[k+1, j+1] / norm_factor
+        end
+    end
+
+    return OrthonormalCoeffs
+end
+
+
+
+function _solve_levenberg_marquardt_solver(Psi::AbstractMatrix{T}, y::AbstractVector{T}; λ_init=1e-3, max_iter=100)::Result{Vector{T},String} where {T<:Real}
     # Levenberg-Marquardt with adaptive regularization
-    T = eltype(Psi)
+    λ = 0.0
     x = pinv(Psi) * y # Initial guess using pinv
     λ = T(λ_init)
 
@@ -495,96 +976,6 @@ function robust_iterative_refinement(A, b; maxiter=5, tol=1.0e-10)
 end
 
 
-function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::S, center_data::Val{false}) where {T<:Real,S<:Integer}
-
-    if ndims(Data) > 1 && size(Data, 2) > 1
-        # Replace this by ErrorTypes
-        throw(ArgumentError("aPCE_OrthonormalBasis expects 1D data only. Use create_basis for multi-dimensional data."))
-    end # 
-
-    data_vec = vec(Data)
-    NumberOfDataPoints = length(data_vec)
-    dd = Degree
-
-    # Compute raw moments (no centering)
-    m = zeros(T, 2 * dd + 2)
-    for i in 0:(2*dd+1)
-        m[i+1] = sum(data_vec .^ i) / NumberOfDataPoints
-    end
-
-    OrthonormalBasis = zeros(T, dd + 1, dd + 1)
-    OrthogonalBasis = zeros(T, dd + 1, dd + 1)
-
-    # Same algorithm as centered version but without scaling
-    for degree in 0:dd
-        Hankel = @views OrthogonalBasis[1:(degree+1), 1:(degree+1)]
-        Vc = zeros(T, degree + 1)
-
-        for i in 0:(degree-1)
-            for j in 0:degree
-                Hankel[i+1, j+1] = m[i+j+1]
-            end
-            max_val = maximum(abs.(@views Hankel[i+1, :]))
-            if max_val > zero(T)
-                Hankel[i+1, :] = @views Hankel[i+1, :] / max_val
-            end
-        end
-
-        for j in 0:(degree-1)
-            Hankel[degree+1, j+1] = zero(T)
-        end
-        Hankel[degree+1, degree+1] = one(T)
-        max_val = maximum(abs.(@views Hankel[degree+1, :]))
-        if max_val > zero(T)
-            Hankel[degree+1, :] = @views Hankel[degree+1, :] / max_val
-        end
-
-        for i in 0:(degree-1)
-            Vc[i+1] = zero(T)
-        end
-        Vc[degree+1] = one(T)
-
-        OrthogonalBasis[degree+1, 1:(degree+1)] .= solve_linear_robust(Hankel, Vc)
-
-        # Normalization using original data
-        P_norm = zero(T)
-        for i in 1:NumberOfDataPoints
-            Poly = zero(T)
-            for k in 0:degree
-                Poly += @views OrthogonalBasis[degree+1, k+1] * data_vec[i]^k
-            end
-            P_norm += Poly^2 / NumberOfDataPoints
-        end
-
-        # Improved numerical stability check
-        eps_val = eps(T) * 1.0e6  # More conservative epsilon
-        if P_norm <= eps_val
-            # Fallback: use standard monomial basis for this degree
-            for i in 1:(degree+1)
-                for j in 1:(degree+1)
-                    if i == degree + 1 && j == degree + 1
-                        OrthonormalBasis[i, j] = one(T)
-                    elseif i >= j && i <= degree
-                        OrthonormalBasis[i, j] = one(T)
-                    else
-                        OrthonormalBasis[i, j] = zero(T)
-                    end
-                end
-            end
-        else
-            # Normal normalization with safety check
-            norm_factor = sqrt(P_norm)
-            if norm_factor <= eps_val
-                norm_factor = eps_val
-            end
-            for k in 0:degree
-                OrthonormalBasis[degree+1, k+1] = @views OrthogonalBasis[degree+1, k+1] / norm_factor
-            end
-        end
-    end
-
-    return OrthonormalBasis
-end
 
 
 """

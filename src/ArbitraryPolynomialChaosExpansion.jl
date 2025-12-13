@@ -94,10 +94,7 @@ BLAS.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
 configdir(args...) = projectdir("configs", args...)
 outputdir(args...) = projectdir("output", args...)
 
-export aPCE_FullBasis, aPCE_MultivariatePolynomialDegrees, aPCE_PsiPolynomialMatrix, compose_Ψ, GaussianCollocation, partitionTrainTest, special_sort_two_arrays!, train!, evaluate_Ψ, aPCE, aPCE_OrthonormalBasis, create_basis, normalization_functions, predict, UQ, aPCE_PsiPolynomialMatrix_zygote, reverse_columns!, compute_moments!
-
-# Re-export the methods to ensure they're available
-export aPCE_OrthonormalBasis
+export aPCE_FullBasis, aPCE_MultivariatePolynomialDegrees, aPCE_PsiPolynomialMatrix, compose_Ψ, GaussianCollocation, partitionTrainTest, special_sort_two_arrays!, train!, evaluate_Ψ, aPCE, aPCE_OrthonormalBasis, create_basis, normalization_functions, predict, UQ, PsiPolynomialMatrix_zygote, reverse_columns!, compute_moments!
 
 include("APCEfunctions.jl")
 include("APCEhighlevel.jl")
