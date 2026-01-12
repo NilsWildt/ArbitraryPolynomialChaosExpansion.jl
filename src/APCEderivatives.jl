@@ -91,9 +91,9 @@ ChainRule for computing a single element of the Psi matrix.
 Returns the polynomial evaluation and its gradient with respect to the input.
 """
 function ChainRulesCore.rrule(
-    ::typeof(compute_Psi_element),
-    i, j, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, InputDimensions
-)
+        ::typeof(compute_Psi_element),
+        i, j, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, InputDimensions
+    )
     # Forward computation
     product = one(eltype(TrainingInput))
     derivatives = zeros(size(TrainingInput, 2))
@@ -136,11 +136,11 @@ Efficient ChainRule for the Zygote-compatible Psi matrix computation.
 Uses pre-computed polynomial evaluations and optimized gradient computation.
 """
 function ChainRulesCore.rrule(
-    ::typeof(aPCE_PsiPolynomialMatrix_zygote),
-    TrainingInput,
-    MultivariatePolynomialDegrees,
-    OrthonormalBasis
-)
+        ::typeof(aPCE_PsiPolynomialMatrix_zygote),
+        TrainingInput,
+        MultivariatePolynomialDegrees,
+        OrthonormalBasis
+    )
     # Ensure input is matrix
     x = ensure_matrix(TrainingInput)
 
@@ -182,9 +182,9 @@ function ChainRulesCore.rrule(
 
                     # Compute derivative for dimension d
                     derivative_coeffs = zeros(T, degree)
-                    coeffs = @view OrthonormalBasis[degree+1, 1:(degree+1), d]
+                    coeffs = @view OrthonormalBasis[degree + 1, 1:(degree + 1), d]
                     for k in 1:degree
-                        derivative_coeffs[k] = coeffs[k+1] * k
+                        derivative_coeffs[k] = coeffs[k + 1] * k
                     end
 
                     x_val = x[j, d]
@@ -219,11 +219,11 @@ Efficient ChainRule for the optimized Psi matrix computation.
 Uses vectorized operations and pre-computed polynomial evaluations.
 """
 function ChainRulesCore.rrule(
-    ::typeof(aPCE_PsiPolynomialMatrix),
-    TrainingInput,
-    MultivariatePolynomialDegrees,
-    OrthonormalBasis
-)
+        ::typeof(aPCE_PsiPolynomialMatrix),
+        TrainingInput,
+        MultivariatePolynomialDegrees,
+        OrthonormalBasis
+    )
     # Ensure input is matrix
     x = ensure_matrix(TrainingInput)
 
@@ -265,9 +265,9 @@ function ChainRulesCore.rrule(
 
                     # Compute derivative for dimension d
                     derivative_coeffs = zeros(T, degree)
-                    coeffs = @view OrthonormalBasis[degree+1, 1:(degree+1), d]
+                    coeffs = @view OrthonormalBasis[degree + 1, 1:(degree + 1), d]
                     @simd for k in 1:degree
-                        derivative_coeffs[k] = coeffs[k+1] * k
+                        derivative_coeffs[k] = coeffs[k + 1] * k
                     end
 
                     x_val = x[j, d]
@@ -303,13 +303,13 @@ end
 ChainRule for basis creation with Val dispatch.
 Uses ForwardDiff for gradient computation of the basis construction.
 """
-function ChainRulesCore.rrule(::typeof(create_basis), x::AbstractArray{T}, degree::Integer, ::Val{is_ortho}; center_data::Bool=true) where {T,is_ortho}
-    basis = create_basis(x, degree, Val(is_ortho); center_data=center_data)
+function ChainRulesCore.rrule(::typeof(create_basis), x::AbstractArray{T}, degree::Integer, ::Val{is_ortho}; center_data::Bool = true) where {T, is_ortho}
+    basis = create_basis(x, degree, Val(is_ortho); center_data = center_data)
 
     function create_basis_pullback(Δbasis)
         function basis_wrapper(x_vec)
             x_reshaped = reshape(x_vec, size(x))
-            basis_val = create_basis(x_reshaped, degree, Val(is_ortho); center_data=center_data)
+            basis_val = create_basis(x_reshaped, degree, Val(is_ortho); center_data = center_data)
             return sum(basis_val .* unthunk(Δbasis))
         end
         grad = ForwardDiff.gradient(basis_wrapper, vec(x))
@@ -325,8 +325,8 @@ end
 
 ChainRule for basis creation with default dispatch (orthonormal basis).
 """
-function ChainRulesCore.rrule(::typeof(create_basis), x::AbstractArray{T}, degree::Integer; center_data::Bool=true) where {T}
-    return rrule(create_basis, x, degree, Val(true); center_data=center_data)
+function ChainRulesCore.rrule(::typeof(create_basis), x::AbstractArray{T}, degree::Integer; center_data::Bool = true) where {T}
+    return rrule(create_basis, x, degree, Val(true); center_data = center_data)
 end
 
 """
@@ -335,8 +335,8 @@ end
 ChainRule for basis creation with Bool dispatch.
 Converts Bool to Val for type-stable dispatch.
 """
-function ChainRulesCore.rrule(::typeof(create_basis), x::AbstractArray, degree::Integer, is_orthonormal::Bool; center_data::Bool=true)
-    return rrule(create_basis, x, degree, Val(is_orthonormal); center_data=center_data)
+function ChainRulesCore.rrule(::typeof(create_basis), x::AbstractArray, degree::Integer, is_orthonormal::Bool; center_data::Bool = true)
+    return rrule(create_basis, x, degree, Val(is_orthonormal); center_data = center_data)
 end
 
 """
@@ -345,7 +345,7 @@ end
 ChainRule for aPCE_OrthonormalBasis.
 Uses ForwardDiff for gradient computation since this involves complex numerical operations.
 """
-function ChainRulesCore.rrule(::typeof(aPCE_OrthonormalBasis), Data::AbstractArray{T}, Degree::Integer, center_data::Val{C}) where {T,C}
+function ChainRulesCore.rrule(::typeof(aPCE_OrthonormalBasis), Data::AbstractArray{T}, Degree::Integer, center_data::Val{C}) where {T, C}
     basis = aPCE_OrthonormalBasis(Data, Degree, center_data)
 
     function aPCE_OrthonormalBasis_pullback(Δbasis)
@@ -375,22 +375,22 @@ ReverseDiff.@grad_from_chainrules create_basis(
 
 @from_rrule DefaultCtx Tuple{
     typeof(create_basis),
-    AbstractArray,Integer,
+    AbstractArray, Integer,
 }
 
 @from_rrule DefaultCtx Tuple{
     typeof(create_basis),
-    AbstractArray,Integer,Val,
+    AbstractArray, Integer, Val,
 }
 
 @from_rrule DefaultCtx Tuple{
     typeof(create_basis),
-    AbstractArray,Integer,Bool,
+    AbstractArray, Integer, Bool,
 }
 
 @from_rrule DefaultCtx Tuple{
     typeof(aPCE_OrthonormalBasis),
-    AbstractArray,Integer,Val,
+    AbstractArray, Integer, Val,
 }
 
 
@@ -406,9 +406,8 @@ function ChainRulesCore.rrule(::typeof(solve_linear_robust), A, b; kwargs...)
     return x, solve_linear_robust_pullback
 end
 
-@from_rrule DefaultCtx Tuple{typeof(solve_linear_robust),Any,Any} true
-@from_rrule DefaultCtx Tuple{typeof(pinv),AbstractMatrix}
-
+@from_rrule DefaultCtx Tuple{typeof(solve_linear_robust), Any, Any} true
+@from_rrule DefaultCtx Tuple{typeof(pinv), AbstractMatrix}
 
 
 # ===== TESTS =====
@@ -423,7 +422,7 @@ end
     f1(x) = sum(create_basis(x, degree))
     f2(x) = sum(create_basis(x, degree, Val(true)))
     f3(x) = sum(create_basis(x, degree, true))
-    f4(x) = sum(create_basis(x, degree; center_data=true))
+    f4(x) = sum(create_basis(x, degree; center_data = true))
 
     grad1 = ForwardDiff.gradient(f1, x)
     grad2 = ForwardDiff.gradient(f2, x)
@@ -433,13 +432,13 @@ end
     @info "grad2: $grad2"
     @info "grad3: $grad3"
     @info "grad4: $grad4"
-    @test isapprox(grad1, grad2, atol=1.0e-10)
-    @test isapprox(grad1, grad3, atol=1.0e-10)
-    @test isapprox(grad1, grad4, atol=1.0e-10)
+    @test isapprox(grad1, grad2, atol = 1.0e-10)
+    @test isapprox(grad1, grad3, atol = 1.0e-10)
+    @test isapprox(grad1, grad4, atol = 1.0e-10)
 
     # Test Zygote consistency
     grad1_zyg = Zygote.gradient(f1, x)[1]
-    @test isapprox(grad1, grad1_zyg, atol=1.0e-8)
+    @test isapprox(grad1, grad1_zyg, atol = 1.0e-8)
 end
 
 @testitem "create_basis_differentiation_val_dispatch" begin
@@ -449,8 +448,8 @@ end
     degree = 2
 
     # Test Val{true} dispatch
-    f_true(x) = sum(create_basis(x, degree, Val(true); center_data=true))
-    f_true_no_center(x) = sum(create_basis(x, degree, Val(true); center_data=false))
+    f_true(x) = sum(create_basis(x, degree, Val(true); center_data = true))
+    f_true_no_center(x) = sum(create_basis(x, degree, Val(true); center_data = false))
 
     grad_true_fd = ForwardDiff.gradient(f_true, x)
     grad_true_no_center_fd = ForwardDiff.gradient(f_true_no_center, x)
@@ -458,8 +457,8 @@ end
     grad_true_zyg = Zygote.gradient(f_true, x)[1]
     grad_true_no_center_zyg = Zygote.gradient(f_true_no_center, x)[1]
 
-    @test isapprox(grad_true_fd, grad_true_zyg, atol=1.0e-8)
-    @test isapprox(grad_true_no_center_fd, grad_true_no_center_zyg, atol=1.0e-8)
+    @test isapprox(grad_true_fd, grad_true_zyg, atol = 1.0e-8)
+    @test isapprox(grad_true_no_center_fd, grad_true_no_center_zyg, atol = 1.0e-8)
 
     # Test Val{false} dispatch
     f_false(x) = sum(create_basis(x, degree, Val(false)))
@@ -467,7 +466,7 @@ end
     grad_false_fd = ForwardDiff.gradient(f_false, x)
     grad_false_zyg = Zygote.gradient(f_false, x)[1]
 
-    @test isapprox(grad_false_fd, grad_false_zyg, atol=1.0e-8)
+    @test isapprox(grad_false_fd, grad_false_zyg, atol = 1.0e-8)
 end
 
 @testitem "create_basis_differentiation_bool_dispatch" begin
@@ -477,8 +476,8 @@ end
     degree = 2
 
     # Test Bool dispatch
-    f_bool_true(x) = sum(create_basis(x, degree, true; center_data=false))
-    f_bool_false(x) = sum(create_basis(x, degree, false; center_data=true))
+    f_bool_true(x) = sum(create_basis(x, degree, true; center_data = false))
+    f_bool_false(x) = sum(create_basis(x, degree, false; center_data = true))
 
     grad_bool_true_fd = ForwardDiff.gradient(f_bool_true, x)
     grad_bool_false_fd = ForwardDiff.gradient(f_bool_false, x)
@@ -486,18 +485,18 @@ end
     grad_bool_true_zyg = Zygote.gradient(f_bool_true, x)[1]
     grad_bool_false_zyg = Zygote.gradient(f_bool_false, x)[1]
 
-    @test isapprox(grad_bool_true_fd, grad_bool_true_zyg, atol=1.0e-8)
-    @test isapprox(grad_bool_false_fd, grad_bool_false_zyg, atol=1.0e-8)
+    @test isapprox(grad_bool_true_fd, grad_bool_true_zyg, atol = 1.0e-8)
+    @test isapprox(grad_bool_false_fd, grad_bool_false_zyg, atol = 1.0e-8)
 
     # Test that Bool and Val give same results
-    f_val_true(x) = sum(create_basis(x, degree, Val(true); center_data=false))
-    f_val_false(x) = sum(create_basis(x, degree, Val(false); center_data=true))
+    f_val_true(x) = sum(create_basis(x, degree, Val(true); center_data = false))
+    f_val_false(x) = sum(create_basis(x, degree, Val(false); center_data = true))
 
     grad_val_true_fd = ForwardDiff.gradient(f_val_true, x)
     grad_val_false_fd = ForwardDiff.gradient(f_val_false, x)
 
-    @test isapprox(grad_bool_true_fd, grad_val_true_fd, atol=1.0e-12)
-    @test isapprox(grad_bool_false_fd, grad_val_false_fd, atol=1.0e-12)
+    @test isapprox(grad_bool_true_fd, grad_val_true_fd, atol = 1.0e-12)
+    @test isapprox(grad_bool_false_fd, grad_val_false_fd, atol = 1.0e-12)
 end
 
 @testitem "psi_matrix_chainrules" begin
@@ -514,7 +513,7 @@ end
     grad_psi_fd = ForwardDiff.gradient(f_psi, x)
     grad_psi_zyg = Zygote.gradient(f_psi, x)[1]
     @info "compare gradients aPCE_PsiPolynomialMatrix" StatsBase.mean(abs.(grad_psi_fd .- grad_psi_zyg))
-    @test isapprox(grad_psi_fd, grad_psi_zyg, atol=1.0e-6)
+    @test isapprox(grad_psi_fd, grad_psi_zyg, atol = 1.0e-6)
 
     # Test aPCE_PsiPolynomialMatrix_zygote
     f_psi_zyg(x) = sum(aPCE_PsiPolynomialMatrix_zygote(x, MultivariatePolynomialDegrees, OrthonormalBasis))
@@ -523,10 +522,10 @@ end
     grad_psi_zyg_zyg = Zygote.gradient(f_psi_zyg, x)[1]
     @info "compare gradients aPCE_PsiPolynomialMatrix_zygote" StatsBase.mean(abs.(grad_psi_zyg_fd .- grad_psi_zyg_zyg))
 
-    @test isapprox(grad_psi_zyg_fd, grad_psi_zyg_zyg, atol=1.0e-6)
+    @test isapprox(grad_psi_zyg_fd, grad_psi_zyg_zyg, atol = 1.0e-6)
 
     # Test that both methods give similar results
-    @test isapprox(grad_psi_fd, grad_psi_zyg_fd, atol=1.0e-6)
+    @test isapprox(grad_psi_fd, grad_psi_zyg_fd, atol = 1.0e-6)
 end
 
 
@@ -573,7 +572,7 @@ end
     grad_small_fd = ForwardDiff.gradient(f_small, x_small)
     grad_small_zyg = Zygote.gradient(f_small, x_small)[1]
     @info "compare gradients edge_cases_chainrules" StatsBase.mean(abs.(grad_small_fd .- grad_small_zyg))
-    @test isapprox(grad_small_fd, grad_small_zyg, atol=1.0e-8)
+    @test isapprox(grad_small_fd, grad_small_zyg, atol = 1.0e-8)
 
     # Test with degree 0
     degree = 0
@@ -589,7 +588,7 @@ end
     grad_1d_fd = ForwardDiff.gradient(f_1d, x_1d)
     grad_1d_zyg = Zygote.gradient(f_1d, x_1d)[1]
 
-    @test isapprox(grad_1d_fd, grad_1d_zyg, atol=1.0e-8)
+    @test isapprox(grad_1d_fd, grad_1d_zyg, atol = 1.0e-8)
 end
 
 
@@ -850,7 +849,7 @@ end
     using ArbitraryPolynomialChaosExpansion
 
     backend_mooncake = AutoMooncake()
-    backend_fd = AutoFiniteDifferences(; fdm=FiniteDifferences.central_fdm(5, 1))
+    backend_fd = AutoFiniteDifferences(; fdm = FiniteDifferences.central_fdm(5, 1))
 
     x = rand(Float64, 30, 2)
     degree = 3
@@ -869,7 +868,7 @@ end
     grad_fd = gradient(loss, extras_fd, backend_fd, x)
 
     # Should match within reasonable tolerance
-    @test grad_moon ≈ grad_fd rtol = 1e-4
+    @test grad_moon ≈ grad_fd rtol = 1.0e-4
 end
 
 @testitem "Mooncake autodiff - center_data parameter" begin
@@ -883,7 +882,7 @@ end
     # Test with center_data=true
     function loss_centered(x_mat)
         basis = ArbitraryPolynomialChaosExpansion.create_basis(
-            x_mat, degree, Val(true); center_data=true
+            x_mat, degree, Val(true); center_data = true
         )
         return sum(abs2, basis)
     end
@@ -896,7 +895,7 @@ end
     # Test with center_data=false
     function loss_not_centered(x_mat)
         basis = ArbitraryPolynomialChaosExpansion.create_basis(
-            x_mat, degree, Val(true); center_data=false
+            x_mat, degree, Val(true); center_data = false
         )
         return sum(abs2, basis)
     end
@@ -907,7 +906,7 @@ end
     @test all(isfinite, grad_not_centered)
 
     # Gradients should be different
-    @test !isapprox(grad_centered, grad_not_centered, rtol=1e-3)
+    @test !isapprox(grad_centered, grad_not_centered, rtol = 1.0e-3)
 end
 
 @testitem "Mooncake autodiff - edge cases" begin
@@ -977,9 +976,6 @@ end
     @test grad isa typeof(x)
     @test all(isfinite, grad)
 end
-
-
-
 
 
 # Currently borken at 1.12 bc of JET dependency.

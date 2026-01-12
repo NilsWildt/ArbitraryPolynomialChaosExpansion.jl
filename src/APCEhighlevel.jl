@@ -7,7 +7,7 @@ using DispatchDoctor: @stable
 using LinearAlgebra: qr, svd, pinv, I
 
 export aPCE, predict_from_coeffs
-mutable struct aPCE{T<:Real}
+mutable struct aPCE{T <: Real}
     const InputDistribution::AbstractArray{T} # in [ d x N-samples]
     const input_dimensions::Int64
     output_dimensions::Int64
@@ -20,16 +20,16 @@ mutable struct aPCE{T<:Real}
     do_gauss::Bool
 
     @stable function aPCE(
-        InputDistribution::AbstractVecOrMat{T},
-        ExpansionDegree::Int64;
-        outdim::Int64=1,
-        is_orthonormal::Bool=true,
-        s_marginals=1.0,
-        s_interactions=1.0,
-        center_data=true,
-        do_gauss=false,
-        kwargs...
-    ) where {T}
+            InputDistribution::AbstractVecOrMat{T},
+            ExpansionDegree::Int64;
+            outdim::Int64 = 1,
+            is_orthonormal::Bool = true,
+            s_marginals = 1.0,
+            s_interactions = 1.0,
+            center_data = true,
+            do_gauss = false,
+            kwargs...
+        ) where {T}
         input_dimensions = Int64(size(InputDistribution, 2))
         gauss_one_order_more = 0
         if do_gauss
@@ -37,7 +37,7 @@ mutable struct aPCE{T<:Real}
         end
         MultivariatePolynomialDegrees = aPCE_MultivariatePolynomialDegrees(input_dimensions, ExpansionDegree + gauss_one_order_more, s_marginals, s_interactions)
         NumberOfTerms = min(size(MultivariatePolynomialDegrees, 1), numberPolynomials(ExpansionDegree + gauss_one_order_more, input_dimensions))
-        OrthonormalBasis = create_basis(InputDistribution, ExpansionDegree + gauss_one_order_more, Val(is_orthonormal); center_data=center_data)
+        OrthonormalBasis = create_basis(InputDistribution, ExpansionDegree + gauss_one_order_more, Val(is_orthonormal); center_data = center_data)
         ExpansionCoefficients = zeros(T, NumberOfTerms, outdim)
         return new{T}(
             InputDistribution,
@@ -72,13 +72,13 @@ import Base.show
 end
 
 
-@stable function UQ(apc::aPCE{T}; axis=1) where {T<:Real}
+@stable function UQ(apc::aPCE{T}; axis = 1) where {T <: Real}
     # @info "=> aPCE Toolbox: UQ Arbitrary Polynomial Chaos ..."
     # @info "Computing the mean and variance of the output for dimension $axis"
     lc = Array{T}(apc.ExpansionCoefficients[:, axis])
     OutputMean = @views lc[1, :]
-    OutputVar = @views sum(lc[2:end, :] .^ 2; dims=1)[:]
-    return (OutputMean=OutputMean, OutputVar=OutputVar)
+    OutputVar = @views sum(lc[2:end, :] .^ 2; dims = 1)[:]
+    return (OutputMean = OutputMean, OutputVar = OutputVar)
 end
 
 # function aPCE_PsiPolynomialMatrix(aPCE::aPCE{T}, TrainingInput::Array{S})::Array{T} where {T<:Real,S<:Real}
@@ -91,26 +91,26 @@ end
 #     return Psi
 # end
 
-function aPCE_PsiPolynomialMatrix(aPCE::aPCE{T}, TrainingInput::S)::S where {T<:Real,S<:AbstractArray}
+function aPCE_PsiPolynomialMatrix(aPCE::aPCE{T}, TrainingInput::S)::S where {T <: Real, S <: AbstractArray}
     # @info "" aPCE typeof(TrainingInput) typeof(aPCE)
     Psi = aPCE_PsiPolynomialMatrix(TrainingInput, aPCE.MultivariatePolynomialDegrees, aPCE.OrthonormalBasis)
     return Psi
 end
 
 
-function GaussianCollocation(aPCE::aPCE{T}, len=0; strategy=:PCM)::Matrix{T} where {T<:Real}
+function GaussianCollocation(aPCE::aPCE{T}, len = 0; strategy = :PCM)::Matrix{T} where {T <: Real}
     @assert aPCE.do_gauss "Gaussian collocation requires the do_gauss flag to be set to true"
 
     # Generate all possible combinations of polynomial points
     degree = aPCE.ExpansionDegree
     num_dims = aPCE.input_dimensions
-    point_indices = collect(1:(degree+1))
+    point_indices = collect(1:(degree + 1))
 
     # Create all combinations of point indices across dimensions
     point_combinations = stack(reduce(vcat, Iterators.product([point_indices for _ in 1:num_dims]...)))'
 
     # Sort combinations by sum of indices (lower total degree first)
-    sorted_indices = sortperm(sum(point_combinations; dims=2); dims=1)
+    sorted_indices = sortperm(sum(point_combinations; dims = 2); dims = 1)
     sorted_combinations = point_combinations[sorted_indices[:], :]
 
     # Handle different collocation strategies
@@ -127,13 +127,13 @@ function GaussianCollocation(aPCE::aPCE{T}, len=0; strategy=:PCM)::Matrix{T} whe
             # Extract roots of the polynomial (every other entry from real part)
             polynomial_roots[:, dim] = reinterpret(
                 T,
-                PolynomialRoots.roots(polynomial_basis[degree+2, :])
-            )[1:2:(end-1)]
+                PolynomialRoots.roots(polynomial_basis[degree + 2, :])
+            )[1:2:(end - 1)]
         end
 
         # Sort roots by distance to distribution mean in each dimension
-        mean_distances = abs.(polynomial_roots .- StatsBase.mean(aPCE.InputDistribution; dims=1)[:, :][1])
-        sort_indices_by_dim = mapslices(sortperm, mean_distances, dims=1)
+        mean_distances = abs.(polynomial_roots .- StatsBase.mean(aPCE.InputDistribution; dims = 1)[:, :][1])
+        sort_indices_by_dim = mapslices(sortperm, mean_distances, dims = 1)
 
         @inbounds for dim in 1:num_dims
             polynomial_roots[:, dim] = polynomial_roots[sort_indices_by_dim[:, dim], dim]
@@ -150,7 +150,7 @@ function GaussianCollocation(aPCE::aPCE{T}, len=0; strategy=:PCM)::Matrix{T} whe
         end
 
         # Sort points by first dimension value
-        collocation_points = sortslices(collocation_points, dims=1, by=x -> x[1])
+        collocation_points = sortslices(collocation_points, dims = 1, by = x -> x[1])
         result = collocation_points
     else
         error("Unknown strategy: $strategy. Use :FT or :PCM.")
@@ -208,7 +208,7 @@ end
 #     return nothing
 # end
 
-function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion=:true, reg_order=1)
+function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion = :true, reg_order = 1)
     @info "=> aPCE Toolbox: Training Arbitrary Polynomial Chaos ..."
     T = eltype(TrainingInput)
 
@@ -229,7 +229,7 @@ function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion=:true, reg_order=
     # More robust pseudoinverse calculation
     try
         # Try the standard pinv with the specified tolerance
-        Psi_inv = LinearAlgebra.pinv(Psi, rtol=sqrt(eps(real(float(oneunit(eltype(Psi)))))))
+        Psi_inv = LinearAlgebra.pinv(Psi, rtol = sqrt(eps(real(float(oneunit(eltype(Psi)))))))
         @tensor aPCE.ExpansionCoefficients[i, k] = Psi_inv[i, j] * y_rhs[j, k]
     catch e
         @warn "Standard pinv failed, trying alternative approach" exception = e
@@ -273,8 +273,8 @@ function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion=:true, reg_order=
             # @info "Bayesian regularization for axis $i"
             aPCE.ExpansionCoefficients[:, i] .= invert(
                 Psi, y_rhs[:, i], Lₖx₀(reg_order, view(x₀, :, i));
-                alg=:gcv_svd,
-                method=LBFGS(linesearch=LineSearches.BackTracking())
+                alg = :gcv_svd,
+                method = LBFGS(linesearch = LineSearches.BackTracking())
             )
         end
     end
@@ -288,7 +288,7 @@ function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion=:true, reg_order=
 end
 
 
-@stable function predict(aPCE::aPCE{T}, PredictionInput)::Matrix{T} where {T<:Real}
+@stable function predict(aPCE::aPCE{T}, PredictionInput)::Matrix{T} where {T <: Real}
     # @info "=> aPCE Toolbox: Prediction using Arbitrary Polynomial Chaos ..."
     Psi = aPCE_PsiPolynomialMatrix(aPCE, PredictionInput)
     TensorOperations.@tensor PredictionOutput[k, j] := Psi[i, k] * aPCE.ExpansionCoefficients[i, j]
@@ -297,7 +297,7 @@ end
 end
 
 
-@stable function predict_from_coeffs(aPCE::aPCE{T}, PredictionInput, θ) where {T<:ForwardDiff.Dual}
+@stable function predict_from_coeffs(aPCE::aPCE{T}, PredictionInput, θ) where {T <: ForwardDiff.Dual}
     Psi = aPCE_PsiPolynomialMatrix(aPCE, PredictionInput)
     @einsum PredictionOutput[k, j] := Psi[i, k] * θ[i, j]
     # PredictionOutput = outer_product_kernel(cu(Psi), cu(aPCE.ExpansionCoefficients))
@@ -315,7 +315,7 @@ end
     @test apc.do_gauss == false
 
     # Test with different options
-    apc2 = aPCE(TrainingInput, degree; outdim=3, is_orthonormal=false, do_gauss=true)
+    apc2 = aPCE(TrainingInput, degree; outdim = 3, is_orthonormal = false, do_gauss = true)
     @test apc2.output_dimensions == 3
     @test apc2.is_orthonormal == false
     @test apc2.do_gauss == true
@@ -365,7 +365,7 @@ end
     # Create test data
     TrainingInput = rand(10, 2)
     degree = 1
-    apc = aPCE(TrainingInput, degree; do_gauss=true)
+    apc = aPCE(TrainingInput, degree; do_gauss = true)
 
     # Test Gaussian collocation
     collocation_points = GaussianCollocation(apc)
@@ -374,8 +374,8 @@ end
     @test all(!isinf, collocation_points)
 
     # Test with different strategies
-    collocation_points_ft = GaussianCollocation(apc; strategy=:FT)
-    collocation_points_pcm = GaussianCollocation(apc; strategy=:PCM)
+    collocation_points_ft = GaussianCollocation(apc; strategy = :FT)
+    collocation_points_pcm = GaussianCollocation(apc; strategy = :PCM)
     @test size(collocation_points_ft, 2) == 2
     @test size(collocation_points_pcm, 2) == 2
 end
@@ -385,7 +385,7 @@ end
     TrainingInput = rand(10, 2)
     degree = 1
     @inferred aPCE(TrainingInput, degree)
-    @inferred aPCE(TrainingInput, degree; outdim=3, is_orthonormal=false, do_gauss=true)
+    @inferred aPCE(TrainingInput, degree; outdim = 3, is_orthonormal = false, do_gauss = true)
 
     # Test type stability of predict
     apc = aPCE(TrainingInput, degree)
@@ -398,8 +398,8 @@ end
     @inferred UQ(apc)
 
     # Test type stability of GaussianCollocation
-    apc_gauss = aPCE(TrainingInput, degree; do_gauss=true)
+    apc_gauss = aPCE(TrainingInput, degree; do_gauss = true)
     @inferred GaussianCollocation(apc_gauss)
-    @inferred GaussianCollocation(apc_gauss; strategy=:FT)
-    @inferred GaussianCollocation(apc_gauss; strategy=:PCM)
+    @inferred GaussianCollocation(apc_gauss; strategy = :FT)
+    @inferred GaussianCollocation(apc_gauss; strategy = :PCM)
 end
