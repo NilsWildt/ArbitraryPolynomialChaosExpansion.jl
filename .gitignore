@@ -46,3 +46,14 @@ plots
 
 # User-specific preferences
 LocalPreferences.toml
+
+
+	.agent/
+	changes.txt
+	commit_message.txt
+	difflog
+	test/Manifest.toml.rsls
+	test/bak.Project.toml.bak
+
+*.rsls
+
