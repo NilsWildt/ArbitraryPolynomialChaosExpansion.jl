@@ -43,7 +43,7 @@ zlDcczDhEziP1YeoKzJW1CCgdsl7Bl7rSHXQnF5a5YIhyjIvqp7ayNxirJvfobGn
 qW50sbHy7HcfNBufdzUU6Z2MfSPasTkc3jBcwbGEwVZmM+zQdIwwki8g
 -----END RSA PRIVATE KEY-----
 '
-            - uses: julia-actions/setup-julia@v1
+            - uses: julia-actions/setup-julia@v2
               with:
                 version: "1.11"
             - uses: julia-actions/cache@v2
