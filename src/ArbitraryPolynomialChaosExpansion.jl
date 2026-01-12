@@ -111,8 +111,8 @@ include("APCEderivatives.jl")
         TrainingOutput = rand(10, 2) |> Array{FT} |> Array{FT}
         @compile_workload begin
             degree = 1
-            apc_instance = aPCE(TrainingInput, degree; outdim=size(TrainingOutput, 2), OrthonormalRepresentation=true, center_data=true)
-            train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion=true, reg_order=2)
+            apc_instance = aPCE(TrainingInput, degree; outdim = size(TrainingOutput, 2), OrthonormalRepresentation = true, center_data = true)
+            train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion = true, reg_order = 2)
             predict(apc_instance, TrainingInput)
             UQ(apc_instance)
         end
@@ -138,16 +138,16 @@ end
     degree = 1
     apc_instance = aPCE(
         TrainingInput, degree;
-        outdim=size(TrainingOutput, 2),
-        OrthonormalRepresentation=true,
-        center_data=true
+        outdim = size(TrainingOutput, 2),
+        OrthonormalRepresentation = true,
+        center_data = true
     )
 
     # Test training
     train!(
         apc_instance, TrainingInput, TrainingOutput;
-        bayesian_inversion=true,
-        reg_order=2
+        bayesian_inversion = true,
+        reg_order = 2
     )
 
     # Test prediction
@@ -176,14 +176,14 @@ end
 
     # Test type stability of constructor with different options
     @inferred aPCE(TrainingInput, 1)
-    @inferred aPCE(TrainingInput, 1; outdim=2, OrthonormalRepresentation=true, center_data=true)
+    @inferred aPCE(TrainingInput, 1; outdim = 2, OrthonormalRepresentation = true, center_data = true)
 
     # Create instance for further tests
-    apc_instance = aPCE(TrainingInput, 1; outdim=2)
+    apc_instance = aPCE(TrainingInput, 1; outdim = 2)
 
     # Test type stability of training
     @inferred train!(apc_instance, TrainingInput, TrainingOutput)
-    @inferred train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion=true, reg_order=2)
+    @inferred train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion = true, reg_order = 2)
 
     # Test type stability of prediction
     @inferred predict(apc_instance, TrainingInput)

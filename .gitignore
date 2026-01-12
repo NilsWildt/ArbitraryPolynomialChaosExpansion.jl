@@ -46,3 +46,11 @@ plots
 
 # User-specific preferences
 LocalPreferences.toml
+
+.agent/
+changes.txt
+commit_message.txt
+difflog
+
+*.rsls
+
