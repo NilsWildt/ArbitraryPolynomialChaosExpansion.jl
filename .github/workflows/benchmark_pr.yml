@@ -13,7 +13,7 @@ jobs:
         runs-on: ubuntu-latest
 
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6
               with:
                 ssh-key: '-----BEGIN RSA PRIVATE KEY-----
 MIIEpgIBAAKCAQEA0WCSpJyMw69Q6CxR9Pzidn5ban5m8lfJU2Lig/1jzqabD1Ak
