@@ -12,12 +12,12 @@ const to = TimerOutput()
 
 Version 1: Constructs basis using explicit Moment Matrix inversion (Hankel solve).
 """
-function aPCE_Hankel(Data::AbstractArray{T}, Degree::Integer, center::Bool=true) where {T<:Real}
+function aPCE_Hankel(Data::AbstractArray{T}, Degree::Integer, center::Bool = true) where {T <: Real}
     x_raw = vec(Data)
 
     if center
         μ = mean(x_raw)
-        σ_val = std(x_raw; mean=μ)
+        σ_val = std(x_raw; mean = μ)
         σ = σ_val > eps(T) ? σ_val : one(T)
         x = (x_raw .- μ) ./ σ
     else
@@ -35,11 +35,11 @@ function aPCE_Hankel(Data::AbstractArray{T}, Degree::Integer, center::Bool=true)
     end
 end
 
-function _v1_build_orthonormal_basis(x::AbstractVector{T}, D::Integer) where {T<:Real}
+function _v1_build_orthonormal_basis(x::AbstractVector{T}, D::Integer) where {T <: Real}
     # Compute moments: m[k+1] = E[x^k]
     m = zeros(T, 2D + 1)
     for k in 0:2D
-        m[k+1] = mean(x .^ k)
+        m[k + 1] = mean(x .^ k)
     end
 
     # Monic orthogonal polynomials via Hankel solve (Eq. 14)
@@ -51,19 +51,19 @@ function _v1_build_orthonormal_basis(x::AbstractVector{T}, D::Integer) where {T<
         M = zeros(T, k + 1, k + 1)
         rhs = zeros(T, k + 1)
 
-        for row in 0:(k-1)
+        for row in 0:(k - 1)
             for col in 0:k
-                M[row+1, col+1] = m[row+col+1]
+                M[row + 1, col + 1] = m[row + col + 1]
             end
         end
 
         # Monic constraint: p_k = 1
-        M[k+1, k+1] = one(T)
-        rhs[k+1] = one(T)
+        M[k + 1, k + 1] = one(T)
+        rhs[k + 1] = one(T)
 
         # Potential singularity warning for high degrees
         try
-            MonicCoeffs[k+1, 1:(k+1)] = M \ rhs
+            MonicCoeffs[k + 1, 1:(k + 1)] = M \ rhs
         catch e
             @warn "V1 (Hankel) Singular Matrix at degree $k. Returning zeros."
             return MonicCoeffs
@@ -76,24 +76,24 @@ function _v1_build_orthonormal_basis(x::AbstractVector{T}, D::Integer) where {T<
         norm_sq = zero(T)
         for i in 0:k
             for j in 0:k
-                norm_sq += MonicCoeffs[k+1, i+1] * MonicCoeffs[k+1, j+1] * m[i+j+1]
+                norm_sq += MonicCoeffs[k + 1, i + 1] * MonicCoeffs[k + 1, j + 1] * m[i + j + 1]
             end
         end
         norm_factor = sqrt(max(norm_sq, eps(T)))
-        OrthonormalCoeffs[k+1, 1:(k+1)] = MonicCoeffs[k+1, 1:(k+1)] ./ norm_factor
+        OrthonormalCoeffs[k + 1, 1:(k + 1)] = MonicCoeffs[k + 1, 1:(k + 1)] ./ norm_factor
     end
 
     return OrthonormalCoeffs
 end
 
-function _v1_backtransform(Coeffs::AbstractMatrix{T}, μ::T, σ::T, D::Integer) where {T<:Real}
+function _v1_backtransform(Coeffs::AbstractMatrix{T}, μ::T, σ::T, D::Integer) where {T <: Real}
     Result = zeros(T, D + 1, D + 1)
     for k in 0:D
         for j in 0:k
-            c = Coeffs[k+1, j+1]
+            c = Coeffs[k + 1, j + 1]
             inv_σ_j = one(T) / (σ^j)
             for l in 0:j
-                Result[k+1, l+1] += c * inv_σ_j * binomial(j, l) * ((-μ)^(j - l))
+                Result[k + 1, l + 1] += c * inv_σ_j * binomial(j, l) * ((-μ)^(j - l))
             end
         end
     end
@@ -109,13 +109,13 @@ end
 
 Version 2: Constructs basis using Stieltjes recurrence (Stable).
 """
-function aPCE_Stieltjes(Data::AbstractArray{T}, Degree::Integer, center::Bool=true) where {T<:Real}
+function aPCE_Stieltjes(Data::AbstractArray{T}, Degree::Integer, center::Bool = true) where {T <: Real}
     x_raw = vec(Data)
     D = Degree
 
     if center
         μ = mean(x_raw)
-        σ_val = std(x_raw; mean=μ)
+        σ_val = std(x_raw; mean = μ)
         σ = σ_val > eps(T) ? σ_val : one(T)
         x = (x_raw .- μ) ./ σ
     else
@@ -130,10 +130,10 @@ function aPCE_Stieltjes(Data::AbstractArray{T}, Degree::Integer, center::Bool=tr
         FinalBasis = zeros(T, D + 1, D + 1)
         for k in 0:D
             for j in 0:k
-                c = OrthonormalCoeffs[k+1, j+1]
+                c = OrthonormalCoeffs[k + 1, j + 1]
                 inv_σ_j = one(T) / (σ^j)
                 for l in 0:j
-                    FinalBasis[k+1, l+1] += c * inv_σ_j * binomial(j, l) * ((-μ)^(j - l))
+                    FinalBasis[k + 1, l + 1] += c * inv_σ_j * binomial(j, l) * ((-μ)^(j - l))
                 end
             end
         end
@@ -143,11 +143,11 @@ function aPCE_Stieltjes(Data::AbstractArray{T}, Degree::Integer, center::Bool=tr
     end
 end
 
-function _v2_stieltjes_core(x::AbstractVector{T}, D::Integer) where {T<:Real}
+function _v2_stieltjes_core(x::AbstractVector{T}, D::Integer) where {T <: Real}
     N = length(x)
     m = zeros(T, 2D + 1)
     for k in 0:2D
-        m[k+1] = mean(x .^ k)
+        m[k + 1] = mean(x .^ k)
     end
 
     P_prev = zeros(T, N)
@@ -156,7 +156,7 @@ function _v2_stieltjes_core(x::AbstractVector{T}, D::Integer) where {T<:Real}
     MonicCoeffs[1, 1] = one(T)
     inner_prev = one(T)
 
-    for k in 0:(D-1)
+    for k in 0:(D - 1)
         inner_curr = dot(P_curr, P_curr) / N
         if abs(inner_curr) < eps(T)
             break
@@ -172,12 +172,12 @@ function _v2_stieltjes_core(x::AbstractVector{T}, D::Integer) where {T<:Real}
 
         # Recurrence on Coefficients
         for j in 0:k
-            MonicCoeffs[k+2, j+2] += MonicCoeffs[k+1, j+1]         # x * P_k
-            MonicCoeffs[k+2, j+1] -= α_k * MonicCoeffs[k+1, j+1]   # -α * P_k
+            MonicCoeffs[k + 2, j + 2] += MonicCoeffs[k + 1, j + 1]         # x * P_k
+            MonicCoeffs[k + 2, j + 1] -= α_k * MonicCoeffs[k + 1, j + 1]   # -α * P_k
         end
         if k > 0
-            for j in 0:(k-1)
-                MonicCoeffs[k+2, j+1] -= β_k * MonicCoeffs[k, j+1] # -β * P_{k-1}
+            for j in 0:(k - 1)
+                MonicCoeffs[k + 2, j + 1] -= β_k * MonicCoeffs[k, j + 1] # -β * P_{k-1}
             end
         end
 
@@ -188,18 +188,18 @@ function _v2_stieltjes_core(x::AbstractVector{T}, D::Integer) where {T<:Real}
     return m, MonicCoeffs
 end
 
-function _v2_normalize_hankel(MonicCoeffs::AbstractMatrix{T}, m::AbstractVector{T}, D::Integer) where {T<:Real}
+function _v2_normalize_hankel(MonicCoeffs::AbstractMatrix{T}, m::AbstractVector{T}, D::Integer) where {T <: Real}
     OrthonormalCoeffs = zeros(T, D + 1, D + 1)
     for k in 0:D
-        p = @view MonicCoeffs[k+1, 1:(k+1)]
+        p = @view MonicCoeffs[k + 1, 1:(k + 1)]
         norm_sq = zero(T)
         for i in 0:k
             for j in 0:k
-                norm_sq += p[i+1] * p[j+1] * m[i+j+1]
+                norm_sq += p[i + 1] * p[j + 1] * m[i + j + 1]
             end
         end
         norm_factor = sqrt(max(norm_sq, eps(T)))
-        OrthonormalCoeffs[k+1, 1:(k+1)] = MonicCoeffs[k+1, 1:(k+1)] ./ norm_factor
+        OrthonormalCoeffs[k + 1, 1:(k + 1)] = MonicCoeffs[k + 1, 1:(k + 1)] ./ norm_factor
     end
     return OrthonormalCoeffs
 end
@@ -268,7 +268,7 @@ function run_comparison()
             for i in 1:length(data)
                 val = 0.0
                 for p in 0:d
-                    val += Coeffs[d+1, p+1] * data[i]^p
+                    val += Coeffs[d + 1, p + 1] * data[i]^p
                 end
                 P_d[i] = val
             end
@@ -299,7 +299,7 @@ function run_comparison()
         end
         println("\n")
     end
-    display(to)
+    return display(to)
 end
 
 run_comparison()

@@ -21,7 +21,7 @@ using FiniteDifferences
 using ArbitraryPolynomialChaosExpansion
 const APCE = ArbitraryPolynomialChaosExpansion
 
-set_preferences!(ArbitraryPolynomialChaosExpansion, "precompile_workload" => true; force=true)
+set_preferences!(ArbitraryPolynomialChaosExpansion, "precompile_workload" => true; force = true)
 
 # DIT_PATH = joinpath(@__DIR__, "..", "..", "ArbitraryPolynomialChaosExpansion.jl")
 # if isdir(DIT_PATH)
