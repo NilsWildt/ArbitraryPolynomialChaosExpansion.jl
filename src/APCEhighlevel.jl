@@ -230,7 +230,8 @@ function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion = :true, reg_orde
     try
         # Try the standard pinv with the specified tolerance
         Psi_inv = LinearAlgebra.pinv(Psi, rtol = sqrt(eps(real(float(oneunit(eltype(Psi)))))))
-        @tensor aPCE.ExpansionCoefficients[i, k] = Psi_inv[i, j] * y_rhs[j, k]
+        # Replaced @tensor with explicit matrix multiplication for Mooncake AD compatibility
+        aPCE.ExpansionCoefficients .= Psi_inv * y_rhs
     catch e
         @warn "Standard pinv failed, trying alternative approach" exception = e
 
@@ -291,8 +292,8 @@ end
 @stable function predict(aPCE::aPCE{T}, PredictionInput)::Matrix{T} where {T <: Real}
     # @info "=> aPCE Toolbox: Prediction using Arbitrary Polynomial Chaos ..."
     Psi = aPCE_PsiPolynomialMatrix(aPCE, PredictionInput)
-    TensorOperations.@tensor PredictionOutput[k, j] := Psi[i, k] * aPCE.ExpansionCoefficients[i, j]
-    # PredictionOutput = outer_product_kernel(cu(Psi), cu(aPCE.ExpansionCoefficients))
+    # Replaced @tensor with explicit matrix multiplication for Mooncake AD compatibility
+    PredictionOutput = Psi' * aPCE.ExpansionCoefficients
     return PredictionOutput
 end
 

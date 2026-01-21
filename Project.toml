@@ -1,7 +1,7 @@
 name = "ArbitraryPolynomialChaosExpansion"
 uuid = "e0c64dd9-0151-4106-bdf9-1cf426dd9187"
-authors = ["NilsWildt"]
 version = "0.2.4"
+authors = ["NilsWildt"]
 
 [deps]
 AddPackage = "70d26913-0580-4037-ad67-7d2c365cf5c5"
@@ -68,6 +68,7 @@ Requires = "ae029012-a4dd-5104-9daa-d747884805df"
 ReverseDiff = "37e2e3b7-166d-5795-8a7a-e32c996b4267"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 Setfield = "efcf1570-3423-57d1-acb7-fd33fddbac46"
+SimpleKernelRegression = "47c81bad-6c13-54dd-8d7a-198cdd0ce79a"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"

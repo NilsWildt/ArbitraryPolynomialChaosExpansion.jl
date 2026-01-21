@@ -19,7 +19,14 @@ end
 """
 Custom sorter that sorts multiple arrays simultaneously based on the first array
 """
-struct CoSorter{T1, T2, T3, A <: AbstractVecOrMat{T1}, B <: AbstractVecOrMat{T2}, C <: AbstractVecOrMat{T3}} <: AbstractVector{SpecialCoSorterElement{T1, T2, T3}}
+struct CoSorter{
+    T1,
+    T2,
+    T3,
+    A<:AbstractVecOrMat{T1},
+    B<:AbstractVecOrMat{T2},
+    C<:AbstractVecOrMat{T3},
+} <: AbstractVector{SpecialCoSorterElement{T1,T2,T3}}
     sortarray::A
     otherarray::B
     coarray::C
@@ -27,12 +34,18 @@ end
 
 Base.size(c::CoSorter) = size(c.sortarray)
 Base.getindex(c::CoSorter, i...) =
-    SpecialCoSorterElement(getindex(c.sortarray, i...), getindex(c.otherarray, i...), getindex(c.coarray, i...))
+    SpecialCoSorterElement(
+        getindex(c.sortarray, i...),
+        getindex(c.otherarray, i...),
+        getindex(c.coarray, i...),
+    )
 Base.setindex!(c::CoSorter, t::SpecialCoSorterElement, i...) =
     (setindex!(c.sortarray, t.x, i...); setindex!(c.coarray, t.y, i...); c)
 
-Base.isless(a::SpecialCoSorterElement, b::SpecialCoSorterElement) = isless(a.x, b.x) || (a.x == b.x && isless(a.z, b.z))
-Base.Sort.defalg(v::C) where {T <: Union{Number, Missing}, C <: CoSorter{T}} = Base.DEFAULT_UNSTABLE
+Base.isless(a::SpecialCoSorterElement, b::SpecialCoSorterElement) =
+    isless(a.x, b.x) || (a.x == b.x && isless(a.z, b.z))
+Base.Sort.defalg(v::C) where {T<:Union{Number,Missing},C<:CoSorter{T}} =
+    Base.DEFAULT_UNSTABLE
 
 # ===== UTILITY FUNCTIONS =====
 
@@ -124,7 +137,10 @@ function evalpoly_two(x, coeffs::AbstractVector{<:ReverseDiff.TrackedReal})
     return i == fi ? out * x + coeffs[fi] : out
 end
 
-function evalpoly_two(x::ReverseDiff.TrackedReal, coeffs::AbstractVector{<:ReverseDiff.TrackedReal})
+function evalpoly_two(
+    x::ReverseDiff.TrackedReal,
+    coeffs::AbstractVector{<:ReverseDiff.TrackedReal},
+)
     isempty(coeffs) && throw(ArgumentError("coeffs cannot be empty"))
     i = lastindex(coeffs)
     out = coeffs[i]
@@ -145,7 +161,10 @@ end
 Evaluate polynomial with coefficients `coeffs` at multiple points in vector `x`.
 Returns a vector of evaluated values.
 """
-@inline function evaluate_polynomial_horner_array(x::AbstractVector{T}, coeffs::AbstractVector{S}) where {T <: Real, S <: Real}
+@inline function evaluate_polynomial_horner_array(
+    x::AbstractVector{T},
+    coeffs::AbstractVector{S},
+) where {T<:Real,S<:Real}
     R = promote_type(T, S)
     results = Vector{R}(undef, length(x))
     @inbounds for (i, xi) in enumerate(x)
@@ -156,6 +175,21 @@ Returns a vector of evaluated values.
         results[i] = result
     end
     return results
+end
+"""
+    evaluate_polynomial_horner_scalar(x, coeffs::AbstractVector)
+Evaluate polynomial with coefficients `coeffs` at a single point `x`.
+AD-friendly scalar version - no array allocation.
+"""
+@inline function evaluate_polynomial_horner_scalar(
+    x::T,
+    coeffs::AbstractVector{S},
+) where {T,S}
+    result = zero(promote_type(T, S))
+    @inbounds @simd for coeff in reverse(coeffs)
+        result = muladd(result, x, coeff)
+    end
+    return result
 end
 
 """
@@ -219,7 +253,12 @@ Generate multivariate polynomial degrees for aPCE expansion.
 - `s_marginals`: Fraction of marginal terms to keep (0.0 to 1.0)
 - `s_interactions`: Fraction of interaction terms to keep (0.0 to 1.0)
 """
-function aPCE_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T, s_marginals::F, s_interactions::F) where {T <: Integer, F <: Real}
+function aPCE_MultivariatePolynomialDegrees(
+    num_dimensions::T,
+    max_degree::T,
+    s_marginals::F,
+    s_interactions::F,
+) where {T<:Integer,F<:Real}
     function get_stats(r)::Array{F}
         o = Series(Mean(), Variance(), Extrema())
         n = length(r)
@@ -286,11 +325,13 @@ function aPCE_MultivariatePolynomialDegrees(num_dimensions::T, max_degree::T, s_
     end
 
     keeper_marginals = d_marginal_indices[filter_by_percentage(all_marginals, s_marginals)]
-    keeper_interactions = d_interactions_indices[filter_by_percentage(all_interactions, s_interactions)]
+    keeper_interactions =
+        d_interactions_indices[filter_by_percentage(all_interactions, s_interactions)]
     idxkeep = vcat(keeper_marginals, keeper_interactions)
     indices = @views indices[idxkeep, :]
     indices = vcat(indices, Base.zeros(T, num_dimensions)')
-    indices = sortslices(hcat(vec(sum(indices; dims = 2)), indices); dims = 1, rev = false)[:, 2:end]
+    indices =
+        sortslices(hcat(vec(sum(indices; dims=2)), indices); dims=1, rev=false)[:, 2:end]
     return indices::Matrix{T}
 end
 
@@ -749,7 +790,11 @@ Compute orthonormal polynomial basis for 1D data using moment-based approach.
 Constructs orthonormal polynomial basis using the Stieltjes procedure.
 Mathematically equivalent to Oladyshkin & Nowak (2012) Hankel method.
 """
-function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::Integer, ::Val{true}) where {T <: Real}
+function aPCE_OrthonormalBasis(
+    Data::AbstractArray{T},
+    Degree::Integer,
+    ::Val{true},
+) where {T<:Real}
     x_raw = vec(Data)
     N = length(x_raw)
     D = Degree
@@ -782,7 +827,11 @@ function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::Integer, ::Val{tr
     return FinalBasis
 end
 
-function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::Integer, ::Val{false}) where {T <: Real}
+function aPCE_OrthonormalBasis(
+    Data::AbstractArray{T},
+    Degree::Integer,
+    ::Val{false},
+) where {T<:Real}
     x = vec(Data)
     D = Degree
 
@@ -869,7 +918,11 @@ end
 Normalize monic polynomials using Hankel inner product (paper Eq. 22).
 ‖P_k‖² = Σᵢ Σⱼ pᵢ pⱼ m_{i+j}
 """
-function _normalize_hankel(MonicCoeffs::AbstractMatrix{T}, m::AbstractVector{T}, D::Integer) where {T <: Real}
+function _normalize_hankel(
+    MonicCoeffs::AbstractMatrix{T},
+    m::AbstractVector{T},
+    D::Integer,
+) where {T<:Real}
     OrthonormalCoeffs = zeros(T, D + 1, D + 1)
 
     for k in 0:D
@@ -893,8 +946,12 @@ function _normalize_hankel(MonicCoeffs::AbstractMatrix{T}, m::AbstractVector{T},
     return OrthonormalCoeffs
 end
 
-
-function _solve_levenberg_marquardt_solver(Psi::AbstractMatrix{T}, y::AbstractVector{T}; λ_init = 1.0e-3, max_iter = 100)::Result{Vector{T}, String} where {T <: Real}
+function _solve_levenberg_marquardt_solver(
+    Psi::AbstractMatrix{T},
+    y::AbstractVector{T};
+    λ_init=1.0e-3,
+    max_iter=100,
+)::Result{Vector{T},String} where {T<:Real}
     # Levenberg-Marquardt with adaptive regularization
     λ = 0.0
     x = pinv(Psi) * y # Initial guess using pinv
@@ -931,7 +988,12 @@ function _solve_levenberg_marquardt_solver(Psi::AbstractMatrix{T}, y::AbstractVe
 end
 
 # Public solve_levenberg_marquardt function using direct solver (not implicit diff)
-function solve_levenberg_marquardt(Psi, y; λ_init = 1.0e-3, max_iter = 50)::Result{Vector{eltype(Psi)}, String}
+function solve_levenberg_marquardt(
+    Psi,
+    y;
+    λ_init=1.0e-3,
+    max_iter=50,
+)::Result{Vector{eltype(Psi)},String}
     return _solve_levenberg_marquardt_solver(Psi, y; λ_init = λ_init, max_iter = max_iter)
 end
 
@@ -1035,10 +1097,24 @@ function _apce_closed_form_basis_moment!(basis, col, degree)
         basis[1, 1] = 1
     elseif degree == 4
         denom = -m[4]^3 + m[4] * m[7] - 2 * m[6] * m[5] + m[5]^2
-        basis[5, 1] = -(-m[4] * m[6] * m[5] - m[4]^2 * m[8] + m[4] * m[6]^2 + 2 * m[4] * m[5] * m[7] - 2 * m[5]^2 * m[6] + m[5]^3) / denom
-        basis[5, 2] = -(m[6]^3 - m[5]^2 * m[4]^2 + m[4]^2 * m[5] * m[6] - m[5] * m[6] * m[7] - m[4] * m[6] * m[7] - m[4] * m[6] * m[8] + m[4] * m[5] * m[8] + m[4]^3 * m[6] - m[4]^3 * m[7] + m[4] * m[7]^2) / (m[4] * denom)
-        basis[5, 3] = -(m[5]^2 * m[4]^2 - m[4] * m[5] * m[8] - m[5] * m[6]^2 + m[5]^2 * m[7] - m[4]^3 * m[6] + m[4] * m[6] * m[7]) / (m[4] * denom)
-        basis[5, 4] = (m[4]^2 * m[5] - m[6] * m[5] - m[4] * m[8] + m[6]^2 + m[5] * m[7]) / denom
+        basis[5, 1] =
+            -(
+                -m[4] * m[6] * m[5] - m[4]^2 * m[8] + m[4] * m[6]^2 +
+                2 * m[4] * m[5] * m[7] - 2 * m[5]^2 * m[6] + m[5]^3
+            ) / denom
+        basis[5, 2] =
+            -(
+                m[6]^3 - m[5]^2 * m[4]^2 + m[4]^2 * m[5] * m[6] - m[5] * m[6] * m[7] -
+                m[4] * m[6] * m[7] - m[4] * m[6] * m[8] + m[4] * m[5] * m[8] +
+                m[4]^3 * m[6] - m[4]^3 * m[7] + m[4] * m[7]^2
+            ) / (m[4] * denom)
+        basis[5, 3] =
+            -(
+                m[5]^2 * m[4]^2 - m[4] * m[5] * m[8] - m[5] * m[6]^2 + m[5]^2 * m[7] -
+                m[4]^3 * m[6] + m[4] * m[6] * m[7]
+            ) / (m[4] * denom)
+        basis[5, 4] =
+            (m[4]^2 * m[5] - m[6] * m[5] - m[4] * m[8] + m[6]^2 + m[5] * m[7]) / denom
         basis[5, 5] = 1
         basis[4, 1] = -1 / (1 - m[4] + m[4]^2) * (-m[4]^2 + m[4]^3 - m[4] * m[5] + m[6])
         basis[4, 2] = (-m[4] * m[6] + m[4]^2 - m[5] + m[4] * m[5]) / (1 - m[4] + m[4]^2)
@@ -1085,7 +1161,12 @@ end
 Create orthonormal basis for multi-dimensional data.
 Uses closed-form solutions for degrees 0-4, numerical method for higher degrees.
 """
-function create_basis(x::AbstractArray{T}, degree::Integer, ::Val{true}; center_data::Bool = true) where {T <: Real}
+function create_basis(
+    x::AbstractArray{T},
+    degree::Integer,
+    ::Val{true};
+    center_data::Bool=true,
+) where {T<:Real}
     if ndims(x) == 1
         x = reshape(x, :, 1)
     end
@@ -1117,7 +1198,12 @@ end
 Create full (monomial) basis for multi-dimensional data.
 Note: center_data parameter is ignored for monomial basis.
 """
-function create_basis(x::AbstractArray{T}, degree::Integer, ::Val{false}; center_data::Bool = false) where {T <: Real}
+function create_basis(
+    x::AbstractArray{T},
+    degree::Integer,
+    ::Val{false};
+    center_data::Bool=false,
+) where {T<:Real}
     if ndims(x) == 1
         x = reshape(x, :, 1)
     end
@@ -1140,7 +1226,14 @@ end
 
 Compute a single element of the Psi matrix (polynomial evaluation).
 """
-function compute_Psi_element(i, j, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, InputDimensions)
+function compute_Psi_element(
+    i,
+    j,
+    TrainingInput,
+    MultivariatePolynomialDegrees,
+    OrthonormalBasis,
+    InputDimensions,
+)
     product = one(eltype(TrainingInput))
     @inbounds for ii in 1:InputDimensions
         degree = MultivariatePolynomialDegrees[i, ii] + 1
@@ -1156,12 +1249,23 @@ end
 
 Generic fallback version for non-typed inputs.
 """
-function aPCE_PsiPolynomialMatrix_zygote(TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis)
+function aPCE_PsiPolynomialMatrix_zygote(
+    TrainingInput,
+    MultivariatePolynomialDegrees,
+    OrthonormalBasis,
+)
     NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
     NCpoints = size(TrainingInput, 1)
 
     Psi = [
-        compute_Psi_element(i, j, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, InputDimensions)
+        compute_Psi_element(
+            i,
+            j,
+            TrainingInput,
+            MultivariatePolynomialDegrees,
+            OrthonormalBasis,
+            InputDimensions,
+        )
             for i in 1:NumberOfTerms, j in 1:NCpoints
     ]
     return reshape(Psi, NumberOfTerms, NCpoints)
@@ -1170,10 +1274,15 @@ end
 """
     aPCE_PsiPolynomialMatrix(TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis)
 
-Compute the Psi matrix optimized for ForwardDiff compatibility.
-Uses vectorized operations for better performance.
+Compute the Psi matrix optimized for AD compatibility.
+Uses scalar polynomial evaluation to avoid intermediate array allocations.
+This is AD-friendly: no in-place mutations, just scalar operations building up Psi.
 """
-function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis::AbstractArray{S}) where {S, T <: Real}
+function aPCE_PsiPolynomialMatrix(
+    TrainingInput::AbstractArray{T},
+    MultivariatePolynomialDegrees,
+    OrthonormalBasis::AbstractArray{S},
+) where {S,T<:Real}
     NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
     NCpoints = size(TrainingInput, 1)
     Psi = ones(T, NumberOfTerms, NCpoints)
@@ -1182,11 +1291,11 @@ function aPCE_PsiPolynomialMatrix(TrainingInput::AbstractArray{T}, MultivariateP
         for ii in 1:InputDimensions
             degree = MultivariatePolynomialDegrees[i, ii] + 1
             coeffs = @views OrthonormalBasis[degree, 1:degree, ii]
-            x = @views TrainingInput[:, ii]
-            poly_values = evaluate_polynomial_horner_array(x, coeffs)
-            #    poly_values = evalpoly_two.(x, coeffs)
+            # Scalar evaluation for each point - no intermediate array allocation
             for j in 1:NCpoints
-                Psi[i, j] *= poly_values[j]
+                xj = TrainingInput[j, ii]
+                poly_val = evaluate_polynomial_horner_scalar(xj, coeffs)
+                Psi[i, j] *= poly_val
             end
         end
     end
@@ -1200,7 +1309,12 @@ end
 
 Compute moments of data up to order 2*dd+1 in-place.
 """
-@inline function compute_moments!(m::AbstractArray{T}, Data::AbstractArray{S}, NumberOfDataPoints::Integer, dd::Integer) where {T <: Real, S <: Real}
+@inline function compute_moments!(
+    m::AbstractArray{T},
+    Data::AbstractArray{S},
+    NumberOfDataPoints::Integer,
+    dd::Integer,
+) where {T<:Real,S<:Real}
     current_power = Vector{T}(undef, length(Data))
     fill!(current_power, one(T))
     for l in 0:(2 * dd + 1)
@@ -1220,7 +1334,7 @@ Generate Gaussian collocation points for quadrature.
 """
 function GaussianCollocation(
         input_dimensions, ExpansionDegree, OrthonormalBasis::AbstractArray{T},
-        InputDistribution::AbstractArray{T}, NumberOfTerms; strategy = :PCM
+    InputDistribution::AbstractArray{T}, NumberOfTerms; strategy=:PCM,
     )::Matrix{T} where {T <: Real}
 
     polynomial_roots = zeros(T, input_dimensions, ExpansionDegree + 1)
@@ -1232,7 +1346,15 @@ function GaussianCollocation(
     end
 
     PointsVector = 1:(ExpansionDegree + 1) |> collect
-    UniqueCombinations = stack(reduce(vcat, (UnrolledUtilities.unrolled_product([PointsVector for _ in 1:input_dimensions]...))))'
+    UniqueCombinations =
+        stack(
+            reduce(
+                vcat,
+                (UnrolledUtilities.unrolled_product(
+                    [PointsVector for _ in 1:input_dimensions]...,
+                )),
+            ),
+        )'
 
     sort_indices = sortperm(sum(UniqueCombinations; dims = 2); dims = 1)
     SortUniqueCombinations = UniqueCombinations[sort_indices[:], :]
@@ -1249,7 +1371,8 @@ function GaussianCollocation(
         collocation_points = zeros(T, NumberOfTerms, input_dimensions)
         @inbounds for i in 1:NumberOfTerms
             for j in axes(SortUniqueCombinations, 2)
-                collocation_points[i, j] = @views polynomial_roots[j, Int(SortUniqueCombinations[i, j])]
+                collocation_points[i, j] =
+                    @views polynomial_roots[j, Int(SortUniqueCombinations[i, j])]
             end
         end
         collocation_points = sortslices(collocation_points, dims = 1, by = x -> x[1])
@@ -1264,8 +1387,18 @@ end
 
 Compose the Psi matrix for evaluation.
 """
-function compose_Ψ(x::AbstractArray{T}, MultivariatePolynomialDegrees, OrthonormalBasis, degree) where {T}
-    Ψ = aPCE_PsiPolynomialMatrix_zygote(x, MultivariatePolynomialDegrees, OrthonormalBasis)' |> Matrix{T}
+function compose_Ψ(
+    x::AbstractArray{T},
+    MultivariatePolynomialDegrees,
+    OrthonormalBasis,
+    degree,
+) where {T}
+    Ψ =
+        aPCE_PsiPolynomialMatrix_zygote(
+            x,
+            MultivariatePolynomialDegrees,
+            OrthonormalBasis,
+        )' |> Matrix{T}
     return Ψ
 end
 
@@ -1274,10 +1407,19 @@ end
 
 Evaluate the polynomial expansion at points x with given coefficients.
 """
-function evaluate_Ψ(x, coeffs, MultivariatePolynomialDegrees, OrthonormalBasis, degree, name)
+function evaluate_Ψ(
+    x,
+    coeffs,
+    MultivariatePolynomialDegrees,
+    OrthonormalBasis,
+    degree,
+    name,
+)
     T = eltype(coeffs)
     Ψ = compose_Ψ(x, MultivariatePolynomialDegrees, OrthonormalBasis, degree)
-    TensorOperations.@tensor order = (k, i) PredictionOutput[k, j] := Ψ[k, i] * coeffs[i, j]
+    # Replaced @tensor with explicit matrix multiplication for Mooncake AD compatibility
+    # Note: Ψ[k,i] * coeffs[i,j] sums over i, giving (Ψ * coeffs)[k,j]
+    PredictionOutput = Ψ * coeffs
     return PredictionOutput
 end
 
@@ -1301,7 +1443,12 @@ Train the polynomial expansion to find optimal coefficients.
 - `bayesian_inversion`: Whether to use Bayesian regularization
 - `reg_order`: Regularization order
 """
-function train(Ψ::AbstractArray{T}, y_rhs; bayesian_inversion = :true, reg_order = 0) where {T <: Real}
+function train(
+    Ψ::AbstractArray{T},
+    y_rhs;
+    bayesian_inversion=:true,
+    reg_order=0,
+) where {T<:Real}
     NumberOfTerms = size(Ψ, 2)
     output_dimensions = size(y_rhs, 2)
     coeffs = zeros(T, NumberOfTerms, output_dimensions)
@@ -1318,7 +1465,7 @@ function train(Ψ::AbstractArray{T}, y_rhs; bayesian_inversion = :true, reg_orde
             coeffs[:, i] .= invert(
                 Ψ, y_rhs[:, i], Lₖx₀(reg_order, view(x₀, :, i));
                 alg = :gcv_svd,
-                method = LBFGS(linesearch = LineSearches.BackTracking())
+                method=LBFGS(linesearch=LineSearches.BackTracking()),
             )
         end
     end
@@ -1350,7 +1497,8 @@ end
     A_ill = [1.0 1.0; 1.0 1.0 + eps_val]
     b_ill = [2.0, 2.0 + eps_val]
     x_true_ill = [1.0, 1.0]
-    x_refined_ill = unwrap(ArbitraryPolynomialChaosExpansion.solve_levenberg_marquardt(A_ill, b_ill))
+    x_refined_ill =
+        unwrap(ArbitraryPolynomialChaosExpansion.solve_levenberg_marquardt(A_ill, b_ill))
     @test isapprox(x_refined_ill, x_true_ill, atol = 1.0e-6)
 
     x_single = A_ill \ b_ill
@@ -1363,13 +1511,16 @@ end
 
 @testitem "aPCE_MultivariatePolynomialDegrees" begin
     @test aPCE_MultivariatePolynomialDegrees(2, 1, 1.0, 1.0) == [0 0; 0 1; 1 0]
-    @test aPCE_MultivariatePolynomialDegrees(2, 2, 1.0, 1.0) == [0 0; 0 1; 1 0; 0 2; 1 1; 2 0]
+    @test aPCE_MultivariatePolynomialDegrees(2, 2, 1.0, 1.0) ==
+          [0 0; 0 1; 1 0; 0 2; 1 1; 2 0]
     @inferred aPCE_MultivariatePolynomialDegrees(2, 2, 1.0, 1.0)
 end
 
 @testitem "aPCE_OrthonormalBasis" begin
-    @test aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true)) ≈ [1.0 0.0; -0.5 1.5]
-    @test aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false)) ≈ [1.0 0.0; -0.5 1.5]
+    @test aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true)) ≈
+          [1.0 0.0; -0.5 1.5]
+    @test aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false)) ≈
+          [1.0 0.0; -0.5 1.5]
     @inferred aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false))
     @inferred aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true))
 end
@@ -1384,14 +1535,17 @@ end
 
 @testitem "aPCE_MultivariatePolynomialDegrees_test" begin
     @test aPCE_MultivariatePolynomialDegrees(2, 1, 1.0, 1.0) == [0 0; 0 1; 1 0]
-    @test aPCE_MultivariatePolynomialDegrees(2, 2, 1.0, 1.0) == [0 0; 0 1; 1 0; 0 2; 1 1; 2 0]
+    @test aPCE_MultivariatePolynomialDegrees(2, 2, 1.0, 1.0) ==
+          [0 0; 0 1; 1 0; 0 2; 1 1; 2 0]
     @inferred aPCE_MultivariatePolynomialDegrees(2, 2, 1.0, 1.0)
 end
 
 
 @testitem "aPCE_OrthonormalBasis_test" begin
-    @test aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true)) ≈ [1.0 0.0; -0.5 1.5]
-    @test aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false)) ≈ [1.0 0.0; -0.5 1.5]
+    @test aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true)) ≈
+          [1.0 0.0; -0.5 1.5]
+    @test aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false)) ≈
+          [1.0 0.0; -0.5 1.5]
     @inferred aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false))
     @inferred aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true))
 end
@@ -1407,7 +1561,8 @@ end
 @testitem "type_stability_tests" begin
     # Test type stability of normalization_functions
     x = rand(10, 2)
-    normalize, inverse_normalize = ArbitraryPolynomialChaosExpansion.normalization_functions(x)
+    normalize, inverse_normalize =
+        ArbitraryPolynomialChaosExpansion.normalization_functions(x)
     @inferred ArbitraryPolynomialChaosExpansion.normalization_functions(x)
     @test typeof(normalize(x)) == typeof(x)
     @test typeof(inverse_normalize(x)) == typeof(x)
@@ -1416,7 +1571,14 @@ end
     TrainingInput = rand(10, 2)
     MultivariatePolynomialDegrees = [0 0; 0 1; 1 0]
     OrthonormalBasis = rand(3, 3, 2)
-    @inferred ArbitraryPolynomialChaosExpansion.compute_Psi_element(1, 1, TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis, 2)
+    @inferred ArbitraryPolynomialChaosExpansion.compute_Psi_element(
+        1,
+        1,
+        TrainingInput,
+        MultivariatePolynomialDegrees,
+        OrthonormalBasis,
+        2,
+    )
 
     # Test type stability of evalpoly_two
     x = 2.0
@@ -1426,12 +1588,18 @@ end
 
     # Test type stability of evaluate_derivative_horner
     @inferred ArbitraryPolynomialChaosExpansion.evaluate_derivative_horner(x, coeffs)
-    @test typeof(ArbitraryPolynomialChaosExpansion.evaluate_derivative_horner(x, coeffs)) == Float64
+    @test typeof(ArbitraryPolynomialChaosExpansion.evaluate_derivative_horner(x, coeffs)) ==
+          Float64
 
     # Test type stability of evaluate_polynomial_horner_array
     x_array = [1.0, 2.0, 3.0]
-    @inferred ArbitraryPolynomialChaosExpansion.evaluate_polynomial_horner_array(x_array, coeffs)
-    @test typeof(ArbitraryPolynomialChaosExpansion.evaluate_polynomial_horner_array(x_array, coeffs)) == Vector{Float64}
+    @inferred ArbitraryPolynomialChaosExpansion.evaluate_polynomial_horner_array(
+        x_array,
+        coeffs,
+    )
+    @test typeof(
+        ArbitraryPolynomialChaosExpansion.evaluate_polynomial_horner_array(x_array, coeffs),
+    ) == Vector{Float64}
 
     # Test type stability of train
     Ψ = rand(10, 5)
@@ -1443,7 +1611,8 @@ end
     Data = rand(10)
     Degree = 2
     @inferred ArbitraryPolynomialChaosExpansion.aPCE_FullBasis(Data, Degree)
-    @test typeof(ArbitraryPolynomialChaosExpansion.aPCE_FullBasis(Data, Degree)) == Matrix{Float64}
+    @test typeof(ArbitraryPolynomialChaosExpansion.aPCE_FullBasis(Data, Degree)) ==
+          Matrix{Float64}
 
     # Test type stability of GaussianCollocation
     input_dimensions = 2
@@ -1451,8 +1620,22 @@ end
     OrthonormalBasis = rand(3, 3, 2)
     InputDistribution = rand(10, 2)
     NumberOfTerms = 6
-    @inferred ArbitraryPolynomialChaosExpansion.GaussianCollocation(input_dimensions, ExpansionDegree, OrthonormalBasis, InputDistribution, NumberOfTerms)
-    @test typeof(ArbitraryPolynomialChaosExpansion.GaussianCollocation(input_dimensions, ExpansionDegree, OrthonormalBasis, InputDistribution, NumberOfTerms)) == Matrix{Float64}
+    @inferred ArbitraryPolynomialChaosExpansion.GaussianCollocation(
+        input_dimensions,
+        ExpansionDegree,
+        OrthonormalBasis,
+        InputDistribution,
+        NumberOfTerms,
+    )
+    @test typeof(
+        ArbitraryPolynomialChaosExpansion.GaussianCollocation(
+            input_dimensions,
+            ExpansionDegree,
+            OrthonormalBasis,
+            InputDistribution,
+            NumberOfTerms,
+        ),
+    ) == Matrix{Float64}
 end
 
 @testitem "edge_cases_tests" begin
@@ -1464,7 +1647,8 @@ end
 
     # Test edge cases for evaluate_derivative_horner
     @test ArbitraryPolynomialChaosExpansion.evaluate_derivative_horner(0.0, [1.0]) == 0.0  # Constant polynomial
-    @test ArbitraryPolynomialChaosExpansion.evaluate_derivative_horner(1.0, [0.0, 0.0]) == 0.0  # Zero polynomial
+    @test ArbitraryPolynomialChaosExpansion.evaluate_derivative_horner(1.0, [0.0, 0.0]) ==
+          0.0  # Zero polynomial
 
     # Test edge cases for train
     Ψ = zeros(5, 3)
@@ -1479,10 +1663,26 @@ end
 
 
 @testitem "aPCE_OrthonormalBasis1" begin
-    @test ArbitraryPolynomialChaosExpansion.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true)) ≈ [1.0 0.0; -0.5 1.5]
-    @test ArbitraryPolynomialChaosExpansion.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false)) ≈ [1.0 0.0; -0.5 1.5]
-    @inferred ArbitraryPolynomialChaosExpansion.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(false))
-    @inferred ArbitraryPolynomialChaosExpansion.aPCE_OrthonormalBasis([1 / sqrt(3), -1 / sqrt(3), 1.0], 1, Val(true))
+    @test ArbitraryPolynomialChaosExpansion.aPCE_OrthonormalBasis(
+        [1 / sqrt(3), -1 / sqrt(3), 1.0],
+        1,
+        Val(true),
+    ) ≈ [1.0 0.0; -0.5 1.5]
+    @test ArbitraryPolynomialChaosExpansion.aPCE_OrthonormalBasis(
+        [1 / sqrt(3), -1 / sqrt(3), 1.0],
+        1,
+        Val(false),
+    ) ≈ [1.0 0.0; -0.5 1.5]
+    @inferred ArbitraryPolynomialChaosExpansion.aPCE_OrthonormalBasis(
+        [1 / sqrt(3), -1 / sqrt(3), 1.0],
+        1,
+        Val(false),
+    )
+    @inferred ArbitraryPolynomialChaosExpansion.aPCE_OrthonormalBasis(
+        [1 / sqrt(3), -1 / sqrt(3), 1.0],
+        1,
+        Val(true),
+    )
 end
 
 @testitem "aPCE_OrthonormalBasis_comprehensive_test_true" begin
@@ -1589,11 +1789,22 @@ end
 
 
 @testitem "evaluate_derivative_horner_test" begin
-    @test ArbitraryPolynomialChaosExpansion.evaluate_derivative_horner(2.0, [1.0, 2.0, 3.0]) == 14.0  # Derivative of 1 + 2x + 3x^2 at x=2
-    @test ArbitraryPolynomialChaosExpansion.evaluate_derivative_horner(0.0, [1.0, 2.0, 3.0]) == 2.0   # Derivative of 1 + 2x + 3x^2 at x=0
-    @test ArbitraryPolynomialChaosExpansion.evaluate_derivative_horner(1.0, [0.0, 0.0, 0.0]) == 0.0   # Derivative of 0 polynomial at x=1
+    @test ArbitraryPolynomialChaosExpansion.evaluate_derivative_horner(
+        2.0,
+        [1.0, 2.0, 3.0],
+    ) == 14.0  # Derivative of 1 + 2x + 3x^2 at x=2
+    @test ArbitraryPolynomialChaosExpansion.evaluate_derivative_horner(
+        0.0,
+        [1.0, 2.0, 3.0],
+    ) == 2.0   # Derivative of 1 + 2x + 3x^2 at x=0
+    @test ArbitraryPolynomialChaosExpansion.evaluate_derivative_horner(
+        1.0,
+        [0.0, 0.0, 0.0],
+    ) == 0.0   # Derivative of 0 polynomial at x=1
     @test ArbitraryPolynomialChaosExpansion.evaluate_derivative_horner(1.0, [5.0]) == 0.0             # Derivative of constant polynomial at x=1
-    @test typeof(ArbitraryPolynomialChaosExpansion.evaluate_derivative_horner(2.0, [1.0, 2.0, 3.0])) == Float64
+    @test typeof(
+        ArbitraryPolynomialChaosExpansion.evaluate_derivative_horner(2.0, [1.0, 2.0, 3.0]),
+    ) == Float64
     @inferred ArbitraryPolynomialChaosExpansion.evaluate_derivative_horner(1.0, [5.0])
 end
 
@@ -1602,7 +1813,8 @@ end
     @test ArbitraryPolynomialChaosExpansion.evalpoly_two(0.0, [1.0, 2.0, 3.0, 4.0]) == 1.0   # Polynomial 1 + 2x + 3x^2 + 4x^3 at x=0
     @test ArbitraryPolynomialChaosExpansion.evalpoly_two(1.0, [0.0, 0.0, 0.0, 0.0]) == 0.0   # Zero polynomial at x=1
     @test ArbitraryPolynomialChaosExpansion.evalpoly_two(1.0, [5.0]) == 5.0                  # Constant polynomial at x=1
-    @test ArbitraryPolynomialChaosExpansion.evalpoly_two(2.0, [1.0, -1.0, 1.0, -1.0]) == -5.0  # Polynomial 1 - x + x^2 - x^3 at x=2
+    @test ArbitraryPolynomialChaosExpansion.evalpoly_two(2.0, [1.0, -1.0, 1.0, -1.0]) ==
+          -5.0  # Polynomial 1 - x + x^2 - x^3 at x=2
 end
 
 @testitem "EstrinPoly_test" begin
@@ -1619,7 +1831,8 @@ end
     @test ArbitraryPolynomialChaosExpansion.derivative_coeffs([1.0, 2.0, 3.0]) == [2.0, 6.0]  # Derivative of 1 + 2x + 3x^2
     @test ArbitraryPolynomialChaosExpansion.derivative_coeffs([0.0, 0.0, 0.0]) == [0.0, 0.0]  # Derivative of 0 polynomial
     @test ArbitraryPolynomialChaosExpansion.derivative_coeffs([5.0]) == [0.0]                 # Derivative of constant polynomial
-    @test ArbitraryPolynomialChaosExpansion.derivative_coeffs([1.0, -1.0, 1.0, -1.0]) == [-1.0, 2.0, -3.0]  # Derivative of 1 - x + x^2 - x^3
+    @test ArbitraryPolynomialChaosExpansion.derivative_coeffs([1.0, -1.0, 1.0, -1.0]) ==
+          [-1.0, 2.0, -3.0]  # Derivative of 1 - x + x^2 - x^3
 end
 
 @testitem "create_basis_orthonormal_true_test" begin
@@ -1729,7 +1942,9 @@ end
     for dim in 1:size(x, 2)
         basis_dim = basis_ortho[:, :, dim]
         # Check that it's not the identity matrix (which would be the case for full basis)
-        @test !all(basis_dim[i, j] == (i >= j ? 1.0 : 0.0) for i in 1:(degree + 1), j in 1:(degree + 1))
+        @test !all(
+            basis_dim[i, j] == (i >= j ? 1.0 : 0.0) for i in 1:(degree+1), j in 1:(degree+1)
+        )
     end
 end
 
@@ -1745,8 +1960,10 @@ end
     # Test that we can extract coefficients from both bases
     for dim in 1:size(x, 2)
         for d in 1:(degree + 1)
-            coeffs_ortho = ArbitraryPolynomialChaosExpansion.coeffs_from_basis(basis_ortho, d, dim)
-            coeffs_full = ArbitraryPolynomialChaosExpansion.coeffs_from_basis(basis_full, d, dim)
+            coeffs_ortho =
+                ArbitraryPolynomialChaosExpansion.coeffs_from_basis(basis_ortho, d, dim)
+            coeffs_full =
+                ArbitraryPolynomialChaosExpansion.coeffs_from_basis(basis_full, d, dim)
 
             @test length(coeffs_ortho) == d
             @test length(coeffs_full) == d
@@ -1760,8 +1977,16 @@ end
     multivar_degrees = [0 0; 0 1; 1 0; 0 2; 1 1; 2 0]  # 2D, degree 2
 
     # This should work without errors for both basis types
-    @test_nowarn ArbitraryPolynomialChaosExpansion.aPCE_PsiPolynomialMatrix_zygote(test_point', multivar_degrees, basis_ortho)
-    @test_nowarn ArbitraryPolynomialChaosExpansion.aPCE_PsiPolynomialMatrix_zygote(test_point', multivar_degrees, basis_full)
+    @test_nowarn ArbitraryPolynomialChaosExpansion.aPCE_PsiPolynomialMatrix_zygote(
+        test_point',
+        multivar_degrees,
+        basis_ortho,
+    )
+    @test_nowarn ArbitraryPolynomialChaosExpansion.aPCE_PsiPolynomialMatrix_zygote(
+        test_point',
+        multivar_degrees,
+        basis_full,
+    )
 end
 
 @testitem "create_basis_default_test" begin
@@ -1779,8 +2004,10 @@ end
     @test isapprox(basis_default, basis_ortho, atol = 1.0e-10)
 
     # Test with center_data parameter
-    basis_default_centered = ArbitraryPolynomialChaosExpansion.create_basis(x, degree, center_data = true)
-    basis_default_uncentered = ArbitraryPolynomialChaosExpansion.create_basis(x, degree, center_data = false)
+    basis_default_centered =
+        ArbitraryPolynomialChaosExpansion.create_basis(x, degree, center_data=true)
+    basis_default_uncentered =
+        ArbitraryPolynomialChaosExpansion.create_basis(x, degree, center_data=false)
 
     # Debug: Check the data properties
     @info "Data mean" StatsBase.mean(x, dims = 1)
@@ -1816,8 +2043,10 @@ end
     @info "Test data mean" StatsBase.mean(x, dims = 1)
     @info "Test data std" StatsBase.std(x, dims = 1)
 
-    basis_centered = ArbitraryPolynomialChaosExpansion.create_basis(x, degree, center_data = true)
-    basis_uncentered = ArbitraryPolynomialChaosExpansion.create_basis(x, degree, center_data = false)
+    basis_centered =
+        ArbitraryPolynomialChaosExpansion.create_basis(x, degree, center_data=true)
+    basis_uncentered =
+        ArbitraryPolynomialChaosExpansion.create_basis(x, degree, center_data=false)
 
     # These should be nearly identical due to the backward transformation
     diff_norm = norm(basis_centered - basis_uncentered)
@@ -1869,8 +2098,10 @@ end
     degree = 2
 
     # Both should work without numerical errors
-    basis_centered = ArbitraryPolynomialChaosExpansion.create_basis(x_large, degree, center_data = true)
-    basis_uncentered = ArbitraryPolynomialChaosExpansion.create_basis(x_large, degree, center_data = false)
+    basis_centered =
+        ArbitraryPolynomialChaosExpansion.create_basis(x_large, degree, center_data=true)
+    basis_uncentered =
+        ArbitraryPolynomialChaosExpansion.create_basis(x_large, degree, center_data=false)
 
     # Both should be valid
     @test all(!isnan, basis_centered)
