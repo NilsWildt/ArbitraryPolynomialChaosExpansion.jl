@@ -516,7 +516,7 @@ end
     @test isapprox(grad_psi_fd, grad_psi_zyg, atol = 1.0e-6)
 
     # Test aPCE_PsiPolynomialMatrix_zygote
-    f_psi_zyg(x) = sum(aPCE_PsiPolynomialMatrix_zygote(x, MultivariatePolynomialDegrees, OrthonormalBasis))
+    f_psi_zyg(x) = sum(ArbitraryPolynomialChaosExpansion.aPCE_PsiPolynomialMatrix_zygote(x, MultivariatePolynomialDegrees, OrthonormalBasis))
 
     grad_psi_zyg_fd = ForwardDiff.gradient(f_psi_zyg, x)
     grad_psi_zyg_zyg = Zygote.gradient(f_psi_zyg, x)[1]
