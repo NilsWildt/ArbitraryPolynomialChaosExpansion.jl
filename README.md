@@ -134,9 +134,8 @@ apc = aPCE(TrainingInput, degree;
 ## Examples
 
 See the `examples/` directory for comprehensive usage examples:
-- `test_ishigami.jl`: Ishigami function uncertainty quantification
-- `test_derivative.jl`: Automatic differentiation examples
-- `test_maria_data.jl`: Real data applications
+- `basic_example.jl`: Basic workflow demonstrating the core API
+- `ishigami_example.jl`: Classic Ishigami function UQ benchmark with analytical validation
 
 ## Contributing
 
