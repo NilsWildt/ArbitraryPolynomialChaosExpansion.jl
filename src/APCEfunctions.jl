@@ -225,7 +225,6 @@ function evaluate_derivative_horner(x, coeffs)
     end
     if isnan(derivative_value) || isinf(derivative_value)
         @warn "NaN or Inf in the derivative"
-        @infiltrate
     end
     return derivative_value
 end
