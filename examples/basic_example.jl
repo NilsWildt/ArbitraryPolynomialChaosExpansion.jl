@@ -21,7 +21,7 @@ Random.seed!(42)
 # -----------------------------------------------------------------------------
 # We use a simple 2D function: f(x1, x2) = sin(x1) + cos(x2) + 0.1*x1*x2
 
-n_samples = 200
+n_samples = 5000
 n_dims = 2
 
 # Generate input samples (uniform distribution on [0, 1])
@@ -50,13 +50,13 @@ println("Validation samples: $(size(X_val, 1))")
 # -----------------------------------------------------------------------------
 # The expansion degree controls the complexity of the surrogate model
 
-degree = 5  # Polynomial degree
+degree = 9 # Polynomial degree
 
 apc = APCE.aPCE(
     X_train,
     degree;
     outdim = size(Y_train, 2),
-    OrthonormalRepresentation = true,
+    is_orthonormal = true,
     center_data = true
 )
 
@@ -75,7 +75,7 @@ APCE.train!(
     X_train,
     Y_train;
     bayesian_inversion = true,
-    reg_order = 2
+    reg_order = 1
 )
 
 println("\nModel trained successfully!")

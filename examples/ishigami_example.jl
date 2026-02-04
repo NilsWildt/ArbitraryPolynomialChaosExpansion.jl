@@ -14,6 +14,7 @@ using Random
 using Statistics
 using LinearAlgebra
 using Printf
+using CairoMakie
 
 # Set random seed for reproducibility
 Random.seed!(123)
@@ -147,20 +148,41 @@ println("  Empirical Variance: $(round(emp_var, digits = 4))")
 # 6. Summary
 # -----------------------------------------------------------------------------
 
-println("\n" * "="^50)
-println("SUMMARY")
-println("="^50)
-if val_r2 > 0.99
-    println("Excellent fit achieved!")
-elseif val_r2 > 0.95
-    println("Good fit achieved.")
-elseif val_r2 > 0.9
-    println("Acceptable fit. Consider increasing polynomial degree.")
-else
-    println("Poor fit. Try increasing samples or polynomial degree.")
-end
+
 
 println("\nMean prediction error: $(round(100 * mean_error / abs(analytical_mean), digits = 2))%")
 println("Variance prediction error: $(round(100 * var_error / analytical_var, digits = 2))%")
+
+# -----------------------------------------------------------------------------
+# 7. Plot: Prediction vs True Response
+# -----------------------------------------------------------------------------
+
+fig = Figure(size = (600, 550))
+ax = Axis(
+    fig[1, 1];
+    xlabel = "True Response",
+    ylabel = "aPCE Prediction",
+    title = "Ishigami Function — aPCE Surrogate (R² = $(round(val_r2, digits = 4)))",
+    aspect = DataAspect()
+)
+
+# Diagonal reference line
+data_range = [minimum(Y_val); maximum(Y_val)]
+lines!(ax, data_range, data_range; color = :grey60, linewidth = 1.5, linestyle = :dash, label = "Perfect fit")
+
+# Validation scatter
+scatter!(
+    ax,
+    vec(Y_val),
+    vec(Y_pred_val);
+    color = (:dodgerblue, 0.5),
+    markersize = 6,
+    label = "Validation (n=$n_val)"
+)
+
+axislegend(ax; position = :lt)
+
+save(joinpath(@__DIR__, "..", "figures", "ishigami_prediction.png"), fig; px_per_unit = 3)
+println("\nFigure saved to figures/ishigami_prediction.png")
 
 println("\n--- Ishigami example completed successfully! ---")
