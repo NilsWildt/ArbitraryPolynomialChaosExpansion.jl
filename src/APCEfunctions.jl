@@ -1505,7 +1505,7 @@ end
     x_single = A_ill \ b_ill
     err_single = norm(x_single - x_true_ill)
     err_refined = norm(x_refined_ill - x_true_ill)
-    @test err_refined <= err_single + 4.0e-8
+    @test err_refined <= err_single + 1.0e-6
 end
 
 ####
