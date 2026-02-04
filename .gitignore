@@ -46,3 +46,7 @@ LocalPreferences.toml
 # Output directories
 output/
 plots/
+
+# Git hook / commit temporary files
+changes.txt
+commit_message.txt

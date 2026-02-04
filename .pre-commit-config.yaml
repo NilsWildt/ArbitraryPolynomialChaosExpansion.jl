@@ -1,0 +1,12 @@
+# Pre-commit hooks for this repository
+# See https://pre-commit.com for more information
+
+repos:
+  - repo: local
+    hooks:
+      - id: runic-format
+        name: Runic (Julia formatter)
+        entry: julia -m Runic
+        language: system
+        files: \.jl$
+        pass_filenames: true
