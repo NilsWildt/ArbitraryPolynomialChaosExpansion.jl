@@ -1,5 +1,5 @@
 # Basic Example: Polynomial Chaos Expansion
-# 
+#
 # This example demonstrates the core workflow of ArbitraryPolynomialChaosExpansion.jl:
 # 1. Generate synthetic training data
 # 2. Create a polynomial chaos expansion
@@ -28,14 +28,14 @@ n_dims = 2
 TrainingInput = rand(n_samples, n_dims)
 
 # Compute outputs using our target function
-target_function(x1, x2) = sin(2*pi*x1) + cos(2*pi*x2) + 0.1*x1*x2
-TrainingOutput = [target_function(TrainingInput[i,1], TrainingInput[i,2]) for i in 1:n_samples]
+target_function(x1, x2) = sin(2 * pi * x1) + cos(2 * pi * x2) + 0.1 * x1 * x2
+TrainingOutput = [target_function(TrainingInput[i, 1], TrainingInput[i, 2]) for i in 1:n_samples]
 TrainingOutput = reshape(TrainingOutput, :, 1)  # Make it a column matrix
 
 # Split into training and validation sets
 split_idx = Int(floor(0.8 * n_samples))
 train_idx = 1:split_idx
-val_idx = (split_idx+1):n_samples
+val_idx = (split_idx + 1):n_samples
 
 X_train = TrainingInput[train_idx, :]
 Y_train = TrainingOutput[train_idx, :]
@@ -53,8 +53,8 @@ println("Validation samples: $(size(X_val, 1))")
 degree = 5  # Polynomial degree
 
 apc = APCE.aPCE(
-    X_train, 
-    degree; 
+    X_train,
+    degree;
     outdim = size(Y_train, 2),
     OrthonormalRepresentation = true,
     center_data = true
@@ -71,10 +71,10 @@ println("  Number of terms: $(apc.NumberOfTerms)")
 # Using Bayesian regularization for robust coefficient estimation
 
 APCE.train!(
-    apc, 
-    X_train, 
-    Y_train; 
-    bayesian_inversion = true, 
+    apc,
+    X_train,
+    Y_train;
+    bayesian_inversion = true,
     reg_order = 2
 )
 
@@ -88,16 +88,16 @@ Y_pred_train = APCE.predict(apc, X_train)
 Y_pred_val = APCE.predict(apc, X_val)
 
 # Compute errors
-train_rmse = sqrt(mean((Y_train .- Y_pred_train).^2))
-val_rmse = sqrt(mean((Y_val .- Y_pred_val).^2))
-train_r2 = 1 - sum((Y_train .- Y_pred_train).^2) / sum((Y_train .- mean(Y_train)).^2)
-val_r2 = 1 - sum((Y_val .- Y_pred_val).^2) / sum((Y_val .- mean(Y_val)).^2)
+train_rmse = sqrt(mean((Y_train .- Y_pred_train) .^ 2))
+val_rmse = sqrt(mean((Y_val .- Y_pred_val) .^ 2))
+train_r2 = 1 - sum((Y_train .- Y_pred_train) .^ 2) / sum((Y_train .- mean(Y_train)) .^ 2)
+val_r2 = 1 - sum((Y_val .- Y_pred_val) .^ 2) / sum((Y_val .- mean(Y_val)) .^ 2)
 
 println("\nPrediction Performance:")
-println("  Training RMSE: $(round(train_rmse, digits=6))")
-println("  Validation RMSE: $(round(val_rmse, digits=6))")
-println("  Training R²: $(round(train_r2, digits=4))")
-println("  Validation R²: $(round(val_r2, digits=4))")
+println("  Training RMSE: $(round(train_rmse, digits = 6))")
+println("  Validation RMSE: $(round(val_rmse, digits = 6))")
+println("  Training R²: $(round(train_r2, digits = 4))")
+println("  Validation R²: $(round(val_r2, digits = 4))")
 
 # -----------------------------------------------------------------------------
 # 5. Uncertainty Quantification
@@ -106,14 +106,14 @@ println("  Validation R²: $(round(val_r2, digits=4))")
 uq_results = APCE.UQ(apc)
 
 println("\nUncertainty Quantification Results:")
-println("  Output Mean: $(round(uq_results.OutputMean[1], digits=4))")
-println("  Output Variance: $(round(uq_results.OutputVar[1], digits=4))")
-println("  Output Std Dev: $(round(sqrt(uq_results.OutputVar[1]), digits=4))")
+println("  Output Mean: $(round(uq_results.OutputMean[1], digits = 4))")
+println("  Output Variance: $(round(uq_results.OutputVar[1], digits = 4))")
+println("  Output Std Dev: $(round(sqrt(uq_results.OutputVar[1]), digits = 4))")
 
 # Compare with empirical statistics from validation data
 println("\nEmpirical Statistics (Validation Data):")
-println("  Empirical Mean: $(round(mean(Y_val), digits=4))")
-println("  Empirical Variance: $(round(var(Y_val), digits=4))")
-println("  Empirical Std Dev: $(round(std(Y_val), digits=4))")
+println("  Empirical Mean: $(round(mean(Y_val), digits = 4))")
+println("  Empirical Variance: $(round(var(Y_val), digits = 4))")
+println("  Empirical Std Dev: $(round(std(Y_val), digits = 4))")
 
 println("\n--- Example completed successfully! ---")

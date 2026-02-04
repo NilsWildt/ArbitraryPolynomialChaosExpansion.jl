@@ -133,7 +133,6 @@ end
 end
 
 
-
 @testitem "APCE_type_stability_test" begin
     # Test type stability of full workflow
     FT = Float64
