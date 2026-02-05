@@ -83,4 +83,5 @@ UnrolledUtilities = "0fe1646c-419e-43be-ac14-22321958931b"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [compat]
+Estrin = "0.1"
 PrettyTables = "3.1.2"
