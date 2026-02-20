@@ -770,7 +770,7 @@ end
     using LinearAlgebra
     using ErrorTypes
 
-    backend = AutoZygote()
+    backend = AutoMooncake()
 
     # Test gradient through Levenberg-Marquardt solver
     function loss_with_lm(A_flat, b)
