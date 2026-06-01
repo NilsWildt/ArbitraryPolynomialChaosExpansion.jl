@@ -1,14 +1,13 @@
-# .github/workflows/ci.yml
 name: CI
 
 on:
   push:
     branches:
       - main
+      - dev/**
+      - feature/**
     paths-ignore:
       - "data/**"
-      - "notebooks/**"
-      - "plots/**"
       - "examples/**"
 
   pull_request:
@@ -16,16 +15,14 @@ on:
       - main
     paths-ignore:
       - "data/**"
-      - "notebooks/**"
-      - "plots/**"
       - "examples/**"
 
-  jobs:
-  testArbitraryPolynomialChaosExpansion:
-    name: ArbitraryPolynomialChaosExpansion - Julia ${{ matrix.version }}
+jobs:
+  test:
+    name: Julia ${{ matrix.version }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    permissions: # needed to allow julia-actions/cache to proactively delete old caches that it has created
+    permissions:
       actions: write
       contents: read
     strategy:
@@ -33,7 +30,6 @@ on:
       matrix:
         version:
           - "1"
-          # - '~1.11.0-0'
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
@@ -44,4 +40,3 @@ on:
       - name: Update registry
         run: julia -e 'using Pkg; Pkg.Registry.update()'
       - uses: julia-actions/julia-runtest@v1
-

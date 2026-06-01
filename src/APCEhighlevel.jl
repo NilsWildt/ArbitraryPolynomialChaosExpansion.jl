@@ -270,13 +270,35 @@ function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion = :true, reg_orde
         # @info "Using bayesian regularization to find the expansion coefficients"
         x₀ = copy(aPCE.ExpansionCoefficients)
 
+        # Validate initial guess - replace Inf/NaN with zeros
+        if any(!isfinite, x₀)
+            @warn "Initial coefficients contain Inf or NaN, using zero initial guess for regularization"
+            x₀ .= zero(T)
+        end
+
         for i in axes(y_rhs, 2)
             # @info "Bayesian regularization for axis $i"
-            aPCE.ExpansionCoefficients[:, i] .= invert(
-                Psi, y_rhs[:, i], Lₖx₀(reg_order, view(x₀, :, i));
-                alg = :gcv_svd,
-                method = LBFGS(linesearch = LineSearches.BackTracking())
-            )
+            # Try the requested reg_order; fall back to lower orders if numerical issues arise
+            solved = false
+            for order in reg_order:-1:0
+                try
+                    aPCE.ExpansionCoefficients[:, i] .= invert(
+                        Psi, y_rhs[:, i], Lₖx₀(order, view(x₀, :, i));
+                        alg = :gcv_svd,
+                        method = LBFGS(linesearch = LineSearches.BackTracking())
+                    )
+                    solved = true
+                    if order < reg_order
+                        @warn "Regularization order $reg_order failed for output $i, succeeded with order $order"
+                    end
+                    break
+                catch e
+                    if order > 0
+                        continue
+                    end
+                    @warn "All regularization orders failed for output $i, keeping pinv solution" exception = e
+                end
+            end
         end
     end
 

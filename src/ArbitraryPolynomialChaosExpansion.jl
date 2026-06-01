@@ -10,8 +10,11 @@ using TypeUtils: as
 using ChainRulesCore
 using ErrorTypes
 using ImplicitDifferentiation
-# using Enzyme
-using Mooncake: @from_rrule, DefaultCtx
+
+# Mooncake support via weak extension (MooncakeExt)
+# On Julia 1.12+, Mooncake is not compatible due to compiler API changes
+# The extension will only be loaded on compatible Julia versions when Mooncake is available
+const MOONCAKE_AVAILABLE = @isdefined(Mooncake)
 
 # Define CPU_MODEL safely with fallback
 const CPU_MODEL = get(
@@ -25,22 +28,15 @@ const CPU_MODEL = get(
 # Use conditional loading directly
 if Sys.isapple() && Sys.ARCH in (:aarch64, :arm64)
     @info "Using `AppleAccelerate.jl` for Apple Silicon."
-    # AppleAccelerate.@replaceBase sin cos tan
-    # AppleAccelerate.@replaceBase asin acos atan
-    # AppleAccelerate.@replaceBase sinh cosh tanh
-    # AppleAccelerate.@replaceBase asinh acosh atanh
-    # AppleAccelerate.@replaceBase exp exp2 expm1
-    # AppleAccelerate.@replaceBase log log10 log2 log1p
-    # AppleAccelerate.@replaceBase sqrt
-    # AppleAccelerate.@replaceBase ceil floor trunc round
-    # AppleAccelerate.@replaceBase abs
 elseif Sys.ARCH == :x86_64 && occursin(r"intel"i, CPU_MODEL)
     @info "Detected Intel x86_64 CPU. Loading `MKL.jl`."
     using MKL
 end
 
+# BLISBLAS is optional - only use if available (loaded via weak extension)
+# On Apple Silicon, AppleAccelerate provides optimized BLAS already
+const BLISBLAS_AVAILABLE = @isdefined(BLISBLAS)
 
-using BLISBLAS: BLISBLAS
 import Optim: NewtonTrustRegion, Options, optimize, minimizer, minimum, LBFGS
 import RegularizationTools: Lₖx₀, solve, RegularizationProblem, setupRegularizationProblem, to_general_form, to_standard_form, gcv_tr, gcv_svd, invert, Lₖ, NelderMead, LₖB, Lₖx₀B, LₖDₓ, Lₖx₀Dₓ, LₖDₓB, Lₖx₀DₓB
 using CPUSummary: CPUSummary
@@ -49,57 +45,39 @@ using ChainRulesCore: ChainRulesCore
 using Combinatorics: Combinatorics, factorial
 using ComponentArrays: ComponentArrays
 using Estrin
-# using DifferentiationInterface: DifferentiationInterface
 using DispatchDoctor: @stable
-# using SparseArrays
-using DrWatson: DrWatson, projectdir
 using Einsum: Einsum, @einsum
 using Estrin: Estrin
-using FastBroadcast: @.. # Unroll to speedup...
+using FastBroadcast: @..
 using ForwardDiff: ForwardDiff, Dual
-# using InducingPoints: InducingPoints, CoverTree, RandomSubset, UniGrid, inducingpoints, kDPP
-using Infiltrator: Infiltrator, @infiltrate
 using Krylov: Krylov
 using LazyGrids: LazyGrids
 using LineSearches: LineSearches
-
-# using Octavian: Octavian
 using OnlineStats: OnlineStats, Extrema, Mean, Series, Variance, eachrow, value
 using Polyester: Polyester, @batch
 using PolynomialRoots: PolynomialRoots
 using Polynomials: Polynomials, degree
-using PrecompileTools: @setup_workload, @compile_workload    # this is a small dependency
-using PrettyTables: PrettyTables
+using PrecompileTools: @setup_workload, @compile_workload
 using Random: Random, Xoshiro, shuffle
 using RegularizationTools: RegularizationTools
 using ReverseDiff: ReverseDiff
-# using StaticArrays: StaticArrays
 using StatsBase: StatsBase, fit!, mean, sum
 using Bumper
 using TensorOperations: TensorOperations, @tensoropt, @tensor
-using TimerOutputs: TimerOutputs
-# using Tracker: Tracker
-using UnicodePlots: UnicodePlots
 using UnrolledUtilities: UnrolledUtilities
 using Zygote: Zygote, bufferfrom
 using Suppressor: @suppress
-# using CUDA
 using KernelAbstractions
-# using cuTENSOR
-# CPUSummary.use_hwloc(true)
 
 BLAS.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
 
-
-configdir(args...) = projectdir("configs", args...)
-outputdir(args...) = projectdir("output", args...)
-
-export aPCE_FullBasis, aPCE_MultivariatePolynomialDegrees, aPCE_PsiPolynomialMatrix, compose_Ψ, GaussianCollocation, partitionTrainTest, special_sort_two_arrays!, train!, evaluate_Ψ, aPCE, aPCE_OrthonormalBasis, create_basis, normalization_functions, predict, UQ, PsiPolynomialMatrix_zygote, reverse_columns!, compute_moments!
+export aPCE_FullBasis, aPCE_MultivariatePolynomialDegrees, aPCE_PsiPolynomialMatrix, compose_Ψ, GaussianCollocation, partitionTrainTest, special_sort_two_arrays!, train!, evaluate_Ψ, aPCE, aPCE_OrthonormalBasis, create_basis, create_centered_basis, CenteredBasis, normalization_functions, predict, UQ, PsiPolynomialMatrix_zygote, reverse_columns!, compute_moments!
 
 include("APCEfunctions.jl")
 include("APCEhighlevel.jl")
 include("utils.jl")
 include("APCEderivatives.jl")
+include("APCEGradientOverrides.jl")
 
 # include("TensorOperationsMooncakeExt.jl")
 # using .TensorOperationsMooncakeExt
@@ -162,11 +140,6 @@ end
     @test haskey(uq_result, :OutputVar)
 end
 
-@testitem "APCE_config_test" begin
-    # Test configuration functions
-    @test isdefined(ArbitraryPolynomialChaosExpansion, :configdir)
-    @test isdefined(ArbitraryPolynomialChaosExpansion, :outputdir)
-end
 
 @testitem "APCE_type_stability_test" begin
     # Test type stability of full workflow

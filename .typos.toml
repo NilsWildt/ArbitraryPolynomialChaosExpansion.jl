@@ -1,0 +1,31 @@
+# Typos configuration for this repository
+# See https://github.com/crate-ci/typos#configuration
+
+[default]
+# Extend the built-in ignore patterns
+extend-ignore-identifiers-re = [
+    "ND",           # PhysicalModelND function name
+    "nin",          # nin variable names (intentional)
+]
+
+[files]
+# Ignore certain files
+extend-exclude = [
+    "*.jl.bak",
+    "*.toml.bak",
+    "docs/build/*",
+]
+
+[type.jl]
+# Julia-specific typos to ignore
+extend-ignore-words = [
+    "ND",           # N-dimensional
+    "nd",           # n-dimensional (in comments)
+    "lod",          # intentional variable name (for testing)
+]
+
+# Common false positives in this codebase
+[default.extend-words]
+ND = "ND"
+nd = "nd"
+nin = "nin"

@@ -62,6 +62,30 @@ println("Output Mean: ", uq_results.OutputMean)
 println("Output Variance: ", uq_results.OutputVar)
 ```
 
+## Results
+
+### Ishigami Function Benchmark
+
+The classic Ishigami function (a = 7, b = 0.1) with 500 training samples and degree-8 expansion achieves near-perfect surrogate accuracy on held-out validation data:
+
+<p align="center">
+  <img src="figures/ishigami_prediction.png" width="500" alt="Ishigami prediction vs true response">
+</p>
+
+### Extended Ishigami: Standard vs Regularized vs FastARD
+
+An extended variant (b = 0.5, 5× the standard) with only 300 training samples and a moderate degree-6 basis (84 terms) exposes the difference between solvers. [FastARD.jl](https://github.com/NilsWildt/FastARD.jl) automatically prunes irrelevant basis functions, achieving the best validation R² with a sparse solution:
+
+| Method | R² (val) | Active / Total terms |
+|--------|----------|----------------------|
+| Standard (pinv) | 0.9449 | 84 / 84 |
+| Regularized (Bayesian) | 0.9449 | 84 / 84 |
+| **FastARD** | **0.9636** | **53 / 84** |
+
+<p align="center">
+  <img src="figures/ishigami_extended_comparison.png" width="100%" alt="Extended Ishigami comparison: Standard vs Regularized vs FastARD">
+</p>
+
 ## Usage
 
 ### Creating Polynomial Bases
@@ -134,9 +158,9 @@ apc = aPCE(TrainingInput, degree;
 ## Examples
 
 See the `examples/` directory for comprehensive usage examples:
-- `test_ishigami.jl`: Ishigami function uncertainty quantification
-- `test_derivative.jl`: Automatic differentiation examples
-- `test_maria_data.jl`: Real data applications
+- `basic_example.jl`: Basic workflow demonstrating the core API
+- `ishigami_example.jl`: Classic Ishigami function UQ benchmark with analytical validation
+- `ishigami_extended_fastard.jl`: Extended Ishigami variant comparing Standard, Regularized, and [FastARD](https://github.com/NilsWildt/FastARD.jl) solvers
 
 ## Contributing
 

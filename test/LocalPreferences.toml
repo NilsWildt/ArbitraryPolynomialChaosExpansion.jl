@@ -1,5 +1,0 @@
-[APCE]
-precompile_workload = true
-
-[ArbitraryPolynomialChaosExpansion]
-precompile_workload = true
