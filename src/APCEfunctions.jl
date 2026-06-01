@@ -1473,8 +1473,7 @@ function GaussianCollocation(
     SortUniqueCombinations = UniqueCombinations[sort_indices[:], :]
 
     if strategy == :FT
-        TrainingInput = SortUniqueCombinations
-        return Array(view(TrainingInput, :, (1:size(TrainingInput, 2))))
+        return Matrix{T}(SortUniqueCombinations)
     elseif strategy == :PCM
         temp = abs.(polynomial_roots .- StatsBase.mean(InputDistribution; dims = 1)[:, :][1])
         temp_sort = mapslices(sortperm, temp, dims = 2)
@@ -1489,7 +1488,7 @@ function GaussianCollocation(
             end
         end
         collocation_points = sortslices(collocation_points, dims = 1, by = x -> x[1])
-        return Array(view(collocation_points, :, (1:size(collocation_points, 2))))
+        return collocation_points
     end
 end
 
