@@ -3,7 +3,7 @@ module Main
     using DrWatson
     using PropDicts
     # using PProf
-    @quickactivate "APCE.jl"
+    @quickactivate "ArbitraryPolynomialChaosExpansion"
     using Logging
     using TerminalLoggers: TerminalLogger
     using ProgressLogging
@@ -25,26 +25,26 @@ module Main
     info_logging = ConsoleLogger(stderr, Logging.Info)
     # Here you may include files from the source directory
     global_logger(debug_logging)
-    include(srcdir("APCE.jl"))
-    using .APC
+    include(srcdir("ArbitraryPolynomialChaosExpansion.jl"))
+    using .ArbitraryPolynomialChaosExpansion
 
     using TimerOutputs
     const to = TimerOutput()
     mytimes = []
     begin # @suppress
         for d in 1:20
-            # APC.run1(d, to)
+            # ArbitraryPolynomialChaosExpansion.run1(d, to)
             # display(degree)
             # degree = 25
             t = @elapsed begin
-                APC.run3(d, to)
+                ArbitraryPolynomialChaosExpansion.run3(d, to)
             end
             push!(mytimes, [d, t])
         end
     end
     display(to)
-    # APC.run(6)
-    # ProfileView.@profview APC.run(20,to)
+    # ArbitraryPolynomialChaosExpansion.run(6)
+    # ProfileView.@profview ArbitraryPolynomialChaosExpansion.run(20,to)
     mytimes = reduce(hcat, mytimes)
     fig = Figure()
     ax = Axis(fig[1, 1], yscale = log10, xlabel = "degree", ylabel = "time (s)")
