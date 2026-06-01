@@ -10,7 +10,11 @@ using TypeUtils: as
 using ChainRulesCore
 using ErrorTypes
 using ImplicitDifferentiation
-using Mooncake: @from_rrule, DefaultCtx
+
+# Mooncake support via weak extension (MooncakeExt)
+# On Julia 1.12+, Mooncake is not compatible due to compiler API changes
+# The extension will only be loaded on compatible Julia versions when Mooncake is available
+const MOONCAKE_AVAILABLE = @isdefined(Mooncake)
 
 # Define CPU_MODEL safely with fallback
 const CPU_MODEL = get(
@@ -29,7 +33,10 @@ elseif Sys.ARCH == :x86_64 && occursin(r"intel"i, CPU_MODEL)
     using MKL
 end
 
-using BLISBLAS: BLISBLAS
+# BLISBLAS is optional - only use if available (loaded via weak extension)
+# On Apple Silicon, AppleAccelerate provides optimized BLAS already
+const BLISBLAS_AVAILABLE = @isdefined(BLISBLAS)
+
 import Optim: NewtonTrustRegion, Options, optimize, minimizer, minimum, LBFGS
 import RegularizationTools: Lₖx₀, solve, RegularizationProblem, setupRegularizationProblem, to_general_form, to_standard_form, gcv_tr, gcv_svd, invert, Lₖ, NelderMead, LₖB, Lₖx₀B, LₖDₓ, Lₖx₀Dₓ, LₖDₓB, Lₖx₀DₓB
 using CPUSummary: CPUSummary
@@ -64,12 +71,13 @@ using KernelAbstractions
 
 BLAS.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
 
-export aPCE_FullBasis, aPCE_MultivariatePolynomialDegrees, aPCE_PsiPolynomialMatrix, compose_Ψ, GaussianCollocation, partitionTrainTest, special_sort_two_arrays!, train!, evaluate_Ψ, aPCE, aPCE_OrthonormalBasis, create_basis, normalization_functions, predict, UQ, PsiPolynomialMatrix_zygote, reverse_columns!, compute_moments!
+export aPCE_FullBasis, aPCE_MultivariatePolynomialDegrees, aPCE_PsiPolynomialMatrix, compose_Ψ, GaussianCollocation, partitionTrainTest, special_sort_two_arrays!, train!, evaluate_Ψ, aPCE, aPCE_OrthonormalBasis, create_basis, create_centered_basis, CenteredBasis, normalization_functions, predict, UQ, PsiPolynomialMatrix_zygote, reverse_columns!, compute_moments!
 
 include("APCEfunctions.jl")
 include("APCEhighlevel.jl")
 include("utils.jl")
 include("APCEderivatives.jl")
+include("APCEGradientOverrides.jl")
 
 # include("TensorOperationsMooncakeExt.jl")
 # using .TensorOperationsMooncakeExt

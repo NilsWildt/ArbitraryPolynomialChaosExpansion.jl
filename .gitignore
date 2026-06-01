@@ -50,3 +50,4 @@ plots/
 # Git hook / commit temporary files
 changes.txt
 commit_message.txt
+.gitnexus

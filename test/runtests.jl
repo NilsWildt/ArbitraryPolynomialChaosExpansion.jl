@@ -16,6 +16,7 @@ using ComponentArrays
 using Statistics
 using LinearAlgebra
 using FiniteDifferences
+using Mooncake
 using ArbitraryPolynomialChaosExpansion
 const APCE = ArbitraryPolynomialChaosExpansion
 

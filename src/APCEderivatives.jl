@@ -20,7 +20,6 @@ Key Features:
 using ChainRulesCore
 using ForwardDiff
 using ReverseDiff
-using Mooncake: @from_rrule, DefaultCtx
 # using Enzyme
 using DispatchDoctor: @stable
 
@@ -340,6 +339,32 @@ function ChainRulesCore.rrule(::typeof(create_basis), x::AbstractArray, degree::
 end
 
 """
+    rrule(::typeof(create_centered_basis), x, degree)
+
+ChainRule for `create_centered_basis`. In the intended use pattern (e.g. the
+IPCollocation layer), `x` is training data and not a trainable parameter;
+the per-call basis is recomputed from the current batch but its gradient
+w.r.t. `x` is not used by downstream optimization. We therefore treat `x` as
+having no gradient contribution through basis construction — this makes the
+call AD-opaque under Mooncake without forcing a ForwardDiff pass through the
+Stieltjes / closed-form moment code (which is the instability source the
+wrapper is designed to avoid).
+
+Rationale recap: the closed-form coefficients use raw moments `m[k]` that
+blow up with `σ^k` on un-scaled data; the Stieltjes back-transform via
+binomial expansion is gradient-unfriendly. `CenteredBasis` keeps polynomial
+coefficients in z-space and defers standardization to the Psi-matrix stage,
+where the gradient path is plain broadcasting and therefore AD-stable.
+"""
+function ChainRulesCore.rrule(::typeof(create_centered_basis), x::AbstractArray{T}, degree::Integer) where {T}
+    cb = create_centered_basis(x, degree)
+    function create_centered_basis_pullback(_Δ)
+        return (NoTangent(), NoTangent(), NoTangent())
+    end
+    return cb, create_centered_basis_pullback
+end
+
+"""
     rrule(::typeof(aPCE_OrthonormalBasis), Data, Degree, ::Val{center_data})
 
 ChainRule for aPCE_OrthonormalBasis.
@@ -373,25 +398,8 @@ ReverseDiff.@grad_from_chainrules create_basis(
     x::ReverseDiff.TrackedArray, d::Integer, is_orthonormal::Val{false}
 );
 
-@from_rrule DefaultCtx Tuple{
-    typeof(create_basis),
-    AbstractArray, Integer,
-}
-
-@from_rrule DefaultCtx Tuple{
-    typeof(create_basis),
-    AbstractArray, Integer, Val,
-}
-
-@from_rrule DefaultCtx Tuple{
-    typeof(create_basis),
-    AbstractArray, Integer, Bool,
-}
-
-@from_rrule DefaultCtx Tuple{
-    typeof(aPCE_OrthonormalBasis),
-    AbstractArray, Integer, Val,
-}
+# Note: Mooncake ChainRules integration is now in ext/MooncakeExt.jl
+# It's loaded as a weak extension only when Mooncake is available
 
 
 function ChainRulesCore.rrule(::typeof(solve_linear_robust), A, b; kwargs...)
@@ -405,9 +413,6 @@ function ChainRulesCore.rrule(::typeof(solve_linear_robust), A, b; kwargs...)
     end
     return x, solve_linear_robust_pullback
 end
-
-@from_rrule DefaultCtx Tuple{typeof(solve_linear_robust), Any, Any} true
-@from_rrule DefaultCtx Tuple{typeof(pinv), AbstractMatrix}
 
 
 # ===== TESTS =====
@@ -594,6 +599,7 @@ end
 
 @testitem "Mooncake autodiff - create_basis orthonormal" begin
     using DifferentiationInterface
+    using ADTypes: AutoMooncake
     using ComponentArrays: ComponentArray
     using ArbitraryPolynomialChaosExpansion
 
@@ -636,6 +642,7 @@ end
 
 @testitem "Mooncake autodiff - closed form basis degrees 0-4" begin
     using DifferentiationInterface
+    using ADTypes: AutoMooncake
     using ArbitraryPolynomialChaosExpansion
 
     backend = AutoMooncake()
@@ -672,6 +679,7 @@ end
 
 @testitem "Mooncake autodiff - numerical basis degree > 4" begin
     using DifferentiationInterface
+    using ADTypes: AutoMooncake
     using ArbitraryPolynomialChaosExpansion
 
     backend = AutoMooncake()
@@ -703,6 +711,7 @@ end
 
 @testitem "Mooncake autodiff - full basis (non-orthonormal)" begin
     using DifferentiationInterface
+    using ADTypes: AutoMooncake
     using ArbitraryPolynomialChaosExpansion
 
     backend = AutoMooncake()
@@ -733,6 +742,7 @@ end
 
 @testitem "Mooncake autodiff - type stability across types" begin
     using DifferentiationInterface
+    using ADTypes: AutoMooncake
     using ArbitraryPolynomialChaosExpansion
     backend = AutoMooncake()
     degree = 3
@@ -767,6 +777,7 @@ end
 
 @testitem "Zygote autodiff - solve_levenberg_marquardt" begin
     using DifferentiationInterface
+    using ADTypes: AutoMooncake
     using LinearAlgebra
     using ErrorTypes
 
@@ -806,6 +817,7 @@ end
 
 @testitem "Mooncake autodiff - solve_levenberg_marquardt" begin
     using DifferentiationInterface
+    using ADTypes: AutoMooncake
     using LinearAlgebra
     using ErrorTypes
     using ArbitraryPolynomialChaosExpansion
@@ -845,6 +857,7 @@ end
 
 @testitem "Mooncake autodiff - gradient numerical accuracy" begin
     using DifferentiationInterface
+    using ADTypes: AutoMooncake
     using FiniteDifferences
     using ArbitraryPolynomialChaosExpansion
 
@@ -873,6 +886,7 @@ end
 
 @testitem "Mooncake autodiff - center_data parameter" begin
     using DifferentiationInterface
+    using ADTypes: AutoMooncake
     using ArbitraryPolynomialChaosExpansion
 
     backend = AutoMooncake()
@@ -909,8 +923,98 @@ end
     @test !isapprox(grad_centered, grad_not_centered, rtol = 1.0e-3)
 end
 
+@testitem "CenteredBasis - Ψ round-trip (x == z-scored + cb.basis)" begin
+    using ArbitraryPolynomialChaosExpansion
+    const APCE = ArbitraryPolynomialChaosExpansion
+
+    x = rand(20, 3) .* 5.0 .+ 2.0
+    cb = APCE.create_centered_basis(x, 3)
+    degs = [0 0 0; 1 0 0; 0 1 0; 0 0 1; 2 0 0; 0 2 0; 0 0 2]
+
+    # Dispatched path: standardizes x internally, then delegates to AbstractArray method
+    Ψ_cb = APCE.aPCE_PsiPolynomialMatrix_zygote(x, degs, cb)
+
+    # Manual path: standardize outside, call AbstractArray method with cb.basis
+    μrow = reshape(cb.μ, 1, :)
+    σrow = reshape(cb.σ, 1, :)
+    z = (x .- μrow) ./ σrow
+    Ψ_direct = APCE.aPCE_PsiPolynomialMatrix_zygote(z, degs, cb.basis)
+
+    @test maximum(abs, Ψ_cb .- Ψ_direct) < 1.0e-12
+    @test size(cb.basis) == (4, 4, 3)
+    @test length(cb.μ) == 3 && length(cb.σ) == 3
+    @test all(isfinite, Ψ_cb)
+end
+
+@testitem "CenteredBasis - Mooncake gradient vs finite differences (fixed basis)" begin
+    using DifferentiationInterface
+    using ADTypes: AutoMooncake
+    using FiniteDifferences
+    using ArbitraryPolynomialChaosExpansion
+    const APCE = ArbitraryPolynomialChaosExpansion
+
+    backend_mc = AutoMooncake()
+    backend_fd = AutoFiniteDifferences(; fdm = FiniteDifferences.central_fdm(5, 1))
+
+    # Fit basis from a reference sample; held constant in the loss closure
+    x_ref = rand(50, 3) .* 3.0 .+ 1.0
+    cb = APCE.create_centered_basis(x_ref, 3)
+    degs = [0 0 0; 1 0 0; 0 1 0; 0 0 1; 2 0 0; 0 2 0; 0 0 2; 1 1 0; 1 0 1]
+
+    x = rand(8, 3) .* 2.0 .+ 0.5
+
+    # Differentiate only through the Ψ-evaluation path; cb is constant.
+    # This is the mathematically well-defined test — basis is treated as data.
+    loss(xlocal) = sum(abs2, APCE.aPCE_PsiPolynomialMatrix_zygote(xlocal, degs, cb))
+
+    extras_mc = prepare_gradient(loss, backend_mc, x)
+    grad_mc = gradient(loss, extras_mc, backend_mc, x)
+
+    extras_fd = prepare_gradient(loss, backend_fd, x)
+    grad_fd = gradient(loss, extras_fd, backend_fd, x)
+
+    @test grad_mc ≈ grad_fd rtol = 1.0e-5
+    @test all(isfinite, grad_mc)
+end
+
+@testitem "CenteredBasis - create_centered_basis is AD-opaque (NoTangent rrule)" begin
+    using DifferentiationInterface
+    using ADTypes: AutoMooncake
+    using ArbitraryPolynomialChaosExpansion
+    const APCE = ArbitraryPolynomialChaosExpansion
+
+    backend = AutoMooncake()
+    x = rand(15, 3) .* 4.0 .+ 1.0
+    degs = [0 0 0; 1 0 0; 0 1 0; 0 0 1; 2 0 0; 0 2 0]
+
+    # lossA: basis rebuilt inside the differentiated function (opaque path used)
+    function lossA(xlocal)
+        cb = APCE.create_centered_basis(xlocal, 3)
+        return sum(abs2, APCE.aPCE_PsiPolynomialMatrix_zygote(xlocal, degs, cb))
+    end
+
+    # lossB: basis held constant in closure (no opaque call on the AD tape)
+    cb_fixed = APCE.create_centered_basis(x, 3)
+    lossB(xlocal) = sum(abs2, APCE.aPCE_PsiPolynomialMatrix_zygote(xlocal, degs, cb_fixed))
+
+    # At the reference point, both evaluations must match
+    @test lossA(x) ≈ lossB(x)
+
+    extras_A = prepare_gradient(lossA, backend, x)
+    grad_A = gradient(lossA, extras_A, backend, x)
+
+    extras_B = prepare_gradient(lossB, backend, x)
+    grad_B = gradient(lossB, extras_B, backend, x)
+
+    # NoTangent rrule on create_centered_basis means it contributes zero to the
+    # gradient. Only the explicit Ψ-evaluation path matters, so grad_A == grad_B.
+    @test grad_A ≈ grad_B atol = 1.0e-10
+    @test all(isfinite, grad_A)
+end
+
 @testitem "Mooncake autodiff - edge cases" begin
     using DifferentiationInterface
+    using ADTypes: AutoMooncake
     using ArbitraryPolynomialChaosExpansion
 
     backend = AutoMooncake()
@@ -953,6 +1057,7 @@ end
 
 @testitem "Mooncake autodiff - check_mode compatibility" begin
     using DifferentiationInterface
+    using ADTypes: AutoMooncake
     using ArbitraryPolynomialChaosExpansion
 
     backend = AutoMooncake()
