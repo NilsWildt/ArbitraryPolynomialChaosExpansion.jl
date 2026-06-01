@@ -50,3 +50,15 @@ plots/
 # Git hook / commit temporary files
 changes.txt
 commit_message.txt
+.gitnexus
+
+# Claude Code / OMC tooling
+.agent/
+.claude/
+.omc/
+CLAUDE.md
+AGENTS.md
+
+# Resilio Sync artifacts
+*.rsls
+.rslsc
