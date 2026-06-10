@@ -55,6 +55,7 @@ end
         :aPCE_OrthonormalBasis, :aPCE_FullBasis, :aPCE_MultivariatePolynomialDegrees,
         :compose_Ψ, :evaluate_Ψ, :normalization_functions, :partitionTrainTest,
         :special_sort_two_arrays!, :reverse_columns!, :compute_moments!,
+        :PsiPolynomialMatrix_zygote,
     ]
     for sym in callables
         @test isdefined(M, sym)
@@ -65,20 +66,19 @@ end
     @test CenteredBasis isa Type
 end
 
-@testitem "public_API_undefined_exports_lock" begin
-    # `PsiPolynomialMatrix_zygote` is exported (so it shows up in `names`) but
-    # was never bound: the implementation is the unexported
-    # `aPCE_PsiPolynomialMatrix_zygote`. The export name is missing the `aPCE_`
-    # prefix, so any downstream `using` + call hits an UndefVarError. This test
-    # locks that known wart and fails if any *new* undefined export appears.
-    # See Stage 2 for the alias fix that makes the public name functional.
+@testitem "public_API_no_undefined_exports" begin
+    # Every exported symbol must be bound. `PsiPolynomialMatrix_zygote` used to
+    # be an unbound export (the implementation is `aPCE_PsiPolynomialMatrix_zygote`,
+    # which the export name omitted the `aPCE_` prefix of); it is now aliased so
+    # the public name resolves. This guards against any new undefined export.
     M = ArbitraryPolynomialChaosExpansion
     undefined_exports = [
         s for s in names(M)
             if s != :ArbitraryPolynomialChaosExpansion && !isdefined(M, s)
     ]
-    @test Set(undefined_exports) == Set([:PsiPolynomialMatrix_zygote])
-    @test isdefined(M, :aPCE_PsiPolynomialMatrix_zygote)  # the real implementation
+    @test isempty(undefined_exports)
+    # The public alias resolves to the internal implementation.
+    @test PsiPolynomialMatrix_zygote === M.aPCE_PsiPolynomialMatrix_zygote
 end
 
 @testitem "public_API_core_signatures_lock" begin

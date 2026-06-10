@@ -1389,6 +1389,14 @@ function aPCE_PsiPolynomialMatrix_zygote(
     return aPCE_PsiPolynomialMatrix_zygote(z, MultivariatePolynomialDegrees, cb.basis)
 end
 
+# The public API exports `PsiPolynomialMatrix_zygote` (see the module's `export`
+# list), but the implementation above is named `aPCE_PsiPolynomialMatrix_zygote`.
+# Without this alias the exported name is unbound, so any downstream `using` +
+# call raises UndefVarError and Aqua's undefined_exports check fails. Aliasing
+# (rather than renaming) keeps the public surface byte-for-byte identical while
+# making the documented public name actually callable.
+const PsiPolynomialMatrix_zygote = aPCE_PsiPolynomialMatrix_zygote
+
 """
     aPCE_PsiPolynomialMatrix(TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis)
 
