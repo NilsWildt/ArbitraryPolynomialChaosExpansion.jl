@@ -1083,7 +1083,8 @@ end
 end
 
 
-# Currently borken at 1.12 bc of JET dependency.
+# Disabled: this testitem calls Pkg.add at runtime. JET itself works on Julia
+# 1.12 and is exercised in test/test_jet.jl.
 # @testitem "comprehensive_ad_backend_test" begin
 #     import Pkg
 #     Pkg.add("Zygote")

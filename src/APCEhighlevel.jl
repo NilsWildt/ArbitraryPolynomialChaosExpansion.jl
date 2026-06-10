@@ -14,7 +14,7 @@ mutable struct aPCE{T <: Real}
     const ExpansionDegree::Int64
     const NumberOfTerms::Int64
     const MultivariatePolynomialDegrees::AbstractArray{Int64}
-    const is_orthonormal::Bool # if flase: then vandermonde// full basis
+    const is_orthonormal::Bool # if false: then vandermonde// full basis
     const OrthonormalBasis::AbstractArray{T}
     ExpansionCoefficients::Matrix{T}
     do_gauss::Bool
