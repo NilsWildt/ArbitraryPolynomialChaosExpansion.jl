@@ -47,10 +47,6 @@ LocalPreferences.toml
 output/
 plots/
 
-# Commit temporary files
-changes.txt
-commit_message.txt
-
 # Claude Code / OMC tooling
 .agent/
 .claude/
