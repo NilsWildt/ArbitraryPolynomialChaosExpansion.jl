@@ -3,6 +3,10 @@
 [![CI](https://github.com/NilsWildt/ArbitraryPolynomialChaosExpansion.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/NilsWildt/ArbitraryPolynomialChaosExpansion.jl/actions/workflows/CI.yml)
 [![Aqua QA](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Registry: unregistered](https://img.shields.io/badge/registry-unregistered-lightgrey.svg)](#installation)
+
+> **Note:** This package is **not yet registered** in the Julia General registry.
+> Install it directly from GitHub — see [Installation](#installation).
 
 A Julia package for constructing polynomial chaos expansions with arbitrary polynomial bases, enabling uncertainty quantification and surrogate modeling for complex systems.
 
@@ -25,14 +29,16 @@ ArbitraryPolynomialChaosExpansion.jl (APCE) provides efficient tools for:
 
 ## Installation
 
+This package is not in the General registry yet, so install it from GitHub:
+
 ```julia
 using Pkg
-Pkg.add("ArbitraryPolynomialChaosExpansion")
+Pkg.add(url = "https://github.com/NilsWildt/ArbitraryPolynomialChaosExpansion.jl")
 ```
 
-Or from the Julia REPL:
+Or from the Julia REPL package mode:
 ```julia
-] add ArbitraryPolynomialChaosExpansion
+] add https://github.com/NilsWildt/ArbitraryPolynomialChaosExpansion.jl
 ```
 
 ## Quick Start
