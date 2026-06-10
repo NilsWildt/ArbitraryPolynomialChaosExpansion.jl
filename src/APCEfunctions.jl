@@ -277,16 +277,17 @@ function aPCE_MultivariatePolynomialDegrees(
     end
 
     function filter_by_percentage(array::AbstractArray, percentage)
-        try
-            if percentage < 0.0 || percentage > 1.0
-                @warn "Percentage must be between 0 and 1"
-            end
-            n = length(array)
-            num_to_keep = round(Int, percentage * n)
-            return @views array[1:num_to_keep]
-        catch
+        # Validate up front instead of catching the BoundsError/InexactError a
+        # bad percentage would have triggered. An out-of-range (or NaN)
+        # percentage keeps the whole array, matching the previous catch branch;
+        # the warning fires for out-of-range but not NaN, as before.
+        if !(0.0 <= percentage <= 1.0)
+            isnan(percentage) || @warn "Percentage must be between 0 and 1"
             return array[:]
         end
+        n = length(array)
+        num_to_keep = round(Int, percentage * n)
+        return @views array[1:num_to_keep]
     end
 
     range_ = 0:max_degree
@@ -337,11 +338,18 @@ end
 # ===== BASIS FUNCTIONS =====
 
 function solve_linear_robust(A, b; kwargs...)
-    try
-        return A \ b
-    catch
-        return unwrap(_solve_levenberg_marquardt_solver(A, b; kwargs...))
+    # Condition-based replacement for `try A \ b catch ... end`: select the
+    # solve path explicitly instead of catching a thrown SingularException, so
+    # the function stays differentiable / kernel-safe. Falls back to the
+    # Levenberg-Marquardt solver in exactly the cases the direct solve fails.
+    if size(A, 1) == size(A, 2)
+        F = LinearAlgebra.lu(A; check = false)        # square: LU like `A \ b`
+        LinearAlgebra.issuccess(F) && return F \ b
+    else
+        x = A \ b                                     # tall/wide: QR least squares
+        all(isfinite, x) && return x
     end
+    return unwrap(_solve_levenberg_marquardt_solver(A, b; kwargs...))
 end
 
 

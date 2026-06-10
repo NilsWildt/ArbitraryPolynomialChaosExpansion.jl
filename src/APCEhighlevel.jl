@@ -226,42 +226,51 @@ function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion = :true, reg_orde
     # Compute the polynomial matrix
     Psi = aPCE_PsiPolynomialMatrix(aPCE, TrainingInput)' |> Matrix{T}
 
-    # More robust pseudoinverse calculation
-    try
-        # Try the standard pinv with the specified tolerance
-        Psi_inv = LinearAlgebra.pinv(Psi, rtol = sqrt(eps(real(float(oneunit(eltype(Psi)))))))
-        # Replaced @tensor with explicit matrix multiplication for Mooncake AD compatibility
-        aPCE.ExpansionCoefficients .= Psi_inv * y_rhs
-    catch e
-        @warn "Standard pinv failed, trying alternative approach" exception = e
-
-        # Try direct solving with Tikhonov regularization
+    # Primary solve: Moore-Penrose pseudoinverse. `pinv` is SVD-based and does
+    # not throw for finite input, so we test the result for finiteness instead
+    # of catching an exception (keeps this path kernel/AD-safe). Only if the
+    # result is non-finite do we drop into the per-output robust ladder
+    # (Tikhonov normal equations -> SVD-thresholded pinv -> QR), each step
+    # guarded by an explicit success/finiteness check rather than try/catch.
+    Psi_inv = LinearAlgebra.pinv(Psi, rtol = sqrt(eps(real(float(oneunit(eltype(Psi)))))))
+    # Replaced @tensor with explicit matrix multiplication for Mooncake AD compatibility
+    coeffs = Psi_inv * y_rhs
+    if all(isfinite, coeffs)
+        aPCE.ExpansionCoefficients .= coeffs
+    else
+        @warn "Standard pinv produced non-finite coefficients, using robust per-output fallback"
         λ = 1.0e-6  # Regularization parameter
         num_terms = size(aPCE.ExpansionCoefficients, 1)
 
-        # Solve directly (Psi'*Psi + λ*I)*c = Psi'*y for each output dimension
         for k in axes(y_rhs, 2)
-            try
-                aPCE.ExpansionCoefficients[:, k] = (Psi' * Psi + λ * LinearAlgebra.I(num_terms)) \ (Psi' * y_rhs[:, k])
-            catch e2
-                @warn "Tikhonov regularization failed for output $k, trying SVD approach" exception = e2
-                # Use SVD with more careful handling
-                try
-                    U, S, V = LinearAlgebra.svd(Psi)
-                    # Threshold small singular values
-                    tol = maximum(size(Psi)) * maximum(S) * eps(T)
-                    S_inv = map(s -> s > tol ? 1 / s : zero(T), S)
-
-                    # Compute pseudoinverse via SVD
-                    Psi_inv_svd = V * Diagonal(S_inv) * U'
-                    aPCE.ExpansionCoefficients[:, k] = Psi_inv_svd * y_rhs[:, k]
-                catch e3
-                    @error "All numerical approaches failed for output $k" exception = e3
-                    # Last resort - try QR factorization for this output
-                    F = LinearAlgebra.qr(Psi)
-                    aPCE.ExpansionCoefficients[:, k] = F \ y_rhs[:, k]
+            # Tikhonov: (Psi'Psi + λI) c = Psi'y. The system matrix is symmetric
+            # positive definite by construction, so factor with Cholesky and
+            # check `issuccess` instead of catching a failure.
+            G = LinearAlgebra.Symmetric(Psi' * Psi + λ * LinearAlgebra.I(num_terms))
+            cF = LinearAlgebra.cholesky(G; check = false)
+            if LinearAlgebra.issuccess(cF)
+                tikhonov = cF \ (Psi' * y_rhs[:, k])
+                if all(isfinite, tikhonov)
+                    aPCE.ExpansionCoefficients[:, k] = tikhonov
+                    continue
                 end
             end
+
+            @warn "Tikhonov regularization failed for output $k, trying SVD approach"
+            # SVD-thresholded pseudoinverse (small singular values dropped).
+            U, S, V = LinearAlgebra.svd(Psi)
+            tol = maximum(size(Psi)) * maximum(S) * eps(T)
+            S_inv = map(s -> s > tol ? 1 / s : zero(T), S)
+            svd_sol = (V * Diagonal(S_inv) * U') * y_rhs[:, k]
+            if all(isfinite, svd_sol)
+                aPCE.ExpansionCoefficients[:, k] = svd_sol
+                continue
+            end
+
+            @error "All numerical approaches failed for output $k, falling back to QR"
+            # Last resort - QR factorization for this output.
+            F = LinearAlgebra.qr(Psi)
+            aPCE.ExpansionCoefficients[:, k] = F \ y_rhs[:, k]
         end
     end
 
@@ -278,8 +287,16 @@ function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion = :true, reg_orde
 
         for i in axes(y_rhs, 2)
             # @info "Bayesian regularization for axis $i"
-            # Try the requested reg_order; fall back to lower orders if numerical issues arise
-            solved = false
+            # Try the requested reg_order; fall back to lower orders if numerical issues arise.
+            #
+            # This try/catch is deliberately retained (it is the one exception to
+            # the no-try/catch-in-compute rule): `invert` runs a third-party
+            # GCV/LBFGS optimization (RegularizationTools + Optim) that can throw
+            # deep inside on an ill-posed problem, and it exposes no success-flag
+            # API to branch on. Catching at this third-party boundary is what
+            # implements the order-fallback; on total failure we keep the pinv
+            # solution already in ExpansionCoefficients. No autodiff runs through
+            # this path (train! is a fitting routine, not a differentiated kernel).
             for order in reg_order:-1:0
                 try
                     aPCE.ExpansionCoefficients[:, i] .= invert(
@@ -287,7 +304,6 @@ function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion = :true, reg_orde
                         alg = :gcv_svd,
                         method = LBFGS(linesearch = LineSearches.BackTracking())
                     )
-                    solved = true
                     if order < reg_order
                         @warn "Regularization order $reg_order failed for output $i, succeeded with order $order"
                     end

@@ -24,11 +24,12 @@ const CPU_MODEL = get(
     end
 )
 
-# Use conditional loading directly
+# Use conditional loading directly. Use @debug, not @info, so importing the
+# package does not print to the console on every `using` (library etiquette).
 if Sys.isapple() && Sys.ARCH in (:aarch64, :arm64)
-    @info "Using `AppleAccelerate.jl` for Apple Silicon."
+    @debug "Using `AppleAccelerate.jl` for Apple Silicon."
 elseif Sys.ARCH == :x86_64 && occursin(r"intel"i, CPU_MODEL)
-    @info "Detected Intel x86_64 CPU. Loading `MKL.jl`."
+    @debug "Detected Intel x86_64 CPU. Loading `MKL.jl`."
     using MKL
 end
 
