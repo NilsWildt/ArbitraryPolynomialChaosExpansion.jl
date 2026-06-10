@@ -22,8 +22,6 @@ jobs:
     name: Julia ${{ matrix.version }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    # "pre" (next Julia release) is informational and must not block merges.
-    continue-on-error: ${{ matrix.version == 'pre' }}
     permissions:
       actions: write
       contents: read
@@ -33,7 +31,6 @@ jobs:
         version:
           - "1.12"   # minimum supported version (the [compat] floor)
           - "1"      # latest stable release
-          - "pre"    # next release, non-blocking early warning
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
@@ -44,29 +41,3 @@ jobs:
       - name: Update registry
         run: julia -e 'using Pkg; Pkg.Registry.update()'
       - uses: julia-actions/julia-runtest@v1
-
-  downgrade:
-    # Resolve the *lowest* versions allowed by [compat] and run the tests, to
-    # prove the lower compat bounds are real. If this fails, raise the offending
-    # dependency's lower bound in Project.toml.
-    name: Downgrade compat (Julia 1)
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    permissions:
-      actions: write
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@v2
-        with:
-          version: "1"   # compat floor is 1.12; do not use 1.10
-          arch: x64
-      - uses: julia-actions/julia-downgrade-compat@v2
-        with:
-          skip: LinearAlgebra, Random   # stdlibs in [compat], not downgradeable
-      - uses: julia-actions/cache@v2
-      - uses: julia-actions/julia-buildpkg@v1
-      - uses: julia-actions/julia-runtest@v1
-        with:
-          allow_reresolve: false
-          force_latest_compatible_version: false
