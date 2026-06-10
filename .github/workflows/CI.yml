@@ -63,6 +63,12 @@ jobs:
           arch: x64
       - uses: julia-actions/julia-downgrade-compat@v2
         with:
+          # Downgrade only the core dependencies, not weakdeps. The optional
+          # extensions (Mooncake, BLISBLAS) pin tighter AD-stack bounds (e.g.
+          # Mooncake needs a recent DispatchDoctor) that the core package does
+          # not require; leaving them to normal install-time resolution avoids
+          # over-constraining users who do not load those extensions.
+          mode: deps
           skip: LinearAlgebra, Random   # stdlibs in [compat], not downgradeable
       - uses: julia-actions/cache@v2
       - uses: julia-actions/julia-buildpkg@v1
