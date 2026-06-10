@@ -47,11 +47,6 @@ LocalPreferences.toml
 output/
 plots/
 
-# Git hook / commit temporary files
-changes.txt
-commit_message.txt
-.gitnexus
-
 # Claude Code / OMC tooling
 .agent/
 .claude/
@@ -62,3 +57,12 @@ AGENTS.md
 # Resilio Sync artifacts
 *.rsls
 .rslsc
+
+# Scratch / non-package material (kept out of the published package).
+# NOTE: examples/ is intentionally NOT ignored -- it holds README-referenced
+# usage examples (basic_example.jl, ishigami_example.jl, ...). Untracked
+# experiment scripts that happen to live in examples/ simply stay untracked.
+notebooks/
+papers/
+scratch/
+*.ipynb

@@ -149,7 +149,6 @@ println("  Empirical Variance: $(round(emp_var, digits = 4))")
 # -----------------------------------------------------------------------------
 
 
-
 println("\nMean prediction error: $(round(100 * mean_error / abs(analytical_mean), digits = 2))%")
 println("Variance prediction error: $(round(100 * var_error / analytical_var, digits = 2))%")
 

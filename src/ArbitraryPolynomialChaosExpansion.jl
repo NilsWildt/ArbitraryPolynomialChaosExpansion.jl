@@ -9,7 +9,6 @@ using LinearAlgebra: svd, norm, pinv, Diagonal, tr
 using TypeUtils: as
 using ChainRulesCore
 using ErrorTypes
-using ImplicitDifferentiation
 
 # Mooncake support via weak extension (MooncakeExt)
 # On Julia 1.12+, Mooncake is not compatible due to compiler API changes
@@ -25,11 +24,12 @@ const CPU_MODEL = get(
     end
 )
 
-# Use conditional loading directly
+# Use conditional loading directly. Use @debug, not @info, so importing the
+# package does not print to the console on every `using` (library etiquette).
 if Sys.isapple() && Sys.ARCH in (:aarch64, :arm64)
-    @info "Using `AppleAccelerate.jl` for Apple Silicon."
+    @debug "Using `AppleAccelerate.jl` for Apple Silicon."
 elseif Sys.ARCH == :x86_64 && occursin(r"intel"i, CPU_MODEL)
-    @info "Detected Intel x86_64 CPU. Loading `MKL.jl`."
+    @debug "Detected Intel x86_64 CPU. Loading `MKL.jl`."
     using MKL
 end
 
@@ -43,28 +43,18 @@ using CPUSummary: CPUSummary
 using ChainRules: ChainRules
 using ChainRulesCore: ChainRulesCore
 using Combinatorics: Combinatorics, factorial
-using ComponentArrays: ComponentArrays
-using Estrin
 using DispatchDoctor: @stable
 using Einsum: Einsum, @einsum
 using Estrin: Estrin
-using FastBroadcast: @..
 using ForwardDiff: ForwardDiff, Dual
-using Krylov: Krylov
-using LazyGrids: LazyGrids
 using LineSearches: LineSearches
 using OnlineStats: OnlineStats, Extrema, Mean, Series, Variance, eachrow, value
-using Polyester: Polyester, @batch
 using PolynomialRoots: PolynomialRoots
-using Polynomials: Polynomials, degree
 using PrecompileTools: @setup_workload, @compile_workload
 using Random: Random, Xoshiro, shuffle
 using RegularizationTools: RegularizationTools
 using ReverseDiff: ReverseDiff
 using StatsBase: StatsBase, fit!, mean, sum
-using Bumper
-using TensorOperations: TensorOperations, @tensoropt, @tensor
-using UnrolledUtilities: UnrolledUtilities
 using Zygote: Zygote, bufferfrom
 using Suppressor: @suppress
 using KernelAbstractions

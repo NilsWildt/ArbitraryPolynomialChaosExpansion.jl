@@ -1,26 +1,22 @@
 using Pkg: Pkg
-using Chairmarks
-using ForwardDiff
-using MethodAnalysis
-using Preferences
-using Random
-using Test
-using Aqua
-using Supposition
-using Revise
-using Suppressor
-using BenchmarkTools
+using Preferences: set_preferences!
 using TestItemRunner
-using ErrorTypes
-using ComponentArrays
-using Statistics
-using LinearAlgebra
+
+# NOTE: the AD-backend packages below are loaded at top level on purpose, not
+# as dead imports. TestItemRunner runs @testitem blocks in this process, and the
+# Mooncake AD tests use `AutoMooncake()` / `AutoForwardDiff()` via
+# DifferentiationInterface without importing the backend package themselves.
+# DifferentiationInterface only activates a backend once its package is loaded in
+# the process (via a package extension), so loading them here is what makes
+# `check_available(AutoMooncake())` true inside those testitems. Removing them
+# breaks the AD tests.
+using ForwardDiff
 using FiniteDifferences
 using Mooncake
+
 using ArbitraryPolynomialChaosExpansion
-const APCE = ArbitraryPolynomialChaosExpansion
 
 set_preferences!(ArbitraryPolynomialChaosExpansion, "precompile_workload" => true; force = true)
 
-# Run all @testitem tests from the package
+# Discover and run all @testitem tests in the package (src/ and test/).
 TestItemRunner.@run_package_tests

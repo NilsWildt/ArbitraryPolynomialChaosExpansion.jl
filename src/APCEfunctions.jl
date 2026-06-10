@@ -167,9 +167,14 @@ Returns a vector of evaluated values.
     ) where {T <: Real, S <: Real}
     R = promote_type(T, S)
     results = Vector{R}(undef, length(x))
+    # Hoist the coefficient reversal out of the per-point loop: previously
+    # `reverse(coeffs)` allocated a fresh reversed vector for every element of
+    # `x` (O(length(x)) temporaries). Reversing once is allocation-equivalent to
+    # a single temporary and leaves the numerical result unchanged.
+    rcoeffs = reverse(coeffs)
     @inbounds for (i, xi) in enumerate(x)
         result = zero(R)
-        @simd for coeff in reverse(coeffs)
+        @simd for coeff in rcoeffs
             result = muladd(result, xi, coeff)
         end
         results[i] = result
@@ -277,16 +282,17 @@ function aPCE_MultivariatePolynomialDegrees(
     end
 
     function filter_by_percentage(array::AbstractArray, percentage)
-        try
-            if percentage < 0.0 || percentage > 1.0
-                @warn "Percentage must be between 0 and 1"
-            end
-            n = length(array)
-            num_to_keep = round(Int, percentage * n)
-            return @views array[1:num_to_keep]
-        catch
+        # Validate up front instead of catching the BoundsError/InexactError a
+        # bad percentage would have triggered. An out-of-range (or NaN)
+        # percentage keeps the whole array, matching the previous catch branch;
+        # the warning fires for out-of-range but not NaN, as before.
+        if !(0.0 <= percentage <= 1.0)
+            isnan(percentage) || @warn "Percentage must be between 0 and 1"
             return array[:]
         end
+        n = length(array)
+        num_to_keep = round(Int, percentage * n)
+        return @views array[1:num_to_keep]
     end
 
     range_ = 0:max_degree
@@ -337,11 +343,18 @@ end
 # ===== BASIS FUNCTIONS =====
 
 function solve_linear_robust(A, b; kwargs...)
-    try
-        return A \ b
-    catch
-        return unwrap(_solve_levenberg_marquardt_solver(A, b; kwargs...))
+    # Condition-based replacement for `try A \ b catch ... end`: select the
+    # solve path explicitly instead of catching a thrown SingularException, so
+    # the function stays differentiable / kernel-safe. Falls back to the
+    # Levenberg-Marquardt solver in exactly the cases the direct solve fails.
+    if size(A, 1) == size(A, 2)
+        F = LinearAlgebra.lu(A; check = false)        # square: LU like `A \ b`
+        LinearAlgebra.issuccess(F) && return F \ b
+    else
+        x = A \ b                                     # tall/wide: QR least squares
+        all(isfinite, x) && return x
     end
+    return unwrap(_solve_levenberg_marquardt_solver(A, b; kwargs...))
 end
 
 
@@ -1388,6 +1401,14 @@ function aPCE_PsiPolynomialMatrix_zygote(
     z = (TrainingInput .- μ_row) ./ σ_row
     return aPCE_PsiPolynomialMatrix_zygote(z, MultivariatePolynomialDegrees, cb.basis)
 end
+
+# The public API exports `PsiPolynomialMatrix_zygote` (see the module's `export`
+# list), but the implementation above is named `aPCE_PsiPolynomialMatrix_zygote`.
+# Without this alias the exported name is unbound, so any downstream `using` +
+# call raises UndefVarError and Aqua's undefined_exports check fails. Aliasing
+# (rather than renaming) keeps the public surface byte-for-byte identical while
+# making the documented public name actually callable.
+const PsiPolynomialMatrix_zygote = aPCE_PsiPolynomialMatrix_zygote
 
 """
     aPCE_PsiPolynomialMatrix(TrainingInput, MultivariatePolynomialDegrees, OrthonormalBasis)
