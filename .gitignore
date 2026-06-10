@@ -62,3 +62,9 @@ AGENTS.md
 # Resilio Sync artifacts
 *.rsls
 .rslsc
+
+# Scratch / non-package material (kept out of the published package)
+notebooks/
+examples/
+papers/
+*.ipynb
