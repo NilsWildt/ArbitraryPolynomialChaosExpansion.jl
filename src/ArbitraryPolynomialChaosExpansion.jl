@@ -9,7 +9,6 @@ using LinearAlgebra: svd, norm, pinv, Diagonal, tr
 using TypeUtils: as
 using ChainRulesCore
 using ErrorTypes
-using ImplicitDifferentiation
 
 # Mooncake support via weak extension (MooncakeExt)
 # On Julia 1.12+, Mooncake is not compatible due to compiler API changes
@@ -43,28 +42,18 @@ using CPUSummary: CPUSummary
 using ChainRules: ChainRules
 using ChainRulesCore: ChainRulesCore
 using Combinatorics: Combinatorics, factorial
-using ComponentArrays: ComponentArrays
-using Estrin
 using DispatchDoctor: @stable
 using Einsum: Einsum, @einsum
 using Estrin: Estrin
-using FastBroadcast: @..
 using ForwardDiff: ForwardDiff, Dual
-using Krylov: Krylov
-using LazyGrids: LazyGrids
 using LineSearches: LineSearches
 using OnlineStats: OnlineStats, Extrema, Mean, Series, Variance, eachrow, value
-using Polyester: Polyester, @batch
 using PolynomialRoots: PolynomialRoots
-using Polynomials: Polynomials, degree
 using PrecompileTools: @setup_workload, @compile_workload
 using Random: Random, Xoshiro, shuffle
 using RegularizationTools: RegularizationTools
 using ReverseDiff: ReverseDiff
 using StatsBase: StatsBase, fit!, mean, sum
-using Bumper
-using TensorOperations: TensorOperations, @tensoropt, @tensor
-using UnrolledUtilities: UnrolledUtilities
 using Zygote: Zygote, bufferfrom
 using Suppressor: @suppress
 using KernelAbstractions

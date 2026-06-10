@@ -3,16 +3,15 @@
 # `using Aqua` was present in the old runtests.jl but `Aqua.test_all` was never
 # actually called. This testitem wires it in.
 #
-# deps_compat and stale_deps are disabled here and tightened in Stage 3 (they
-# require the [compat] bounds and dependency pruning done in that stage). The
-# remaining checks -- undefined exports, method ambiguities, type piracy,
-# project-extras consistency, unbound type parameters -- pass as of Stage 2.
+# All checks are enabled. MKL is excluded from the stale-deps check because it
+# is loaded conditionally (`using MKL` only on Intel x86_64); on other platforms
+# it is never loaded, so Aqua would report it as stale even though it is a
+# legitimate platform-specific BLAS backend.
 
 @testitem "Aqua_quality" begin
     using Aqua
     Aqua.test_all(
         ArbitraryPolynomialChaosExpansion;
-        deps_compat = false,   # Stage 3: add [compat] bounds, then enable
-        stale_deps = false,    # Stage 3: prune unused deps, then enable
+        stale_deps = (ignore = [:MKL],),
     )
 end
