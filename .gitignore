@@ -47,10 +47,9 @@ LocalPreferences.toml
 output/
 plots/
 
-# Git hook / commit temporary files
+# Commit temporary files
 changes.txt
 commit_message.txt
-.gitnexus
 
 # Claude Code / OMC tooling
 .agent/
