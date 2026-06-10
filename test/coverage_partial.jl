@@ -35,8 +35,10 @@ end
     B = aPCE_OrthonormalBasis(data, deg)
     @test size(B) == (deg + 1, deg + 1)
     # P[i, k+1] = value of basis polynomial k at data point i.
-    P = [sum(B[k + 1, j] * data[i]^(j - 1) for j in 1:(deg + 1))
-        for i in eachindex(data), k in 0:deg]
+    P = [
+        sum(B[k + 1, j] * data[i]^(j - 1) for j in 1:(deg + 1))
+            for i in eachindex(data), k in 0:deg
+    ]
     gram = (P' * P) ./ length(data)
     @test isapprox(gram, I(deg + 1); atol = 1.0e-8)
 

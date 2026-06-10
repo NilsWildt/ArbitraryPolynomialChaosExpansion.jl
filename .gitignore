@@ -63,8 +63,11 @@ AGENTS.md
 *.rsls
 .rslsc
 
-# Scratch / non-package material (kept out of the published package)
+# Scratch / non-package material (kept out of the published package).
+# NOTE: examples/ is intentionally NOT ignored -- it holds README-referenced
+# usage examples (basic_example.jl, ishigami_example.jl, ...). Untracked
+# experiment scripts that happen to live in examples/ simply stay untracked.
 notebooks/
-examples/
 papers/
+scratch/
 *.ipynb

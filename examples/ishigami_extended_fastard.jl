@@ -42,7 +42,7 @@ analytical_mean = a_ishi / 2
 analytical_var = a_ishi^2 / 8 + b_ishi * π^4 / 5 + b_ishi^2 * π^8 / 18 + 1 / 2
 
 println("Extended Ishigami Benchmark (a=$a_ishi, b=$b_ishi)")
-println("=" ^ 50)
+println("="^50)
 @printf("  Analytical Mean:     %10.4f\n", analytical_mean)
 @printf("  Analytical Variance: %10.4f\n", analytical_var)
 
@@ -130,13 +130,13 @@ n_active = length(active_idx)
 # 5. Print comparison table
 # -----------------------------------------------------------------------------
 
-println("\n" * "=" ^ 70)
+println("\n" * "="^70)
 println("  Method          | R² (train) | R² (val)  | Active / Total terms")
-println("-" ^ 70)
+println("-"^70)
 @printf("  Standard        | %10.4f | %9.4f | %d / %d\n", r2_std_train, r2_std_val, n_terms, n_terms)
 @printf("  Regularized     | %10.4f | %9.4f | %d / %d\n", r2_reg_train, r2_reg_val, n_terms, n_terms)
 @printf("  FastARD         | %10.4f | %9.4f | %d / %d\n", r2_ard_train, r2_ard_val, n_active, n_terms)
-println("=" ^ 70)
+println("="^70)
 
 # -----------------------------------------------------------------------------
 # 6. Plot: Three-panel prediction-vs-data comparison

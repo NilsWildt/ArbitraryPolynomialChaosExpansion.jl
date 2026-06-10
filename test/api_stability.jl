@@ -10,33 +10,37 @@
 # NOT part of the top-level public API.
 
 @testitem "public_API_surface_lock" begin
-    expected = Set([
-        :CenteredBasis,
-        :GaussianCollocation,
-        :PsiPolynomialMatrix_zygote,
-        :UQ,
-        :aPCE,
-        :aPCE_FullBasis,
-        :aPCE_MultivariatePolynomialDegrees,
-        :aPCE_OrthonormalBasis,
-        :aPCE_PsiPolynomialMatrix,
-        :compose_Ψ,
-        :compute_moments!,
-        :create_basis,
-        :create_centered_basis,
-        :evaluate_Ψ,
-        :normalization_functions,
-        :partitionTrainTest,
-        :predict,
-        :predict_from_coeffs,
-        :reverse_columns!,
-        :special_sort_two_arrays!,
-        :train!,
-    ])
-    actual = Set(setdiff(
-        names(ArbitraryPolynomialChaosExpansion),
-        [:ArbitraryPolynomialChaosExpansion],
-    ))
+    expected = Set(
+        [
+            :CenteredBasis,
+            :GaussianCollocation,
+            :PsiPolynomialMatrix_zygote,
+            :UQ,
+            :aPCE,
+            :aPCE_FullBasis,
+            :aPCE_MultivariatePolynomialDegrees,
+            :aPCE_OrthonormalBasis,
+            :aPCE_PsiPolynomialMatrix,
+            :compose_Ψ,
+            :compute_moments!,
+            :create_basis,
+            :create_centered_basis,
+            :evaluate_Ψ,
+            :normalization_functions,
+            :partitionTrainTest,
+            :predict,
+            :predict_from_coeffs,
+            :reverse_columns!,
+            :special_sort_two_arrays!,
+            :train!,
+        ]
+    )
+    actual = Set(
+        setdiff(
+            names(ArbitraryPolynomialChaosExpansion),
+            [:ArbitraryPolynomialChaosExpansion],
+        )
+    )
 
     removed = setdiff(expected, actual)   # would break downstream `using` code
     added = setdiff(actual, expected)     # unintended new public surface

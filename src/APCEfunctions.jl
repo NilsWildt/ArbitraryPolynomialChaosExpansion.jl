@@ -167,9 +167,14 @@ Returns a vector of evaluated values.
     ) where {T <: Real, S <: Real}
     R = promote_type(T, S)
     results = Vector{R}(undef, length(x))
+    # Hoist the coefficient reversal out of the per-point loop: previously
+    # `reverse(coeffs)` allocated a fresh reversed vector for every element of
+    # `x` (O(length(x)) temporaries). Reversing once is allocation-equivalent to
+    # a single temporary and leaves the numerical result unchanged.
+    rcoeffs = reverse(coeffs)
     @inbounds for (i, xi) in enumerate(x)
         result = zero(R)
-        @simd for coeff in reverse(coeffs)
+        @simd for coeff in rcoeffs
             result = muladd(result, xi, coeff)
         end
         results[i] = result
