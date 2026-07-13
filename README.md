@@ -178,10 +178,14 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## References
 
-- Polynomial Chaos theory and applications in uncertainty quantification
-- Arbitrary Polynomial Chaos methodology for data-driven bases
-- Bayesian regularization for inverse problems
+ N. Wildt, D. M. Tartakovsky, S. Oladyshkin, and W. Nowak, "Code: A Global Approach to ODE Dynamics Learning," J. Mach. Learn. Model. Comput., vol. 7, no. 2, pp. 73–105, 2026. DOI: 10.1615/JMachLearnModelComput.2026062518
+Arbitrary Polynomial Chaos & Uncertainty Quantification
 
-## Acknowledgments
+ S. Oladyshkin and W. Nowak, "Data-Driven Uncertainty Quantification Using the Arbitrary Polynomial Chaos Expansion," Reliab. Eng. Syst. Safety, vol. 106, pp. 179–190, 2012.
+ D. Xiu and G. E. Karniadakis, "The Wiener–Askey Polynomial Chaos for Stochastic Differential Equations," SIAM J. Sci. Comput., vol. 24, no. 2, pp. 619–644, 2002.
+ 
+ H. Sharma, L. Novak, and M. Shields, "Physics-Constrained Polynomial Chaos Expansion for Scientific Machine Learning and Uncertainty Quantification," Comput. Methods Appl. Mech. Eng., vol. 431, p. 117314, 2024.
+ 
+ Y. Li, M. Anitescu, O. Roderick, and F. Hickernell, "Orthogonal Bases for Polynomial Regression with Derivative Information in Uncertainty Quantification," Int. J. Uncertainty Quantif., vol. 1, no. 4, pp. 297–320, 2011.
+ T. J. Sullivan, Introduction to Uncertainty Quantification. Berlin: Springer, 2015.
 
-This package builds upon research in uncertainty quantification and polynomial chaos methods.
