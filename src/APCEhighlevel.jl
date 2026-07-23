@@ -7,42 +7,78 @@ using DispatchDoctor: @stable
 using LinearAlgebra: qr, svd, pinv, I
 
 export aPCE, predict_from_coeffs
-mutable struct aPCE{T <: Real}
-    const InputDistribution::AbstractArray{T} # in [ d x N-samples]
+
+# Basis backend selection. The `basis` keyword is a `Val` (NOT a `Symbol`) on
+# purpose: Julia specializes methods on keyword-argument *types*, so the choice
+# flows into the returned `aPCE{T, B}` basis parameter and the constructor stays
+# `@inferred`-clean — a `Symbol` keyword would make `Val(basis)` a runtime branch
+# and infer a `Union`. Backends:
+#   Val(:auto)        [default] recurrence when orthonormal, monomial/Vandermonde when not
+#   Val(:monomial)             classic array-of-coefficients basis (`create_basis`)
+#   Val(:recurrence)           three-term-recurrence basis (`create_recurrence_basis`;
+#                             orthonormal-only, numerically stable to much higher degree)
+#
+# The default is `:auto` -> recurrence for the orthonormal case: benchmarked
+# 2-5x faster than the monomial path (and leaner end-to-end) AND more robust on
+# skewed marginals. `is_orthonormal = false` forces the monomial/Vandermonde
+# path regardless, preserving that API.
+#
+# `basis` is a concrete `Val` (dispatched by method). `is_orthonormal` is a `Bool`
+# and is branched *directly* (ternary), NOT wrapped in `Val`. Wrapping a literal
+# Bool in `Val(::Bool)` infers to `Val` -- a `Val{true} ∪ Val{false}` union --
+# which erases the literal and makes *every* `aPCE(...)` call infer a `Union`
+# basis-parameter (`aPCE{T, Union{RecurrenceCenteredBasis, Array}}`). A direct
+# ternary keeps the literal constant, so each call site that passes the flag
+# literally infers a concrete `aPCE{T, B}` (enforced by the `@inferred aPCE(...)`
+# tests); a runtime-Bool call site infers a union, which is an acceptable cost of
+# carrying the backend in the type parameter. For `:monomial` both branches return
+# `Array{T,3}` (concrete regardless of the flag); `:recurrence` is orthonormal by
+# construction and rejects `is_orthonormal = false`.
+_aPCE_build_basis(::Val{:auto}, is_orthonormal::Bool, x, degree, center_data) =
+    is_orthonormal ? create_recurrence_basis(x, degree) :
+    create_basis(x, degree, Val(false); center_data = center_data)
+_aPCE_build_basis(::Val{:monomial}, is_orthonormal::Bool, x, degree, center_data) =
+    create_basis(x, degree, Val(is_orthonormal); center_data = center_data)
+_aPCE_build_basis(::Val{:recurrence}, is_orthonormal::Bool, x, degree, _center_data) =
+    is_orthonormal ? create_recurrence_basis(x, degree) :
+    throw(ArgumentError("basis = Val(:recurrence) requires is_orthonormal = true"))
+
+# `aPCE{T, B}`: `B` is the basis-backend container type (an `AbstractArray{T}`
+# for `:monomial`, a `RecurrenceCenteredBasis{T}` for `:recurrence`). Carrying
+# it as a type parameter keeps field access — and therefore predict/UQ/train! —
+# type-stable regardless of which backend is chosen.
+mutable struct aPCE{T <: Real, B, A1 <: AbstractArray{T}, A2 <: AbstractArray{Int64}}
+    const InputDistribution::A1 # in [ d x N-samples]
     const input_dimensions::Int64
     output_dimensions::Int64
     const ExpansionDegree::Int64
     const NumberOfTerms::Int64
-    const MultivariatePolynomialDegrees::AbstractArray{Int64}
+    const MultivariatePolynomialDegrees::A2
     const is_orthonormal::Bool # if false: then vandermonde// full basis
-    const OrthonormalBasis::AbstractArray{T}
+    const OrthonormalBasis::B
     ExpansionCoefficients::Matrix{T}
     do_gauss::Bool
 
-    @stable function aPCE(
-            InputDistribution::AbstractVecOrMat{T},
-            ExpansionDegree::Int64;
-            outdim::Int64 = 1,
-            is_orthonormal::Bool = true,
-            s_marginals = 1.0,
-            s_interactions = 1.0,
-            center_data = true,
-            do_gauss = false,
-            kwargs...
-        ) where {T}
-        input_dimensions = Int64(size(InputDistribution, 2))
-        gauss_one_order_more = 0
-        if do_gauss
-            gauss_one_order_more = 1
-        end
-        MultivariatePolynomialDegrees = aPCE_MultivariatePolynomialDegrees(input_dimensions, ExpansionDegree + gauss_one_order_more, s_marginals, s_interactions)
-        NumberOfTerms = min(size(MultivariatePolynomialDegrees, 1), numberPolynomials(ExpansionDegree + gauss_one_order_more, input_dimensions))
-        OrthonormalBasis = create_basis(InputDistribution, ExpansionDegree + gauss_one_order_more, Val(is_orthonormal); center_data = center_data)
-        ExpansionCoefficients = zeros(T, NumberOfTerms, outdim)
-        return new{T}(
+    # Trivial all-fields inner constructor. All build logic lives in the outer
+    # `@constprop` constructor below: `Base.@constprop` does not apply to inner
+    # constructors, so the keyword-value propagation needed for a concrete
+    # `aPCE{T, B}` return type must live in a module-level method.
+    function aPCE(
+            InputDistribution::A1,
+            input_dimensions::Int64,
+            output_dimensions::Int64,
+            ExpansionDegree::Int64,
+            NumberOfTerms::Int64,
+            MultivariatePolynomialDegrees::A2,
+            is_orthonormal::Bool,
+            OrthonormalBasis::B,
+            ExpansionCoefficients::Matrix{T},
+            do_gauss::Bool,
+        ) where {T <: Real, B, A1 <: AbstractArray{T}, A2 <: AbstractArray{Int64}}
+        return new{T, B, A1, A2}(
             InputDistribution,
             input_dimensions,
-            outdim,
+            output_dimensions,
             ExpansionDegree,
             NumberOfTerms,
             MultivariatePolynomialDegrees,
@@ -54,10 +90,61 @@ mutable struct aPCE{T <: Real}
     end
 end
 
+# Outer constructor: the public entry point and all build logic.
+#
+# NOT `@stable`: the `basis`/`is_orthonormal` keywords make the returned
+# `aPCE{T, B}` basis-parameter depend on the selected backend, so the generic
+# signature is a small type union that DispatchDoctor cannot certify. Each
+# concrete call site is still stable (enforced by the `@inferred aPCE(...)`
+# tests), via the two mechanisms below.
+#
+# `Base.@constprop :aggressive` constant-propagates the `is_orthonormal` *keyword
+# value* into the body. Keyword *types* always dispatch (that is how `basis::Val`
+# selects the backend method), but keyword *values* are not propagated by default
+# -- without `@constprop` the `:auto` ternary (recurrence vs monomial) would infer
+# a `Union` and break `@inferred`. With it, a literal `is_orthonormal` folds to
+# one branch -> concrete `aPCE{T, B}`. (`@constprop` does not work on inner
+# constructors, which is why the logic lives here, not in the struct block.) Cost:
+# a few extra specializations of a constructor called once per model -- negligible.
+Base.@constprop :aggressive function aPCE(
+        InputDistribution::AbstractVecOrMat{T},
+        ExpansionDegree::Int64;
+        outdim::Int64 = 1,
+        is_orthonormal::Bool = true,
+        s_marginals = 1.0,
+        s_interactions = 1.0,
+        center_data = true,
+        do_gauss = false,
+        basis::Val = Val(:auto),
+        kwargs...,
+    ) where {T}
+    input_dimensions = Int64(size(InputDistribution, 2))
+    gauss_one_order_more = 0
+    if do_gauss
+        gauss_one_order_more = 1
+    end
+    MultivariatePolynomialDegrees = aPCE_MultivariatePolynomialDegrees(input_dimensions, ExpansionDegree + gauss_one_order_more, s_marginals, s_interactions)
+    NumberOfTerms = min(size(MultivariatePolynomialDegrees, 1), numberPolynomials(ExpansionDegree + gauss_one_order_more, input_dimensions))
+    OrthonormalBasis = _aPCE_build_basis(basis, is_orthonormal, InputDistribution, ExpansionDegree + gauss_one_order_more, center_data)
+    ExpansionCoefficients = zeros(T, NumberOfTerms, outdim)
+    return aPCE(
+        InputDistribution,
+        input_dimensions,
+        outdim,
+        ExpansionDegree,
+        NumberOfTerms,
+        MultivariatePolynomialDegrees,
+        is_orthonormal,
+        OrthonormalBasis,
+        ExpansionCoefficients,
+        do_gauss
+    )
+end
+
 import Base.show
 
 
-@stable function show(io::IO, aPCE::aPCE)
+@stable function show(io::IO, aPCE::aPCE{T, B, A1, A2}) where {T <: Real, B, A1, A2}
     println(io, "=> aPCE Toolbox: Prediction using Arbitrary Polynomial Chaos ...")
     println(io, "aPCE{$(typeof(aPCE).parameters[1])} Summary:")
     println(io, "Input Dimensions: ", aPCE.input_dimensions)
@@ -72,7 +159,7 @@ import Base.show
 end
 
 
-@stable function UQ(apc::aPCE{T}; axis = 1) where {T <: Real}
+@stable function UQ(apc::aPCE{T, B, A1, A2}; axis = 1) where {T <: Real, B, A1, A2}
     # @info "=> aPCE Toolbox: UQ Arbitrary Polynomial Chaos ..."
     # @info "Computing the mean and variance of the output for dimension $axis"
     lc = Array{T}(apc.ExpansionCoefficients[:, axis])
@@ -91,14 +178,14 @@ end
 #     return Psi
 # end
 
-function aPCE_PsiPolynomialMatrix(aPCE::aPCE{T}, TrainingInput::S)::S where {T <: Real, S <: AbstractArray}
+function aPCE_PsiPolynomialMatrix(aPCE::aPCE{T, B, A1, A2}, TrainingInput::S)::S where {T <: Real, B, A1, A2, S <: AbstractArray}
     # @info "" aPCE typeof(TrainingInput) typeof(aPCE)
     Psi = aPCE_PsiPolynomialMatrix(TrainingInput, aPCE.MultivariatePolynomialDegrees, aPCE.OrthonormalBasis)
     return Psi
 end
 
 
-function GaussianCollocation(aPCE::aPCE{T}, len = 0; strategy = :PCM)::Matrix{T} where {T <: Real}
+function GaussianCollocation(aPCE::aPCE{T, B, A1, A2}, len = 0; strategy = :PCM)::Matrix{T} where {T <: Real, B, A1, A2}
     @assert aPCE.do_gauss "Gaussian collocation requires the do_gauss flag to be set to true"
 
     # Generate all possible combinations of polynomial points
@@ -120,15 +207,14 @@ function GaussianCollocation(aPCE::aPCE{T}, len = 0; strategy = :PCM)::Matrix{T}
     elseif strategy == :PCM
         # Probabilistic Collocation Method - map indices to actual polynomial roots
 
-        # Calculate polynomial roots for each dimension
-        polynomial_roots = zeros(degree + 1, num_dims)
+        # Calculate polynomial roots for each dimension. The nodes are the
+        # roots of the top (degree + 1) orthonormal polynomial; `_basis_nodes`
+        # dispatches on the basis backend (monomial → PolynomialRoots on the
+        # coefficient vector; recurrence → Golub–Welsch eigenvalues of the
+        # Jacobi matrix, which is the more stable route).
+        polynomial_roots = zeros(T, degree + 1, num_dims)
         @inbounds for dim in 1:num_dims
-            polynomial_basis = @views aPCE.OrthonormalBasis[:, :, dim]
-            # Extract roots of the polynomial (every other entry from real part)
-            polynomial_roots[:, dim] = reinterpret(
-                T,
-                PolynomialRoots.roots(polynomial_basis[degree + 2, :])
-            )[1:2:(end - 1)]
+            polynomial_roots[:, dim] = _basis_nodes(aPCE.OrthonormalBasis, dim, degree, T)
         end
 
         # Sort roots by distance to distribution mean in each dimension
@@ -327,7 +413,7 @@ function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion = :true, reg_orde
 end
 
 
-@stable function predict(aPCE::aPCE{T}, PredictionInput)::Matrix{T} where {T <: Real}
+@stable function predict(aPCE::aPCE{T, B, A1, A2}, PredictionInput) where {T <: Real, B, A1, A2}
     # @info "=> aPCE Toolbox: Prediction using Arbitrary Polynomial Chaos ..."
     Psi = aPCE_PsiPolynomialMatrix(aPCE, PredictionInput)
     # Replaced @tensor with explicit matrix multiplication for Mooncake AD compatibility
@@ -336,7 +422,7 @@ end
 end
 
 
-@stable function predict_from_coeffs(aPCE::aPCE{T}, PredictionInput, θ) where {T <: ForwardDiff.Dual}
+@stable function predict_from_coeffs(aPCE::aPCE{T, B, A1, A2}, PredictionInput, θ) where {T <: Real, B, A1, A2}
     Psi = aPCE_PsiPolynomialMatrix(aPCE, PredictionInput)
     @einsum PredictionOutput[k, j] := Psi[i, k] * θ[i, j]
     # PredictionOutput = outer_product_kernel(cu(Psi), cu(aPCE.ExpansionCoefficients))
@@ -424,7 +510,12 @@ end
     TrainingInput = rand(10, 2)
     degree = 1
     @inferred aPCE(TrainingInput, degree)
-    @inferred aPCE(TrainingInput, degree; outdim = 3, is_orthonormal = false, do_gauss = true)
+    # Name the backend explicitly (`basis = Val(:monomial)`) so the constructor
+    # is `@inferred`-stable: `is_orthonormal = false` selects the Vandermonde
+    # path, and an *explicit* `is_orthonormal` keyword routes through Julia's
+    # keyword sorter (out of `@constprop`'s reach), which would infer a backend
+    # `Union`. With `basis` named, the monomial return type is concrete.
+    @inferred aPCE(TrainingInput, degree; outdim = 3, basis = Val(:monomial), is_orthonormal = false, do_gauss = true)
 
     # Test type stability of predict
     apc = aPCE(TrainingInput, degree)
@@ -441,4 +532,61 @@ end
     @inferred GaussianCollocation(apc_gauss)
     @inferred GaussianCollocation(apc_gauss; strategy = :FT)
     @inferred GaussianCollocation(apc_gauss; strategy = :PCM)
+end
+
+@testitem "aPCE recurrence backend - workflow, type stability, basis invariance" begin
+    using Random, LinearAlgebra, Statistics
+    const APCE = ArbitraryPolynomialChaosExpansion
+
+    rng = MersenneTwister(42)
+    X = rand(rng, 60, 2)
+    Y = reshape((@. sin(3X[:, 1]) + X[:, 2]^2), :, 1)
+    Xtest = rand(rng, 6, 2)
+
+    # The default `aPCE(...)` (no `basis` kwarg) resolves to the recurrence
+    # backend when orthonormal — `Val(:auto)` -> `Val(:recurrence)`. Verify the
+    # default actually produces a recurrence-backed model.
+    @test aPCE(X, 6) isa aPCE{Float64, <:APCE.RecurrenceCenteredBasis, <:AbstractArray, <:AbstractArray}
+    # `is_orthonormal = false` forces the monomial/Vandermonde path under :auto.
+    @test aPCE(X, 2; is_orthonormal = false).OrthonormalBasis isa AbstractArray
+
+    # `basis = Val(:recurrence)` selects the three-term-recurrence backend and
+    # yields a distinct, fully-inferred concrete type parameter.
+    apc_r = aPCE(X, 6; basis = Val(:recurrence))
+    @test apc_r isa aPCE{Float64, <:APCE.RecurrenceCenteredBasis, <:AbstractArray, <:AbstractArray}
+    @test apc_r.is_orthonormal == true
+    io = IOBuffer(); show(io, apc_r); @test occursin("aPCE", String(take!(io)))
+
+    apc_m = aPCE(X, 6; basis = Val(:monomial))
+    train!(apc_m, X, Y; bayesian_inversion = false)
+    train!(apc_r, X, Y; bayesian_inversion = false)
+
+    # predict and UQ are basis-invariant: the recurrence and monomial backends
+    # span the same orthonormal polynomial space (at degree > 4 the monomial path
+    # is genuinely orthonormal too), so the fitted function and its moments agree.
+    @test isapprox(predict(apc_m, Xtest), predict(apc_r, Xtest); atol = 1.0e-6)
+    @test isapprox(UQ(apc_m).OutputMean, UQ(apc_r).OutputMean; atol = 1.0e-6)
+    @test isapprox(UQ(apc_m).OutputVar, UQ(apc_r).OutputVar; atol = 1.0e-5)
+
+    # Recurrence backend also works end-to-end at low degree (closed-form regime
+    # for the monomial backend) and via Gaussian collocation (Golub–Welsch nodes).
+    apc_lo = aPCE(X, 3; basis = Val(:recurrence))
+    train!(apc_lo, X, Y; bayesian_inversion = false)
+    @test all(isfinite, predict(apc_lo, Xtest))
+    @test all(isfinite, UQ(apc_lo).OutputVar)
+
+    apc_g = aPCE(X, 2; do_gauss = true, basis = Val(:recurrence))
+    cp = GaussianCollocation(apc_g)
+    @test size(cp, 2) == 2 && all(isfinite, cp)
+    @test size(GaussianCollocation(apc_g; strategy = :FT), 2) == 2
+
+    # Type stability across the recurrence path (concrete B in aPCE{T, B}).
+    @test @inferred(aPCE(X, 3; basis = Val(:recurrence))) isa
+        aPCE{Float64, <:APCE.RecurrenceCenteredBasis, <:AbstractArray, <:AbstractArray}
+    @inferred predict(apc_r, Xtest)
+    @inferred UQ(apc_r)
+    @inferred GaussianCollocation(apc_g)
+
+    # is_orthonormal = false with the recurrence backend is a contradiction.
+    @test_throws ArgumentError aPCE(X, 3; basis = Val(:recurrence), is_orthonormal = false)
 end

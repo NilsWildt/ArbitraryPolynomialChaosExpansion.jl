@@ -138,7 +138,7 @@ function ChainRulesCore.rrule(
         ::typeof(aPCE_PsiPolynomialMatrix_zygote),
         TrainingInput,
         MultivariatePolynomialDegrees,
-        OrthonormalBasis
+        OrthonormalBasis::AbstractArray
     )
     # Ensure input is matrix
     x = ensure_matrix(TrainingInput)
@@ -221,7 +221,7 @@ function ChainRulesCore.rrule(
         ::typeof(aPCE_PsiPolynomialMatrix),
         TrainingInput,
         MultivariatePolynomialDegrees,
-        OrthonormalBasis
+        OrthonormalBasis::AbstractArray
     )
     # Ensure input is matrix
     x = ensure_matrix(TrainingInput)
@@ -362,6 +362,22 @@ function ChainRulesCore.rrule(::typeof(create_centered_basis), x::AbstractArray{
         return (NoTangent(), NoTangent(), NoTangent())
     end
     return cb, create_centered_basis_pullback
+end
+
+"""
+    rrule(::typeof(create_recurrence_basis), x, degree)
+
+ChainRule for `create_recurrence_basis`. Same rationale as
+`create_centered_basis`: `x` is training data, not a trainable parameter, so
+basis construction is treated as AD-opaque (NoTangent) and gradients flow
+through the Psi-matrix evaluation instead.
+"""
+function ChainRulesCore.rrule(::typeof(create_recurrence_basis), x::AbstractArray{T}, degree::Integer) where {T}
+    rb = create_recurrence_basis(x, degree)
+    function create_recurrence_basis_pullback(_Δ)
+        return (NoTangent(), NoTangent(), NoTangent())
+    end
+    return rb, create_recurrence_basis_pullback
 end
 
 """
@@ -1012,6 +1028,37 @@ end
     @test all(isfinite, grad_A)
 end
 
+@testitem "RecurrenceCenteredBasis - Ψ evaluation is AD-safe (ForwardDiff & Mooncake vs FD)" begin
+    using DifferentiationInterface
+    using ADTypes: AutoMooncake, AutoForwardDiff
+    using FiniteDifferences
+    using ArbitraryPolynomialChaosExpansion
+    using Random
+    const APCE = ArbitraryPolynomialChaosExpansion
+
+    # Differentiate the forward three-term-recurrence Ψ-evaluation w.r.t. the
+    # evaluation points, basis held constant — the same mathematically
+    # well-defined path exercised for `CenteredBasis` above (basis is data).
+    rng = MersenneTwister(7)
+    x_ref = rand(rng, 50, 2) .* 3.0 .+ 1.0
+    rb = APCE.create_recurrence_basis(x_ref, 4)
+    degs = [0 0; 1 0; 0 1; 2 0; 0 2; 1 1; 3 0; 0 3]
+
+    x = rand(rng, 8, 2) .* 2.0 .+ 0.5
+    loss(xlocal) = sum(abs2, APCE.aPCE_PsiPolynomialMatrix_zygote(xlocal, degs, rb))
+
+    backend_fd = AutoFiniteDifferences(; fdm = FiniteDifferences.central_fdm(5, 1))
+    g_fd = gradient(loss, backend_fd, x)
+
+    g_forward = gradient(loss, AutoForwardDiff(), x)
+    @test g_forward ≈ g_fd rtol = 1.0e-5
+    @test all(isfinite, g_forward)
+
+    g_mooncake = gradient(loss, AutoMooncake(), x)
+    @test g_mooncake ≈ g_fd rtol = 1.0e-5
+    @test all(isfinite, g_mooncake)
+end
+
 @testitem "Mooncake autodiff - edge cases" begin
     using DifferentiationInterface
     using ADTypes: AutoMooncake
@@ -1145,3 +1192,38 @@ end
 #         scenario_intact = true
 #     )
 # end
+
+@testitem "Prediction Gradients with respect to Coefficients (Theta)" begin
+    using DifferentiationInterface
+    using ADTypes: AutoMooncake, AutoForwardDiff
+    using FiniteDifferences
+    using ArbitraryPolynomialChaosExpansion
+    using Random
+
+    rng = MersenneTwister(42)
+    Xtrain = rand(rng, 50, 2)
+    apc = aPCE(Xtrain, 3)
+    # create arbitrary coefficients
+    theta_0 = randn(rng, apc.NumberOfTerms, 1)
+
+    Xtest = rand(rng, 10, 2)
+
+    # Loss function mapping theta -> scalar
+    function loss_theta(theta_vec)
+        # Reshape to matrix as expected by predict_from_coeffs
+        theta_mat = reshape(theta_vec, apc.NumberOfTerms, 1)
+        predictions = predict_from_coeffs(apc, Xtest, theta_mat)
+        return sum(abs2, predictions)
+    end
+
+    backend_fd = AutoFiniteDifferences(; fdm = FiniteDifferences.central_fdm(5, 1))
+    g_fd = gradient(loss_theta, backend_fd, vec(theta_0))
+
+    g_forward = gradient(loss_theta, AutoForwardDiff(), vec(theta_0))
+    @test g_forward ≈ g_fd rtol = 1.0e-5
+
+    backend_mc = AutoMooncake()
+    extras_mc = prepare_gradient(loss_theta, backend_mc, vec(theta_0))
+    g_mooncake = gradient(loss_theta, extras_mc, backend_mc, vec(theta_0))
+    @test g_mooncake ≈ g_fd rtol = 1.0e-5
+end

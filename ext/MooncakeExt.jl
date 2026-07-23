@@ -1,5 +1,5 @@
 # MooncakeExt.jl - Extension for Mooncake AD support
-# This extension is only loaded when Mooncake is available and Julia < 1.12
+# This extension is loaded when Mooncake is available
 
 module MooncakeExt
 
@@ -30,6 +30,11 @@ using Mooncake: @from_rrule, DefaultCtx
 
 @from_rrule DefaultCtx Tuple{
     typeof(ArbitraryPolynomialChaosExpansion.create_centered_basis),
+    AbstractArray, Integer,
+}
+
+@from_rrule DefaultCtx Tuple{
+    typeof(ArbitraryPolynomialChaosExpansion.create_recurrence_basis),
     AbstractArray, Integer,
 }
 

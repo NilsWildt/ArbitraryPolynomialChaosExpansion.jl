@@ -61,7 +61,7 @@ using KernelAbstractions
 
 BLAS.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
 
-export aPCE_FullBasis, aPCE_MultivariatePolynomialDegrees, aPCE_PsiPolynomialMatrix, compose_Ψ, GaussianCollocation, partitionTrainTest, special_sort_two_arrays!, train!, evaluate_Ψ, aPCE, aPCE_OrthonormalBasis, create_basis, create_centered_basis, CenteredBasis, normalization_functions, predict, UQ, PsiPolynomialMatrix_zygote, reverse_columns!, compute_moments!
+export aPCE_FullBasis, aPCE_MultivariatePolynomialDegrees, aPCE_PsiPolynomialMatrix, compose_Ψ, GaussianCollocation, partitionTrainTest, special_sort_two_arrays!, train!, evaluate_Ψ, aPCE, aPCE_OrthonormalBasis, create_basis, create_centered_basis, CenteredBasis, create_recurrence_basis, RecurrenceCenteredBasis, normalization_functions, predict, UQ, PsiPolynomialMatrix_zygote, reverse_columns!, compute_moments!
 
 include("APCEfunctions.jl")
 include("APCEhighlevel.jl")
@@ -79,7 +79,7 @@ include("APCEGradientOverrides.jl")
         TrainingOutput = rand(10, 2) |> Array{FT} |> Array{FT}
         @compile_workload begin
             degree = 1
-            apc_instance = aPCE(TrainingInput, degree; outdim = size(TrainingOutput, 2), OrthonormalRepresentation = true, center_data = true)
+            apc_instance = aPCE(TrainingInput, degree; outdim = size(TrainingOutput, 2), is_orthonormal = true, center_data = true)
             train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion = true, reg_order = 2)
             predict(apc_instance, TrainingInput)
             UQ(apc_instance)
@@ -107,7 +107,7 @@ end
     apc_instance = aPCE(
         TrainingInput, degree;
         outdim = size(TrainingOutput, 2),
-        OrthonormalRepresentation = true,
+        is_orthonormal = true,
         center_data = true
     )
 
@@ -139,7 +139,11 @@ end
 
     # Test type stability of constructor with different options
     @inferred aPCE(TrainingInput, 1)
-    @inferred aPCE(TrainingInput, 1; outdim = 2, OrthonormalRepresentation = true, center_data = true)
+    # `is_orthonormal = true` is the default, so it is omitted here: the default
+    # path is `@constprop`-specialized and `@inferred`-stable, whereas an
+    # *explicit* `is_orthonormal` keyword goes through Julia's keyword sorter
+    # (which `@constprop` cannot reach) and would infer a backend `Union`.
+    @inferred aPCE(TrainingInput, 1; outdim = 2, center_data = true)
 
     # Create instance for further tests
     apc_instance = aPCE(TrainingInput, 1; outdim = 2)

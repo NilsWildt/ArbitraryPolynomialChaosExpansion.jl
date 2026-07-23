@@ -5,9 +5,10 @@
 # These tests fail loudly on any accidental export addition or removal.
 #
 # Ground truth captured from `names(ArbitraryPolynomialChaosExpansion)` on the
-# v0.2.4 baseline (21 exported symbols). Note that `APCEGradientOverrides` is a
-# *submodule*; its exports stay in the submodule namespace and are deliberately
-# NOT part of the top-level public API.
+# v0.2.4 baseline (21 exported symbols), extended with the opt-in recurrence
+# basis (`create_recurrence_basis`, `RecurrenceCenteredBasis`) → 23. Note that
+# `APCEGradientOverrides` is a *submodule*; its exports stay in the submodule
+# namespace and are deliberately NOT part of the top-level public API.
 
 @testitem "public_API_surface_lock" begin
     expected = Set(
@@ -15,6 +16,7 @@
             :CenteredBasis,
             :GaussianCollocation,
             :PsiPolynomialMatrix_zygote,
+            :RecurrenceCenteredBasis,
             :UQ,
             :aPCE,
             :aPCE_FullBasis,
@@ -25,6 +27,7 @@
             :compute_moments!,
             :create_basis,
             :create_centered_basis,
+            :create_recurrence_basis,
             :evaluate_Ψ,
             :normalization_functions,
             :partitionTrainTest,
@@ -48,7 +51,7 @@
     @test isempty(removed)
     @test isempty(added)
     @test actual == expected
-    @test length(actual) == 21
+    @test length(actual) == 23
 end
 
 @testitem "public_API_callables_defined" begin
@@ -59,15 +62,18 @@ end
         :aPCE_OrthonormalBasis, :aPCE_FullBasis, :aPCE_MultivariatePolynomialDegrees,
         :compose_Ψ, :evaluate_Ψ, :normalization_functions, :partitionTrainTest,
         :special_sort_two_arrays!, :reverse_columns!, :compute_moments!,
-        :PsiPolynomialMatrix_zygote,
+        :PsiPolynomialMatrix_zygote, :create_recurrence_basis,
     ]
     for sym in callables
         @test isdefined(M, sym)
         @test !isempty(methods(getfield(M, sym)))
     end
-    # CenteredBasis is a public type used by create_centered_basis.
+    # CenteredBasis / RecurrenceCenteredBasis are public types used by the
+    # create_centered_basis / create_recurrence_basis constructors.
     @test isdefined(M, :CenteredBasis)
     @test CenteredBasis isa Type
+    @test isdefined(M, :RecurrenceCenteredBasis)
+    @test RecurrenceCenteredBasis isa Type
 end
 
 @testitem "public_API_no_undefined_exports" begin

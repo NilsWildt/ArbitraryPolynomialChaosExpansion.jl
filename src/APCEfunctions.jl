@@ -817,11 +817,11 @@ function aPCE_OrthonormalBasis(
     σ = σ_val > eps(T) ? σ_val : one(T)
     x = (x_raw .- μ) ./ σ
 
-    # Compute moments and build basis in transformed space
-    m, MonicCoeffs = _stieltjes_core(x, D)
+    # Build monic basis in transformed space
+    MonicCoeffs = _stieltjes_core(x, D)
 
-    # Normalize via Hankel inner product: ‖P‖² = pᵀHp
-    OrthonormalCoeffs = _normalize_hankel(MonicCoeffs, m, D)
+    # Normalize to orthonormal form via the empirical sample norm
+    OrthonormalCoeffs = _normalize_hankel(MonicCoeffs, x, D)
 
     # Back-transform to original variable via binomial expansion
     FinalBasis = zeros(T, D + 1, D + 1)
@@ -848,10 +848,10 @@ function aPCE_OrthonormalBasis(
     D = Degree
 
     # No centering - work directly with raw data
-    m, MonicCoeffs = _stieltjes_core(x, D)
+    MonicCoeffs = _stieltjes_core(x, D)
 
-    # Normalize via Hankel inner product
-    return _normalize_hankel(MonicCoeffs, m, D)
+    # Normalize to orthonormal form via the empirical sample norm
+    return _normalize_hankel(MonicCoeffs, x, D)
 end
 
 # Default: centered
@@ -860,20 +860,16 @@ function aPCE_OrthonormalBasis(Data::AbstractArray{T}, Degree::Integer) where {T
 end
 
 """
-Core Stieltjes three-term recurrence. Returns moments and monic coefficients.
+Core Stieltjes three-term recurrence. Returns the monic coefficients of the
+orthogonal polynomials P_0..P_D w.r.t. the empirical measure of `x`.
 """
 function _stieltjes_core(x::AbstractVector{T}, D::Integer) where {T <: Real}
     N = length(x)
 
-    # Precompute moments: m[k+1] = E[x^k]
-    m = zeros(T, 2D + 1)
-    for k in 0:2D
-        m[k + 1] = mean(x .^ k)
-    end
-
     # Polynomial evaluations
     P_prev = zeros(T, N)
     P_curr = ones(T, N)
+    P_next = zeros(T, N)
 
     # Monic polynomial coefficients
     MonicCoeffs = zeros(T, D + 1, D + 1)
@@ -884,18 +880,19 @@ function _stieltjes_core(x::AbstractVector{T}, D::Integer) where {T <: Real}
 
     for k in 0:(D - 1)
         # <P_k, P_k>
-        inner_curr = LinearAlgebra.dot(P_curr, P_curr) / N
+        inner_curr = sum(abs2, P_curr) / N
 
         # α_k = <x P_k, P_k> / <P_k, P_k>
-        α_k = LinearAlgebra.dot(x .* P_curr, P_curr) / N / inner_curr
+        α_k = sum(i -> x[i] * P_curr[i]^2, eachindex(x)) / (N * inner_curr)
 
         # β_k = <P_k, P_k> / <P_{k-1}, P_{k-1}>
         β_k = inner_curr / inner_prev
 
         # P_{k+1} = (x - α_k) P_k - β_k P_{k-1}
-        P_next = (x .- α_k) .* P_curr
         if k > 0
-            P_next .-= β_k .* P_prev
+            @. P_next = (x - α_k) * P_curr - β_k * P_prev
+        else
+            @. P_next = (x - α_k) * P_curr
         end
 
         # Coefficient recurrence: P_{k+1} = x·P_k - α_k·P_k - β_k·P_{k-1}
@@ -917,36 +914,47 @@ function _stieltjes_core(x::AbstractVector{T}, D::Integer) where {T <: Real}
             end
         end
 
-        # Advance
-        P_prev = P_curr
-        P_curr = P_next
+        # Advance: three-way rotation keeps all three buffers distinct — the
+        # in-place `@. P_next = ...` above reads P_prev/P_curr, so any aliasing
+        # among them corrupts the recurrence from degree 3 onward.
+        P_prev, P_curr, P_next = P_curr, P_next, P_prev
         inner_prev = inner_curr
     end
 
-    return m, MonicCoeffs
+    return MonicCoeffs
 end
 
 """
-Normalize monic polynomials using Hankel inner product (paper Eq. 22).
-‖P_k‖² = Σᵢ Σⱼ pᵢ pⱼ m_{i+j}
+Normalize the monic orthogonal polynomials to orthonormal form using the
+*empirical* L2 norm against the sample measure of `data`:
+
+    ‖P_k‖² = mean_i P_k(x_i)²
+
+This replaces the moment-sum Hankel form ‖P_k‖² = Σᵢ Σⱼ pᵢ pⱼ m_{i+j}, which is
+mathematically equivalent but numerically catastrophic: the moment matrix H is
+exponentially ill-conditioned in the degree (Gautschi), so the double sum
+cancels to garbage beyond degree ~14 and yields absurd normalization factors.
+Evaluating the monic polynomial directly on the data is O(n·d) per degree and is
+exact w.r.t. the empirical measure the basis must be orthonormal against.
 """
 function _normalize_hankel(
         MonicCoeffs::AbstractMatrix{T},
-        m::AbstractVector{T},
+        data::AbstractVector{T},
         D::Integer,
     ) where {T <: Real}
     OrthonormalCoeffs = zeros(T, D + 1, D + 1)
+    N = length(data)
 
     for k in 0:D
         p = @view MonicCoeffs[k + 1, 1:(k + 1)]
 
-        # ‖P_k‖² = pᵀ H p where H[i,j] = m_{i+j}
+        # ‖P_k‖² = mean_i P_k(x_i)²  (empirical sample norm)
         norm_sq = zero(T)
-        for i in 0:k
-            for j in 0:k
-                norm_sq += p[i + 1] * p[j + 1] * m[i + j + 1]
-            end
+        for x_i in data
+            v = evalpoly_two(x_i, p)
+            norm_sq += v * v
         end
+        norm_sq /= N
 
         norm_factor = sqrt(max(norm_sq, eps(T)))
 
@@ -1239,20 +1247,169 @@ function create_centered_basis(
         σ[i] = σ_i
         z = (col .- μ_i) ./ σ_i
 
-        if degree in 0:4
-            basis_slice = zeros(T, degree + 1, degree + 1)
-            _apce_closed_form_basis_moment!(basis_slice, z, degree)
-            basis[:, :, i] .= basis_slice
-        else
-            # Stieltjes in z-space: reuse the core recurrence + Hankel
-            # normalization, but STOP before the binomial back-transform.
-            m, MonicCoeffs = _stieltjes_core(z, degree)
-            OrthonormalCoeffs = _normalize_hankel(MonicCoeffs, m, degree)
-            basis[:, :, i] .= OrthonormalCoeffs
-        end
+        # Stieltjes in z-space for ALL degrees: reuse the core recurrence +
+        # empirical normalization, but STOP before the binomial back-transform.
+        #
+        # The closed-form path (`_apce_closed_form_basis_moment!`) is NOT used
+        # here: it returns *monic* orthogonal polynomials (leading coeff 1, not
+        # unit norm), so for degree ≥ 2 the resulting basis is orthogonal but
+        # not orthonormal and Ψ'Ψ/n ≠ I. Routing every degree through the
+        # normalized Stieltjes recurrence keeps the d ≤ 4 and d ≥ 5 bases
+        # consistent and genuinely orthonormal. The recurrence is cheap at
+        # d ≤ 4 and, with the empirical-norm fix, well-conditioned through the
+        # degrees this package is used at (≤ ~12); beyond that the monomial
+        # coefficient representation itself limits accuracy (see below).
+        #
+        # NOTE on very high degree: the basis is stored as monomial coefficients
+        # and evaluated with `evalpoly`, so predicting at new points needs those
+        # coefficients. For a strongly skewed measure the monomial form of a
+        # degree ≳ 16 orthonormal polynomial has large alternating coefficients
+        # and loses precision on evaluation — a limit of the representation, not
+        # of the normalization. (A three-term-recurrence storage/eval scheme
+        # would be needed to push materially past that.)
+        MonicCoeffs = _stieltjes_core(z, degree)
+        OrthonormalCoeffs = _normalize_hankel(MonicCoeffs, z, degree)
+        basis[:, :, i] .= OrthonormalCoeffs
     end
 
     return CenteredBasis{T, typeof(basis)}(basis, μ, σ)
+end
+
+# ============================================================================
+# RecurrenceCenteredBasis: three-term-recurrence (Jacobi-matrix) basis
+#
+# An opt-in alternative to `CenteredBasis` that stores the recurrence
+# coefficients (αₖ, βₖ) of the orthonormal polynomials instead of their
+# monomial coefficients, and evaluates them via the stable forward three-term
+# recurrence rather than `evalpoly`. This removes the monomial-representation
+# ceiling that caps `CenteredBasis` orthonormality at degree ≈ 12 for strongly
+# skewed measures: every orthonormal value stays O(1), so there is no
+# catastrophic cancellation and the basis stays orthonormal to much higher
+# degree. Cost is the same O(n·d) as `evalpoly`; the trade-off is that new
+# evaluation points must be run through the recurrence (no closed monomial
+# form). Cf. RecurrenceRelationships.jl's `forwardrecurrence`.
+# ============================================================================
+
+"""
+    RecurrenceCenteredBasis{T}
+
+Opt-in basis carrying the orthonormal three-term-recurrence coefficients in
+z-space and the per-dimension `(μ, σ)` standardization statistics.
+
+Fields:
+- `α::Matrix{T}`: recurrence diagonal, shape `(degree, input_dimensions)`
+  (`α₀ … α_{degree-1}` per dimension).
+- `β::Matrix{T}`: recurrence squared off-diagonal, shape
+  `(degree + 1, input_dimensions)` (`β₀ … β_degree` per dimension, `β₀ = 1`).
+- `degree::Int`: polynomial degree.
+- `μ::Vector{T}` / `σ::Vector{T}`: per-dimension standardization statistics.
+
+Construct via [`create_recurrence_basis`](@ref); evaluate via
+`aPCE_PsiPolynomialMatrix_zygote(x, degrees, rb)`.
+"""
+struct RecurrenceCenteredBasis{T <: Real}
+    α::Matrix{T}
+    β::Matrix{T}
+    degree::Int
+    μ::Vector{T}
+    σ::Vector{T}
+end
+
+Base.eltype(::Type{<:RecurrenceCenteredBasis{T}}) where {T} = T
+Base.eltype(rb::RecurrenceCenteredBasis) = eltype(typeof(rb))
+# Reported shape mirrors the equivalent monomial-coefficient tensor
+# `(degree + 1, degree + 1, input_dimensions)` so `show(::aPCE)` and any
+# size-based introspection work uniformly across basis backends.
+Base.size(rb::RecurrenceCenteredBasis) = (rb.degree + 1, rb.degree + 1, size(rb.α, 2))
+Base.size(rb::RecurrenceCenteredBasis, d::Integer) = size(rb)[d]
+
+"""
+    _stieltjes_recurrence(x, D) -> (α, β)
+
+Run the Stieltjes procedure and return the orthonormal three-term-recurrence
+coefficients w.r.t. the empirical measure of `x`:
+
+    √β_{k+1} p_{k+1}(x) = (x - α_k) p_k(x) - √β_k p_{k-1}(x),  p_0 = 1/√β_0
+
+`α` has length `D` (α₀ … α_{D-1}); `β` has length `D + 1` (β₀ … β_D, β₀ = 1).
+These are exactly the coefficients the monic recurrence in `_stieltjes_core`
+already forms internally — here we keep them instead of expanding to monomials.
+"""
+function _stieltjes_recurrence(x::AbstractVector{T}, D::Integer) where {T <: Real}
+    N = length(x)
+    α = zeros(T, max(D, 0))
+    β = zeros(T, D + 1)
+    β[1] = one(T)                       # β₀ = ⟨P₀, P₀⟩ = 1 (P₀ ≡ 1)
+
+    P_prev = zeros(T, N)
+    P_curr = ones(T, N)
+    P_next = zeros(T, N)
+    inner_prev = one(T)                 # ⟨P_{k-1}, P_{k-1}⟩, seeded for k = 0
+
+    for k in 0:(D - 1)
+        inner_curr = sum(abs2, P_curr) / N          # ⟨P_k, P_k⟩
+        α[k + 1] = sum(i -> x[i] * P_curr[i]^2, eachindex(x)) / (N * inner_curr)
+        
+        if k > 0
+            β[k + 1] = inner_curr / inner_prev                      # β_k
+            @. P_next = (x - α[k + 1]) * P_curr - β[k + 1] * P_prev
+        else
+            @. P_next = (x - α[k + 1]) * P_curr
+        end
+
+        P_prev, P_curr, P_next = P_curr, P_next, P_prev
+        inner_prev = inner_curr
+    end
+
+    if D >= 1
+        inner_D = sum(abs2, P_curr) / N             # ⟨P_D, P_D⟩
+        β[D + 1] = inner_D / inner_prev                             # β_D
+    end
+
+    return α, β
+end
+
+"""
+    create_recurrence_basis(x, degree)
+
+Build an orthonormal polynomial basis in z-space stored as its three-term
+recurrence coefficients, returned as a [`RecurrenceCenteredBasis`](@ref).
+
+This is the opt-in, high-degree-stable counterpart to
+[`create_centered_basis`](@ref): identical z-space standardization contract,
+but evaluation goes through the forward recurrence (see
+`aPCE_PsiPolynomialMatrix_zygote(x, degrees, rb)`), so orthonormality does not
+degrade at high degree the way the monomial-coefficient basis does.
+"""
+function create_recurrence_basis(
+        x::AbstractArray{T},
+        degree::Integer,
+    ) where {T <: Real}
+    if ndims(x) == 1
+        x = reshape(x, :, 1)
+    end
+
+    input_dimensions = size(x, 2)
+    μ = zeros(T, input_dimensions)
+    σ = zeros(T, input_dimensions)
+    α = zeros(T, max(degree, 0), input_dimensions)
+    β = zeros(T, degree + 1, input_dimensions)
+
+    for i in 1:input_dimensions
+        col = x[:, i]
+        μ_i = StatsBase.mean(col)
+        σ_val = StatsBase.std(col; mean = μ_i)
+        σ_i = σ_val > eps(T) ? σ_val : one(T)
+        μ[i] = μ_i
+        σ[i] = σ_i
+        z = (col .- μ_i) ./ σ_i
+
+        α_i, β_i = _stieltjes_recurrence(z, degree)
+        α[:, i] .= α_i
+        β[:, i] .= β_i
+    end
+
+    return RecurrenceCenteredBasis{T}(α, β, Int(degree), μ, σ)
 end
 
 
@@ -1400,6 +1557,112 @@ function aPCE_PsiPolynomialMatrix_zygote(
     σ_row = reshape(cb.σ, 1, :)
     z = (TrainingInput .- μ_row) ./ σ_row
     return aPCE_PsiPolynomialMatrix_zygote(z, MultivariatePolynomialDegrees, cb.basis)
+end
+
+"""
+    _orthonormal_recurrence_values(z, α, β, D) -> Matrix
+
+Evaluate the orthonormal polynomials `p_0 … p_D` at every point of `z` via the
+forward three-term recurrence, returning a `(length(z), D + 1)` matrix whose
+column `k + 1` is `p_k` on the data. Non-mutating (each column is a fresh
+broadcast) so it stays ForwardDiff / Mooncake differentiable w.r.t. `z`.
+"""
+function _orthonormal_recurrence_values(
+        z::AbstractVector{Tz},
+        α::AbstractVector,
+        β::AbstractVector,
+        D::Integer,
+    ) where {Tz}
+    N = length(z)
+    out = Matrix{Tz}(undef, N, D + 1)
+    @inbounds for i in 1:N
+        zi = z[i]
+        p0 = one(Tz) / sqrt(Tz(β[1]))
+        out[i, 1] = p0
+        if D > 0
+            p1 = (zi - α[1]) * p0 / sqrt(Tz(β[2]))
+            out[i, 2] = p1
+            for k in 1:(D - 1)
+                out[i, k + 2] = ((zi - α[k + 1]) * out[i, k + 1] - sqrt(Tz(β[k + 1])) * out[i, k]) / sqrt(Tz(β[k + 2]))
+            end
+        end
+    end
+    return out
+end
+
+"""
+    aPCE_PsiPolynomialMatrix_zygote(TrainingInput, MultivariatePolynomialDegrees, rb::RecurrenceCenteredBasis)
+
+`RecurrenceCenteredBasis` dispatch: standardize `TrainingInput` per-dimension,
+evaluate each dimension's orthonormal polynomials through the stable forward
+three-term recurrence, then assemble the multivariate `Psi` product. Unlike the
+monomial-coefficient (`CenteredBasis`) path this keeps every value O(1), so
+orthonormality holds to high degree on skewed measures.
+"""
+function aPCE_PsiPolynomialMatrix_zygote(
+        TrainingInput,
+        MultivariatePolynomialDegrees,
+        rb::RecurrenceCenteredBasis,
+    )
+    μ_row = reshape(rb.μ, 1, :)
+    σ_row = reshape(rb.σ, 1, :)
+    z = (TrainingInput .- μ_row) ./ σ_row
+
+    NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
+    NCpoints = size(z, 1)
+
+    # Per-dimension orthonormal values: Pvals[dim][point, degree + 1].
+    Pvals = [
+        _orthonormal_recurrence_values(
+                z[:, dim], @view(rb.α[:, dim]), @view(rb.β[:, dim]), rb.degree,
+            )
+            for dim in 1:InputDimensions
+    ]
+
+    Psi = [
+        prod(
+            Pvals[dim][j, MultivariatePolynomialDegrees[i, dim] + 1]
+                for dim in 1:InputDimensions
+        )
+            for i in 1:NumberOfTerms, j in 1:NCpoints
+    ]
+    return reshape(Psi, NumberOfTerms, NCpoints)
+end
+
+# `aPCE_PsiPolynomialMatrix` (the non-`_zygote` name used by the high-level
+# aPCE/predict/train! path) shares the recurrence evaluator — the assembly is
+# identical and already AD-friendly.
+function aPCE_PsiPolynomialMatrix(
+        TrainingInput,
+        MultivariatePolynomialDegrees,
+        rb::RecurrenceCenteredBasis,
+    )
+    return aPCE_PsiPolynomialMatrix_zygote(TrainingInput, MultivariatePolynomialDegrees, rb)
+end
+
+"""
+    _recurrence_nodes(rb, dim, n) -> Vector
+
+Golub–Welsch nodes for dimension `dim`: the `n` roots of the orthonormal
+polynomial `p_n` are the eigenvalues of the symmetric-tridiagonal Jacobi matrix
+(diagonal `α₀ … α_{n-1}`, off-diagonal `√β₁ … √β_{n-1}`), mapped back from
+z-space to x-space via `μ + σ·z`. More stable than root-finding on monomial
+coefficients.
+"""
+function _recurrence_nodes(rb::RecurrenceCenteredBasis{T}, dim::Integer, n::Integer) where {T}
+    diagonal = collect(@view rb.α[1:n, dim])
+    off = sqrt.(max.(zero(T), collect(@view rb.β[2:n, dim])))
+    z = LinearAlgebra.eigvals(LinearAlgebra.SymTridiagonal(diagonal, off))
+    return rb.μ[dim] .+ rb.σ[dim] .* z
+end
+
+# Nodes of the top (degree + 1) polynomial per basis backend, used by
+# `GaussianCollocation`. Dispatch keeps each backend's path fully type-stable.
+function _basis_nodes(basis::AbstractArray, dim::Integer, degree::Integer, ::Type{T}) where {T}
+    return real.(PolynomialRoots.roots(basis[degree + 2, :, dim]))
+end
+function _basis_nodes(rb::RecurrenceCenteredBasis, dim::Integer, degree::Integer, ::Type{T}) where {T}
+    return _recurrence_nodes(rb, dim, degree + 1)
 end
 
 # The public API exports `PsiPolynomialMatrix_zygote` (see the module's `export`

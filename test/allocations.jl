@@ -34,11 +34,12 @@ end
     M = ArbitraryPolynomialChaosExpansion
     alloc_of(f, args...) = @allocated f(args...)
     X = rand(Xoshiro(1), 20, 2)
-    apc = aPCE(X, 2; outdim = 1)
+    apc = aPCE(X, 2; outdim = 1, basis = Val(:monomial))
     mpd = apc.MultivariatePolynomialDegrees
     basis = apc.OrthonormalBasis
     alloc_of(M.aPCE_PsiPolynomialMatrix, X, mpd, basis)       # warm up
-    # Generous upper bound: guards against gross regressions (the kernel uses
-    # scalar Horner evaluation to avoid per-element temporaries).
+    # Generous upper bound: guards against gross regressions (the monomial kernel
+    # uses scalar Horner evaluation to avoid per-element temporaries). The default
+    # basis is now :auto (recurrence); this lock pins the monomial path explicitly.
     @test alloc_of(M.aPCE_PsiPolynomialMatrix, X, mpd, basis) <= 65_536
 end

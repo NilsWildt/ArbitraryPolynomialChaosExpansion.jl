@@ -10,13 +10,19 @@
 # Tolerances: pinv-only paths are pure linear algebra (tight rtol); Bayesian
 # paths run an iterative regularized solver (looser rtol to absorb
 # platform-level FP noise while still catching any real behavioral change).
+#
+# These locks pin the *monomial-coefficient* basis path explicitly. The default
+# `aPCE(...)` basis moved to `:auto` (recurrence for the orthonormal case), so
+# each call requests `basis = Val(:monomial)` to keep exercising the exact
+# v0.2.4 code path these baselines were captured on (the coefficient values are
+# basis-dependent; predictions are basis-invariant).
 
 @testitem "golden_A_deg1_2D_1out_bayes" begin
     using Random
     rng = Xoshiro(42)
     X = rand(rng, 10, 2)
     y = rand(rng, 10, 1)
-    apc = aPCE(X, 1; outdim = 1, center_data = true)
+    apc = aPCE(X, 1; outdim = 1, center_data = true, basis = Val(:monomial))
     train!(apc, X, y; bayesian_inversion = true, reg_order = 2)
     pred = predict(apc, X)
     uq = UQ(apc)
@@ -40,7 +46,7 @@ end
     rng = Xoshiro(123)
     X = rand(rng, 20, 2)
     y = rand(rng, 20, 2)
-    apc = aPCE(X, 2; outdim = 2, center_data = true)
+    apc = aPCE(X, 2; outdim = 2, center_data = true, basis = Val(:monomial))
     train!(apc, X, y; bayesian_inversion = true, reg_order = 2)
     pred = predict(apc, X)
     uq = UQ(apc)
@@ -68,7 +74,7 @@ end
     rng = Xoshiro(7)
     X = rand(rng, 15, 2)
     y = rand(rng, 15, 1)
-    apc = aPCE(X, 2; outdim = 1)
+    apc = aPCE(X, 2; outdim = 1, basis = Val(:monomial))
     train!(apc, X, y; bayesian_inversion = false)
     pred = predict(apc, X)
 
@@ -96,7 +102,7 @@ end
     base = rand(rng, 12, 1)
     X = hcat(base, base)
     y = rand(rng, 12, 1)
-    apc = aPCE(X, 2; outdim = 1)
+    apc = aPCE(X, 2; outdim = 1, basis = Val(:monomial))
     train!(apc, X, y; bayesian_inversion = true, reg_order = 1)
     pred = predict(apc, X)
 

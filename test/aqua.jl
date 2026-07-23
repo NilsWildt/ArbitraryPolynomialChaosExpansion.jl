@@ -10,6 +10,7 @@
 
 @testitem "Aqua_quality" begin
     using Aqua
+    using ArbitraryPolynomialChaosExpansion
     Aqua.test_all(
         ArbitraryPolynomialChaosExpansion;
         stale_deps = (ignore = [:MKL],),

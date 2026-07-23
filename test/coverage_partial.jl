@@ -51,6 +51,123 @@ end
     @test eltype(B32) == Float32
 end
 
+@testitem "create_centered_basis_orthonormal_on_skewed_data" begin
+    using Random, LinearAlgebra, Statistics
+    const APCE = ArbitraryPolynomialChaosExpansion
+    # Regression for the empirical-normalization fix. The old moment-sum Hankel
+    # norm suffered catastrophic cancellation, giving orthonormality defects up
+    # to ~1e+26 already at degree 16. The basis must now stay orthonormal
+    # w.r.t. the empirical measure even for strongly skewed marginals.
+    #
+    # Two tiers: a TIGHT bound over the degrees this package is actually used at
+    # (≤ 12), and a LOOSE guard at very high degree. The loose tier only checks
+    # the fix has not regressed to catastrophic cancellation — a sub-1e-6 defect
+    # is unattainable there for *any* monomial-coefficient basis (verified: a
+    # QR-Vandermonde coefficient basis is worse), because a degree ≳ 16
+    # orthonormal polynomial on a skewed measure loses precision when its
+    # monomial form is re-evaluated via `evalpoly`.
+    rng = MersenneTwister(1)
+    n = 5_000
+    datasets = (
+        "Exp(1)" => -log.(rand(rng, n)),
+        "LogNormal" => exp.(randn(rng, n)),
+    )
+    defect(x, d) = let cb = APCE.create_centered_basis(x, d),
+            mpd = APCE.aPCE_MultivariatePolynomialDegrees(1, d, 1.0, 1.0)
+        Psi = Matrix(APCE.aPCE_PsiPolynomialMatrix_zygote(reshape(x, :, 1), mpd, cb)')
+        opnorm(Psi' * Psi ./ n - I)
+    end
+    for (_name, x) in datasets
+        for d in (1, 2, 4, 6, 8, 10, 12)          # tight: orthonormal to ~1e-6
+            @test defect(x, d) < 1.0e-6
+        end
+        for d in (16, 20)                          # loose: no catastrophic blow-up
+            @test defect(x, d) < 1.0
+        end
+    end
+end
+
+@testitem "create_recurrence_basis_high_degree_orthonormality" begin
+    using Random, LinearAlgebra
+    const APCE = ArbitraryPolynomialChaosExpansion
+    # The opt-in three-term-recurrence basis evaluates orthonormal polynomials
+    # via the forward recurrence instead of monomial coefficients + evalpoly, so
+    # it keeps every value O(1) and stays orthonormal to much higher degree than
+    # the monomial `CenteredBasis` (which the previous test caps at ~d=12).
+    rng = MersenneTwister(1)
+    n = 5_000
+    x = -log.(rand(rng, n))                        # Exp(1), skewed
+
+    defect(basis, d) = let mpd = APCE.aPCE_MultivariatePolynomialDegrees(1, d, 1.0, 1.0)
+        Psi = Matrix(APCE.aPCE_PsiPolynomialMatrix_zygote(reshape(x, :, 1), mpd, basis)')
+        opnorm(Psi' * Psi ./ n - I)
+    end
+
+    # Orthonormal to ~1e-6 well past the monomial ceiling.
+    for d in (1, 2, 4, 8, 12, 16)
+        @test defect(APCE.create_recurrence_basis(x, d), d) < 1.0e-6
+    end
+    @test defect(APCE.create_recurrence_basis(x, 20), 20) < 1.0e-4   # vs ~0.16 monomial
+
+    # Strictly better than the monomial basis where the latter degrades.
+    for d in (16, 20, 24)
+        rb = APCE.create_recurrence_basis(x, d)
+        cb = APCE.create_centered_basis(x, d)
+        @test defect(rb, d) < defect(cb, d)
+    end
+
+    # Agrees with the monomial basis at low degree (orthonormal polys are unique
+    # up to per-column sign), including at NEW evaluation points.
+    d = 6
+    mpd = APCE.aPCE_MultivariatePolynomialDegrees(1, d, 1.0, 1.0)
+    Pc = Matrix(APCE.aPCE_PsiPolynomialMatrix_zygote(reshape(x, :, 1), mpd, APCE.create_centered_basis(x, d))')
+    Pr = Matrix(APCE.aPCE_PsiPolynomialMatrix_zygote(reshape(x, :, 1), mpd, APCE.create_recurrence_basis(x, d))')
+    @test isapprox(abs.(Pc), abs.(Pr); atol = 1.0e-8)
+
+    xnew = reshape(collect(range(0.01, 5.0; length = 7)), :, 1)
+    mpd4 = APCE.aPCE_MultivariatePolynomialDegrees(1, 4, 1.0, 1.0)
+    Pr_new = APCE.aPCE_PsiPolynomialMatrix_zygote(xnew, mpd4, APCE.create_recurrence_basis(x, 4))
+    Pc_new = APCE.aPCE_PsiPolynomialMatrix_zygote(xnew, mpd4, APCE.create_centered_basis(x, 4))
+    @test isapprox(abs.(Pr_new), abs.(Pc_new); atol = 1.0e-8)
+
+    # eltype genericity + multi-dimensional construction.
+    rb32 = APCE.create_recurrence_basis(rand(Xoshiro(2), Float32, 200, 2), 3)
+    @test eltype(rb32) == Float32
+    @test size(rb32.α) == (3, 2)
+    @test size(rb32.β) == (4, 2)
+end
+
+@testitem "create_centered_basis_closed_form_consistent_across_d4_d5_boundary" begin
+    using Random, LinearAlgebra
+    const APCE = ArbitraryPolynomialChaosExpansion
+    # Regression for the degree ≤ 4 closed-form path: it used to return *monic*
+    # (un-normalized) polynomials, so d ≤ 4 bases were not orthonormal and were
+    # inconsistent with the d ≥ 5 Stieltjes path at the boundary. Now every
+    # degree routes through the normalized Stieltjes recurrence.
+    rng = MersenneTwister(1)
+    n = 5_000
+    x = -log.(rand(rng, n))                       # Exp(1), skewed
+
+    # (a) low-degree bases must themselves be orthonormal.
+    for d in 1:4
+        cb = APCE.create_centered_basis(x, d)
+        mpd = APCE.aPCE_MultivariatePolynomialDegrees(1, d, 1.0, 1.0)
+        Psi = Matrix(APCE.aPCE_PsiPolynomialMatrix_zygote(reshape(x, :, 1), mpd, cb)')
+        @test opnorm(Psi' * Psi ./ n - I) < 1.0e-6
+    end
+
+    # (b) the d = 4 and d = 5 bases must agree on their shared degrees (0..4).
+    cb4 = APCE.create_centered_basis(x, 4)
+    cb5 = APCE.create_centered_basis(x, 5)
+    mpd4 = APCE.aPCE_MultivariatePolynomialDegrees(1, 4, 1.0, 1.0)
+    mpd5 = APCE.aPCE_MultivariatePolynomialDegrees(1, 5, 1.0, 1.0)
+    Psi4 = Matrix(APCE.aPCE_PsiPolynomialMatrix_zygote(reshape(x, :, 1), mpd4, cb4)')
+    Psi5 = Matrix(APCE.aPCE_PsiPolynomialMatrix_zygote(reshape(x, :, 1), mpd5, cb5)')
+    # 1-D total-degree terms are ordered by degree, so the first 5 columns are
+    # the degree-0..4 polynomials in both bases.
+    @test isapprox(Psi4[:, 1:5], Psi5[:, 1:5]; atol = 1.0e-8)
+end
+
 @testitem "aPCE_PsiPolynomialMatrix_3arg_shape_and_genericity" begin
     using Random
     rng = Xoshiro(5)
