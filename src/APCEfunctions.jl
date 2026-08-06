@@ -1591,6 +1591,80 @@ function _orthonormal_recurrence_values(
 end
 
 """
+    _orthonormal_recurrence_derivative_values(z, α, β, degree, max_order) -> Array{Tz, 3}
+
+Evaluate the orthonormal polynomials `p_0 … p_degree` and their `z`-derivatives
+up to order `max_order` at every point of `z` via the differentiated forward
+three-term recurrence. Returns an `(length(z), degree + 1, max_order + 1)`
+array whose entry `[i, k + 1, m + 1]` is `∂ᵐ p_k / ∂zᵐ` at `z[i]`; the `m = 0`
+slice coincides exactly with
+[`_orthonormal_recurrence_values(z, α, β, degree)`](@ref).
+
+The orthonormal polynomials satisfy
+
+    √β_{k+1} p_{k+1}(z) = (z - α_k) p_k(z) - √β_k p_{k-1}(z),   p_0 = 1/√β_0
+
+with the `k = 0` term `√β_0 p_{-1}` absent. Differentiating `m ≥ 1` times
+w.r.t. `z` (Leibniz applied to the `(z - α_k)` factor) yields the derivative
+recurrence
+
+    √β_{k+1} p_{k+1}⁽ᵐ⁾(z) = m p_k⁽ᵐ⁻¹⁾(z) + (z - α_k) p_k⁽ᵐ⁾(z)
+                              - √β_k p_{k-1}⁽ᵐ⁾(z)
+
+with `p₀⁽ᵐ⁾ = 0` for `m > 0` and `pₖ⁽⁰⁾ = pₖ` (the plain recurrence
+values).
+All orders are computed in one pass over `m` (the `m`-th order reuses the
+`(m-1)`-th), so the cost is `O(max_order × degree)` per point. Non-mutating
+(each layer is a fresh broadcast) mirroring the AD-friendly style of
+`_orthonormal_recurrence_values`.
+"""
+function _orthonormal_recurrence_derivative_values(
+        z::AbstractVector{Tz},
+        α::AbstractVector,
+        β::AbstractVector,
+        degree::Integer,
+        max_order::Integer,
+    ) where {Tz}
+    N = length(z)
+    D = Int(degree)
+    M = Int(max_order)
+    out = Array{Tz, 3}(undef, N, D + 1, M + 1)
+    @inbounds for i in 1:N
+        zi = z[i]
+
+        # m = 0: plain forward recurrence (matches _orthonormal_recurrence_values).
+        p0 = one(Tz) / sqrt(Tz(β[1]))
+        out[i, 1, 1] = p0
+        if D > 0
+            out[i, 2, 1] = (zi - α[1]) * p0 / sqrt(Tz(β[2]))
+            for k in 1:(D - 1)
+                out[i, k + 2, 1] = ((zi - α[k + 1]) * out[i, k + 1, 1] - sqrt(Tz(β[k + 1])) * out[i, k, 1]) / sqrt(Tz(β[k + 2]))
+            end
+        end
+
+        # m ≥ 1: differentiated recurrence; p₀⁽ᵐ⁾ = 0 seeds the sweep and the
+        # k = 0 "√β₀ p_{-1}" term is absent, exactly as in the base recurrence.
+        for m in 1:M
+            Tm = Tz(m)
+            out[i, 1, m + 1] = zero(Tz)
+            if D > 0
+                out[i, 2, m + 1] = (
+                    Tm * out[i, 1, m] + (zi - α[1]) * out[i, 1, m + 1]
+                ) / sqrt(Tz(β[2]))
+                for k in 1:(D - 1)
+                    out[i, k + 2, m + 1] = (
+                        Tm * out[i, k + 1, m]
+                        + (zi - α[k + 1]) * out[i, k + 1, m + 1]
+                        - sqrt(Tz(β[k + 1])) * out[i, k, m + 1]
+                    ) / sqrt(Tz(β[k + 2]))
+                end
+            end
+        end
+    end
+    return out
+end
+
+"""
     aPCE_PsiPolynomialMatrix_zygote(TrainingInput, MultivariatePolynomialDegrees, rb::RecurrenceCenteredBasis)
 
 `RecurrenceCenteredBasis` dispatch: standardize `TrainingInput` per-dimension,
@@ -1639,6 +1713,13 @@ function aPCE_PsiPolynomialMatrix(
     )
     return aPCE_PsiPolynomialMatrix_zygote(TrainingInput, MultivariatePolynomialDegrees, rb)
 end
+
+# NOTE: `aPCE_DerivativeBasis` (the public physical-space derivative of the Psi
+# matrix) lives in APCEhighlevel.jl with the other `aPCE`-struct-typed methods,
+# because the `aPCE` struct is defined there (APCEfunctions.jl is included
+# first and cannot reference the type in a signature). It dispatches on the
+# `OrthonormalBasis` backend and calls `_orthonormal_recurrence_derivative_values`
+# (defined above) for the `RecurrenceCenteredBasis` path.
 
 """
     _recurrence_nodes(rb, dim, n) -> Vector
@@ -2652,4 +2733,116 @@ end
     basis_mono_true = create_basis(x, degree, Val(false))
     basis_mono_false = create_basis(x, degree, Val(false); center_data = false)
     @test isapprox(basis_mono_true, basis_mono_false, atol = 1.0e-12)
+end
+
+@testitem "aPCE_DerivativeBasis_recurrence_matches_forwarddiff" begin
+    using ArbitraryPolynomialChaosExpansion
+    using ForwardDiff
+    using Random
+
+    # Empirical-orthonormal recurrence basis from known samples (degree 8).
+    rng = Xoshiro(20260806)
+    x_ref = randn(rng, 10_000)
+    apc = aPCE(reshape(x_ref, :, 1), 8)
+    @test apc.OrthonormalBasis isa ArbitraryPolynomialChaosExpansion.RecurrenceCenteredBasis
+
+    degs = apc.MultivariatePolynomialDegrees
+    basis = apc.OrthonormalBasis
+    P = apc.NumberOfTerms
+
+    # Reference: order-fold ForwardDiff.derivative of the (univariate) Psi column.
+    f_psi(ξ) = vec(aPCE_PsiPolynomialMatrix(reshape([ξ], 1, 1), degs, basis))
+    ref1(x) = ForwardDiff.derivative(f_psi, x)
+    ref2(x) = ForwardDiff.derivative(z -> ForwardDiff.derivative(f_psi, z), x)
+    ref4(x) = ForwardDiff.derivative(z -> ForwardDiff.derivative(w -> ForwardDiff.derivative(v -> ForwardDiff.derivative(f_psi, v), w), z), x)
+
+    x_test = [-2.1, -0.7, 0.0, 0.4, 1.9]
+    for (order, ref) in ((1, ref1), (2, ref2), (4, ref4))
+        D = aPCE_DerivativeBasis(apc, x_test, order)
+        @test size(D) == (P, length(x_test))
+        for (j, xj) in enumerate(x_test)
+            @test D[:, j] ≈ ref(xj) atol = 1e-10 rtol = 1e-10
+        end
+    end
+
+    # Type stability of the recurrence path (works for runtime `order`, too).
+    @test_nowarn @inferred aPCE_DerivativeBasis(apc, x_test, 2)
+    @test_nowarn @inferred aPCE_DerivativeBasis(apc, x_test, 4)
+
+    # order 0 reproduces the Psi matrix exactly (same (P, n) orientation).
+    D0 = aPCE_DerivativeBasis(apc, x_test, 0)
+    Ψ = aPCE_PsiPolynomialMatrix(reshape(x_test, :, 1), degs, basis)
+    @test size(D0) == size(Ψ) == (P, length(x_test))
+    @test D0 ≈ Ψ
+end
+
+@testitem "aPCE_DerivativeBasis_chain_rule_physical_units" begin
+    using ArbitraryPolynomialChaosExpansion
+    using ForwardDiff
+    using Random
+
+    # Non-unit (μ, σ) sample: 2 + 3·N(0, 1) ⇒ μ ≈ 2, σ ≈ 3. ForwardDiff
+    # differentiates through the internal z = (x - μ)/σ standardization, so
+    # agreement proves the (1/σ)^order chain-rule scaling is applied.
+    rng = Xoshiro(7)
+    x_ref = 2.0 .+ 3.0 .* randn(rng, 10_000)
+    apc = aPCE(reshape(x_ref, :, 1), 6)
+    @test apc.OrthonormalBasis isa ArbitraryPolynomialChaosExpansion.RecurrenceCenteredBasis
+    @test apc.OrthonormalBasis.σ[1] ≈ 3.0 atol = 0.1
+
+    degs = apc.MultivariatePolynomialDegrees
+    basis = apc.OrthonormalBasis
+    P = apc.NumberOfTerms
+    f_psi(ξ) = vec(aPCE_PsiPolynomialMatrix(reshape([ξ], 1, 1), degs, basis))
+
+    # Explicitly nested ForwardDiff references (orders 1-4); distinct bound
+    # variables, so no closure self-reference.
+    ref1(x) = ForwardDiff.derivative(f_psi, x)
+    ref2(x) = ForwardDiff.derivative(z -> ForwardDiff.derivative(f_psi, z), x)
+    ref3(x) = ForwardDiff.derivative(z -> ForwardDiff.derivative(w -> ForwardDiff.derivative(f_psi, w), z), x)
+    ref4(x) = ForwardDiff.derivative(z -> ForwardDiff.derivative(w -> ForwardDiff.derivative(v -> ForwardDiff.derivative(f_psi, v), w), z), x)
+
+    x_test = [-4.0, -1.5, 1.0, 3.7]
+    for (order, ref) in ((1, ref1), (2, ref2), (3, ref3), (4, ref4))
+        ref_mat = reduce(vcat, [reshape(ref(xj), 1, :) for xj in x_test])
+        D = aPCE_DerivativeBasis(apc, x_test, order)
+        @test D ≈ Matrix(transpose(ref_mat)) atol = 1e-9 rtol = 1e-9
+    end
+end
+
+@testitem "aPCE_DerivativeBasis_monomial_backend" begin
+    using ArbitraryPolynomialChaosExpansion
+    using ForwardDiff
+    using Random
+
+    # Monomial / Vandermonde backend (`basis = Val(:monomial)`): x-space
+    # coefficients, differentiated via derivative_coeffs + Horner.
+    rng = Xoshiro(11)
+    x_ref = randn(rng, 2_000)
+    apc = aPCE(reshape(x_ref, :, 1), 5; basis = Val(:monomial), is_orthonormal = false)
+    @test apc.OrthonormalBasis isa Array{Float64, 3}
+
+    degs = apc.MultivariatePolynomialDegrees
+    basis = apc.OrthonormalBasis
+    P = apc.NumberOfTerms
+    f_psi(ξ) = vec(aPCE_PsiPolynomialMatrix(reshape([ξ], 1, 1), degs, basis))
+
+    ref1(x) = ForwardDiff.derivative(f_psi, x)
+    ref2(x) = ForwardDiff.derivative(z -> ForwardDiff.derivative(f_psi, z), x)
+    ref3(x) = ForwardDiff.derivative(z -> ForwardDiff.derivative(w -> ForwardDiff.derivative(f_psi, w), z), x)
+    ref4(x) = ForwardDiff.derivative(z -> ForwardDiff.derivative(w -> ForwardDiff.derivative(v -> ForwardDiff.derivative(f_psi, v), w), z), x)
+
+    x_test = [-1.4, -0.2, 0.6, 1.1]
+    for (order, ref) in ((1, ref1), (2, ref2), (3, ref3), (4, ref4))
+        D = aPCE_DerivativeBasis(apc, x_test, order)
+        @test size(D) == (P, length(x_test))
+        for (j, xj) in enumerate(x_test)
+            @test D[:, j] ≈ ref(xj) atol = 1e-10 rtol = 1e-10
+        end
+    end
+
+    # order 0 equals the Psi matrix on the monomial backend, too.
+    D0 = aPCE_DerivativeBasis(apc, x_test, 0)
+    Ψ = aPCE_PsiPolynomialMatrix(reshape(x_test, :, 1), degs, basis)
+    @test D0 ≈ Ψ
 end
