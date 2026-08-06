@@ -1665,6 +1665,76 @@ function _orthonormal_recurrence_derivative_values(
 end
 
 """
+    _orthonormal_recurrence_derivative_order(z, α, β, degree, order) -> Matrix{Tz}
+
+Evaluate only the `order`-th `z`-derivative of the orthonormal polynomials
+`p_0 … p_degree` at every point of `z`, returning a `(length(z), degree + 1)`
+matrix whose entry `[i, k + 1]` is `∂ᵒʳᵈᵉʳ p_k / ∂zᵒʳᵈᵉʳ` at `z[i]`.
+
+Same differentiated three-term recurrence as
+[`_orthonormal_recurrence_derivative_values`](@ref), but the sweep over
+derivation order keeps only the current and previous `m`-layer instead of
+materializing all `order + 1` of them, so peak memory is
+`O(length(z) × degree)` rather than `O(length(z) × degree × order)`. Use this
+when a single order is needed; use the full-tensor version when several orders
+are consumed together (e.g. the reverse-mode pullback, which reads both the
+values and the first derivative).
+"""
+function _orthonormal_recurrence_derivative_order(
+        z::AbstractVector{Tz},
+        α::AbstractVector,
+        β::AbstractVector,
+        degree::Integer,
+        order::Integer,
+    ) where {Tz}
+    N = length(z)
+    D = Int(degree)
+    M = Int(order)
+    out = Matrix{Tz}(undef, N, D + 1)
+
+    # Two rolling layers of length D + 1: `cur` holds the m-th derivative row,
+    # `prev` the (m-1)-th. Reused across points, so allocation is O(degree).
+    cur = Vector{Tz}(undef, D + 1)
+    prev = Vector{Tz}(undef, D + 1)
+    @inbounds for i in 1:N
+        zi = z[i]
+
+        # m = 0: plain forward recurrence into `cur`.
+        cur[1] = one(Tz) / sqrt(Tz(β[1]))
+        if D > 0
+            cur[2] = (zi - α[1]) * cur[1] / sqrt(Tz(β[2]))
+            for k in 1:(D - 1)
+                cur[k + 2] = ((zi - α[k + 1]) * cur[k + 1] - sqrt(Tz(β[k + 1])) * cur[k]) / sqrt(Tz(β[k + 2]))
+            end
+        end
+
+        # m ≥ 1: differentiated recurrence; the m-th layer reuses the (m-1)-th,
+        # so swap `cur`/`prev` and overwrite. p₀⁽ᵐ⁾ = 0 seeds each sweep and the
+        # k = 0 "√β₀ p_{-1}" term is absent, exactly as in the base recurrence.
+        for m in 1:M
+            cur, prev = prev, cur
+            Tm = Tz(m)
+            cur[1] = zero(Tz)
+            if D > 0
+                cur[2] = (Tm * prev[1] + (zi - α[1]) * cur[1]) / sqrt(Tz(β[2]))
+                for k in 1:(D - 1)
+                    cur[k + 2] = (
+                        Tm * prev[k + 1]
+                        + (zi - α[k + 1]) * cur[k + 1]
+                        - sqrt(Tz(β[k + 1])) * cur[k]
+                    ) / sqrt(Tz(β[k + 2]))
+                end
+            end
+        end
+
+        for k in 1:(D + 1)
+            out[i, k] = cur[k]
+        end
+    end
+    return out
+end
+
+"""
     aPCE_PsiPolynomialMatrix_zygote(TrainingInput, MultivariatePolynomialDegrees, rb::RecurrenceCenteredBasis)
 
 `RecurrenceCenteredBasis` dispatch: standardize `TrainingInput` per-dimension,

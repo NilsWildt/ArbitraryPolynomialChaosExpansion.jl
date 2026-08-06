@@ -207,7 +207,7 @@ recurrence (or monomial coefficients) instead of dual numbers, which is
 - `x::AbstractVector{S}`: Physical points at which to evaluate the derivatives
   (a vector of scalar coordinates, i.e. a one-dimensional domain).
 - `order::Integer`: Derivative order (≥ 0). `order = 0` reproduces
-  `aPCE_PsiPolynomialMatrix(apc, x)` exactly.
+  `aPCE_PsiPolynomialMatrix(apc, reshape(x, :, 1))` exactly.
 
 # Returns
 - `Matrix`: Derivative basis of size `(NumberOfTerms, length(x))`, entry
@@ -233,10 +233,12 @@ function aPCE_DerivativeBasis(
         x::AbstractVector{S},
         order::Integer,
     ) where {T <: Real, S <: Real}
-    @assert order >= 0 "derivative order must be non-negative"
-    @assert apc.input_dimensions == 1 (
-        "aPCE_DerivativeBasis currently supports one input dimension (1D "
-        * "physical points); got $(apc.input_dimensions)"
+    order >= 0 || throw(ArgumentError("derivative order must be non-negative"))
+    apc.input_dimensions == 1 || throw(
+        DimensionMismatch(
+            "aPCE_DerivativeBasis currently supports one input dimension (1D " *
+            "physical points); got $(apc.input_dimensions)",
+        ),
     )
     return _aPCE_derivative_basis_backend(apc, x, Int(order), apc.OrthonormalBasis)
 end
@@ -270,7 +272,7 @@ function _aPCE_derivative_basis_backend(
     μ = rb.μ[1]
     σ = rb.σ[1]
     z = (x .- μ) ./ σ
-    vals = _orthonormal_recurrence_derivative_values(
+    vals = _orthonormal_recurrence_derivative_order(
         z, @view(rb.α[:, 1]), @view(rb.β[:, 1]), rb.degree, order,
     )
 
@@ -280,7 +282,7 @@ function _aPCE_derivative_basis_backend(
     @inbounds for i in 1:P
         k = degs[i, 1] + 1
         for j in 1:n
-            out[i, j] = vals[j, k, order + 1] * chain
+            out[i, j] = vals[j, k] * chain
         end
     end
     return out
