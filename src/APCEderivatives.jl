@@ -294,6 +294,64 @@ function ChainRulesCore.rrule(
     return Psi, aPCE_PsiPolynomialMatrix_pullback
 end
 
+# ===== CHAINRULE FOR PSI MATRIX (RecurrenceCenteredBasis) =====
+
+"""
+    rrule(::typeof(aPCE_PsiPolynomialMatrix_zygote), TrainingInput, MultivariatePolynomialDegrees, rb::RecurrenceCenteredBasis)
+
+Efficient ChainRule for Psi matrix computation on the `RecurrenceCenteredBasis`
+backend. The pullback uses the analytic derivative recurrence
+(`_orthonormal_recurrence_derivative_values`) instead of tracing through the
+mutating forward recurrence, so reverse-mode AD backends (Zygote, Mooncake) can
+differentiate without hitting "mutating arrays" errors.
+"""
+function ChainRulesCore.rrule(
+        ::typeof(aPCE_PsiPolynomialMatrix_zygote),
+        TrainingInput,
+        MultivariatePolynomialDegrees,
+        rb::RecurrenceCenteredBasis{T},
+    ) where {T}
+    x = ensure_matrix(TrainingInput)
+
+    Psi = aPCE_PsiPolynomialMatrix_zygote(x, MultivariatePolynomialDegrees, rb)
+
+    NumberOfTerms, InputDimensions = size(MultivariatePolynomialDegrees)
+    NCpoints = size(x, 1)
+    z = (x .- reshape(rb.μ, 1, :)) ./ reshape(rb.σ, 1, :)
+
+    allvals = [
+        _orthonormal_recurrence_derivative_values(
+            z[:, dim], @view(rb.α[:, dim]), @view(rb.β[:, dim]), rb.degree, 1,
+        )
+        for dim in 1:InputDimensions
+    ]
+
+    function aPCE_PsiPolynomialMatrix_recurrence_pullback(ΔPsi)
+        Δx = zeros(T, size(x))
+        @inbounds for j in 1:NCpoints
+            for i in 1:NumberOfTerms
+                Δij = ΔPsi[i, j]
+                iszero(Δij) && continue
+                for d in 1:InputDimensions
+                    deg_d = MultivariatePolynomialDegrees[i, d]
+                    iszero(deg_d) && continue
+                    other = one(T)
+                    for od in 1:InputDimensions
+                        od === d && continue
+                        other *= allvals[od][j, MultivariatePolynomialDegrees[i, od] + 1, 1]
+                        iszero(other) && break
+                    end
+                    dz = allvals[d][j, deg_d + 1, 2]
+                    Δx[j, d] += Δij * dz * other / rb.σ[d]
+                end
+            end
+        end
+        return (NoTangent(), Δx, NoTangent(), NoTangent())
+    end
+
+    return Psi, aPCE_PsiPolynomialMatrix_recurrence_pullback
+end
+
 # ===== CHAINRULES FOR BASIS CREATION =====
 
 """
@@ -547,6 +605,34 @@ end
 
     # Test that both methods give similar results
     @test isapprox(grad_psi_fd, grad_psi_zyg_fd, atol = 1.0e-6)
+end
+
+
+@testitem "psi_matrix_chainrules_recurrence" begin
+    using ForwardDiff, Zygote, StatsBase
+
+    x = rand(10, 2)
+    degree = 4
+    MultivariatePolynomialDegrees = aPCE_MultivariatePolynomialDegrees(2, degree, 1.0, 1.0)
+    rb = create_recurrence_basis(x, degree)
+
+    @test rb isa RecurrenceCenteredBasis
+
+    f_rec(x) = sum(ArbitraryPolynomialChaosExpansion.aPCE_PsiPolynomialMatrix_zygote(x, MultivariatePolynomialDegrees, rb))
+
+    grad_fd = ForwardDiff.gradient(f_rec, x)
+    grad_zyg = Zygote.gradient(f_rec, x)[1]
+    @info "recurrence Zygote vs ForwardDiff" mean_abs_diff=StatsBase.mean(abs.(grad_fd .- grad_zyg))
+    @test isapprox(grad_fd, grad_zyg, atol = 1.0e-6)
+
+    x_1d = rand(10, 1)
+    rb_1d = create_recurrence_basis(x_1d, 6)
+    degs_1d = aPCE_MultivariatePolynomialDegrees(1, 6, 1.0, 1.0)
+    f_1d(x) = sum(ArbitraryPolynomialChaosExpansion.aPCE_PsiPolynomialMatrix_zygote(x, degs_1d, rb_1d))
+
+    grad_1d_fd = ForwardDiff.gradient(f_1d, x_1d)
+    grad_1d_zyg = Zygote.gradient(f_1d, x_1d)[1]
+    @test isapprox(grad_1d_fd, grad_1d_zyg, atol = 1.0e-6)
 end
 
 
