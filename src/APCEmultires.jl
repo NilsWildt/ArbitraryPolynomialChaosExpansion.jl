@@ -1011,3 +1011,36 @@ end
     expected = [0 0; 0 1; 1 0; 1 1; 2 0]
     @test rows == expected
 end
+
+@testitem "multires_AD_mooncake_crosscheck" begin
+    using ForwardDiff, Zygote, Random
+    using DifferentiationInterface
+    using ADTypes: AutoMooncake
+    using ArbitraryPolynomialChaosExpansion: aPCE_PsiPolynomialMatrix_zygote
+
+    Random.seed!(42)
+    x = rand(10, 2)
+    degree = 4
+    degs = aPCE_MultivariatePolynomialDegrees(2, degree, 1.0, 1.0)
+    mwb = create_multiwavelet_basis(x, degree)
+
+    f_multi(z) = sum(aPCE_PsiPolynomialMatrix_zygote(z, degs, mwb))
+
+    # ForwardDiff — numerical ground truth
+    grad_fd = ForwardDiff.gradient(f_multi, x)
+
+    # Zygote — via ChainRules rrule
+    grad_zyg = Zygote.gradient(f_multi, x)[1]
+
+    # Mooncake — via @from_rrule registration in MooncakeExt.jl
+    backend = AutoMooncake()
+    extras = prepare_gradient(f_multi, backend, x)
+    grad_moon = similar(x)
+    gradient!(f_multi, grad_moon, extras, backend, x)
+
+    # Three-way agreement
+    @test isapprox(grad_fd, grad_zyg, atol = 1.0e-6)
+    @test isapprox(grad_fd, grad_moon, atol = 1.0e-6)
+    @test all(isfinite, grad_moon)
+    @test !all(iszero, grad_moon)
+end

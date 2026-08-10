@@ -92,6 +92,34 @@ An extended variant (b = 0.5, 5× the standard) with only 300 training samples a
   <img src="figures/ishigami_extended_comparison.png" width="100%" alt="Extended Ishigami comparison: Standard vs Regularized vs FastARD">
 </p>
 
+### Multiresolution Basis (aMR-PC)
+
+For responses with sharp transitions or multimodal behaviour, a single global polynomial basis struggles with Runge-type oscillations. The [multiresolution basis](https://doi.org/10.1016/j.ress.2022.108376) decomposes the input domain into elements, each with its own local orthonormal basis and independent coefficient solve — eliminating cross-domain interference.
+
+On a 1-D step function (degree 6, 80 training points), splitting at the discontinuity reduces prediction MSE by **470×**:
+
+| Method | MSE |
+|--------|-----|
+| Global aPCE (single element) | 8.6 × 10⁻² |
+| **Multires aPCE** (2 elements) | **1.8 × 10⁻⁴** |
+
+<p align="center">
+  <img src="figures/multires_bimodal_comparison.png" width="90%" alt="Multiresolution aPCE vs global aPCE on a step function">
+</p>
+
+```julia
+# Standard global basis — overshoots near discontinuities
+apc_global = aPCE(X, degree; basis = Val(:recurrence))
+
+# Multiresolution: split domain at the discontinuity
+apc_mr = aPCE(X, degree; basis = Val(:multires),
+              split_dim = 1, split_point = 0.5)
+
+train!(apc_mr, X, y)
+predict(apc_mr, X_test)
+UQ(apc_mr)
+```
+
 ## Usage
 
 ### Creating Polynomial Bases

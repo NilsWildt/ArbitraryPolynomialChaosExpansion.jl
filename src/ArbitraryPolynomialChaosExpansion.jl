@@ -84,6 +84,11 @@ include("APCEGradientOverrides.jl")
             train!(apc_instance, TrainingInput, TrainingOutput; bayesian_inversion = true, reg_order = 2)
             predict(apc_instance, TrainingInput)
             UQ(apc_instance)
+
+            # Multires basis precompilation
+            apc_mr = aPCE(TrainingInput, degree; basis = Val(:multires))
+            train!(apc_mr, TrainingInput, TrainingOutput)
+            predict(apc_mr, TrainingInput)
         end
     end
 end
