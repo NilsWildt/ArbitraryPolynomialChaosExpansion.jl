@@ -388,3 +388,109 @@ function ChainRulesCore.rrule(
     end
     return mwb, create_multiwavelet_basis_pullback
 end
+
+# ============================================================================
+# Tests (TestItems.jl — discovered by TestItemRunner in both src/ and test/)
+# ============================================================================
+
+@testitem "multires_single_element_equivalence" begin
+    using ForwardDiff, Zygote, StatsBase, Random
+    using ArbitraryPolynomialChaosExpansion: predict, train!, UQ
+
+    Random.seed!(42)
+    x = rand(20, 2)
+    degree = 3
+
+    mwb = create_multiwavelet_basis(x, degree)
+    rb = create_recurrence_basis(x, degree)
+
+    @test mwb isa MultiWaveletBasis{Float64}
+    @test length(mwb.elements) == 1
+    @test mwb.elements[1].basis isa RecurrenceCenteredBasis{Float64}
+
+    degs = aPCE_MultivariatePolynomialDegrees(2, degree, 1.0, 1.0)
+    Psi_multi = aPCE_PsiPolynomialMatrix(x, degs, mwb)
+    Psi_rec = aPCE_PsiPolynomialMatrix(x, degs, rb)
+
+    @test size(Psi_multi) == size(Psi_rec)
+    @test maximum(abs.(Psi_multi .- Psi_rec)) < 1.0e-12
+
+    TrainingOutput = sin.(x[:, 1]) .* cos.(x[:, 2])
+    TrainingOutput = reshape(TrainingOutput, :, 1)
+
+    apc_multi = aPCE(x, degree; outdim = 1, basis = Val(:multires))
+    apc_rec = aPCE(x, degree; outdim = 1, basis = Val(:recurrence))
+
+    train!(apc_multi, x, TrainingOutput; bayesian_inversion = true, reg_order = 2)
+    train!(apc_rec, x, TrainingOutput; bayesian_inversion = true, reg_order = 2)
+
+    @test maximum(abs.(apc_multi.ExpansionCoefficients .- apc_rec.ExpansionCoefficients)) < 1.0e-12
+
+    preds_multi = predict(apc_multi, x)
+    preds_rec = predict(apc_rec, x)
+    @test maximum(abs.(preds_multi .- preds_rec)) < 1.0e-12
+
+    uq_multi = UQ(apc_multi)
+    uq_rec = UQ(apc_rec)
+    @test maximum(abs.(uq_multi.OutputMean .- uq_rec.OutputMean)) < 1.0e-12
+    @test maximum(abs.(uq_multi.OutputVar .- uq_rec.OutputVar)) < 1.0e-12
+end
+
+@testitem "multires_AD_forwarddiff_zygote" begin
+    using ForwardDiff, Zygote, StatsBase, Random
+    using ArbitraryPolynomialChaosExpansion: aPCE_PsiPolynomialMatrix_zygote
+
+    Random.seed!(42)
+    x = rand(10, 2)
+    degree = 4
+    degs = aPCE_MultivariatePolynomialDegrees(2, degree, 1.0, 1.0)
+    mwb = create_multiwavelet_basis(x, degree)
+
+    f_multi(z) = sum(aPCE_PsiPolynomialMatrix_zygote(z, degs, mwb))
+
+    grad_fd = ForwardDiff.gradient(f_multi, x)
+    grad_zyg = Zygote.gradient(f_multi, x)[1]
+
+    @test isapprox(grad_fd, grad_zyg, atol = 1.0e-6)
+
+    rb = create_recurrence_basis(x, degree)
+    f_rec(z) = sum(aPCE_PsiPolynomialMatrix_zygote(z, degs, rb))
+    grad_rec_fd = ForwardDiff.gradient(f_rec, x)
+
+    @test isapprox(grad_fd, grad_rec_fd, atol = 1.0e-12)
+end
+
+@testitem "multires_per_element_degree" begin
+    using Random
+
+    Random.seed!(42)
+    x = rand(20, 3)
+
+    degree_vec = [2, 3, 4]
+    mwb = create_multiwavelet_basis(x, degree_vec)
+
+    @test mwb isa MultiWaveletBasis{Float64}
+    @test mwb.elements[1].degree == degree_vec
+    @test mwb.elements[1].basis.degree == maximum(degree_vec)
+
+    mwb2 = create_multiwavelet_basis(x, 3)
+    @test all(mwb2.elements[1].degree .== 3)
+end
+
+@testitem "multires_type_stability" begin
+    using Random
+
+    Random.seed!(42)
+    x = rand(10, 2)
+    degree = 3
+    degs = aPCE_MultivariatePolynomialDegrees(2, degree, 1.0, 1.0)
+    mwb = create_multiwavelet_basis(x, degree)
+
+    Psi = aPCE_PsiPolynomialMatrix(x, degs, mwb)
+    @test Psi isa Matrix{Float64}
+
+    x32 = Float32.(x)
+    mwb32 = create_multiwavelet_basis(x32, degree)
+    Psi32 = aPCE_PsiPolynomialMatrix(x32, degs, mwb32)
+    @test Psi32 isa Matrix{Float32}
+end
