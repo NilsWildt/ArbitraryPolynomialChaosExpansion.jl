@@ -96,12 +96,13 @@ An extended variant (b = 0.5, 5× the standard) with only 300 training samples a
 
 For responses with sharp transitions or multimodal behaviour, a single global polynomial basis struggles with Runge-type oscillations. The [multiresolution basis](https://doi.org/10.1016/j.ress.2022.108376) decomposes the input domain into elements, each with its own local orthonormal basis and independent coefficient solve — eliminating cross-domain interference.
 
-On a 1-D step function (degree 6, 80 training points), splitting at the discontinuity reduces prediction MSE by **470×**:
+On a 1-D step function (degree 6, 80 training points), splitting at the discontinuity dramatically improves prediction accuracy:
 
-| Method | MSE |
-|--------|-----|
-| Global aPCE (single element) | 8.6 × 10⁻² |
-| **Multires aPCE** (2 elements) | **1.8 × 10⁻⁴** |
+| Method | MSE | vs Global |
+|--------|-----|-----------|
+| Global aPCE (single element) | 8.6 × 10⁻² | — |
+| Multires aPCE — manual split (split\_point = 0.5) | 1.8 × 10⁻⁴ | **470×** |
+| Multires aPCE — **auto-refine** (no prior knowledge) | 4.8 × 10⁻³ | **18×** |
 
 <p align="center">
   <img src="figures/multires_bimodal_comparison.png" width="90%" alt="Multiresolution aPCE vs global aPCE on a step function">
@@ -111,14 +112,27 @@ On a 1-D step function (degree 6, 80 training points), splitting at the disconti
 # Standard global basis — overshoots near discontinuities
 apc_global = aPCE(X, degree; basis = Val(:recurrence))
 
-# Multiresolution: split domain at the discontinuity
+# Manual split when the discontinuity location is known
 apc_mr = aPCE(X, degree; basis = Val(:multires),
               split_dim = 1, split_point = 0.5)
-
 train!(apc_mr, X, y)
-predict(apc_mr, X_test)
-UQ(apc_mr)
+
+# Auto-refine: the algorithm finds the discontinuity itself
+apc_auto = aPCE(X, degree; basis = Val(:multires))
+auto_refine!(apc_auto, X, y; max_elements = 8)
+
+# Both paths give the same API for prediction and UQ
+predict(apc_auto, X_test)
+UQ(apc_auto)
+
+# Sobol sensitivity indices via surrogate Monte Carlo (Saltelli estimator)
+sobol_indices_multires(apc_auto, X)
+
+# Bootstrap confidence intervals on the Sobol indices
+sobol_bootstrap_ci(apc_auto, X, y; n_bootstrap = 200)
 ```
+
+The auto-refinement loop uses a between-group-variance criterion to select which element and dimension to split, a quantile grid search for the optimal split point, and stops when further splitting yields less than 1% variance improvement. No domain knowledge or manual split points required.
 
 ## Usage
 
