@@ -42,6 +42,9 @@ _aPCE_build_basis(::Val{:monomial}, is_orthonormal::Bool, x, degree, center_data
 _aPCE_build_basis(::Val{:recurrence}, is_orthonormal::Bool, x, degree, _center_data) =
     is_orthonormal ? create_recurrence_basis(x, degree) :
     throw(ArgumentError("basis = Val(:recurrence) requires is_orthonormal = true"))
+_aPCE_build_basis(::Val{:multires}, is_orthonormal::Bool, x, degree, _center_data) =
+    is_orthonormal ? create_multiwavelet_basis(x, degree) :
+    throw(ArgumentError("basis = Val(:multires) requires is_orthonormal = true"))
 
 # `aPCE{T, B}`: `B` is the basis-backend container type (an `AbstractArray{T}`
 # for `:monomial`, a `RecurrenceCenteredBasis{T}` for `:recurrence`). Carrying
