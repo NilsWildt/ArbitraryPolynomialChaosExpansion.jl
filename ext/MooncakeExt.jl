@@ -38,6 +38,23 @@ using Mooncake: @from_rrule, DefaultCtx
     AbstractArray, Integer,
 }
 
+# Register multires basis construction (AD-opaque: NoTangent)
+@from_rrule DefaultCtx Tuple{
+    typeof(ArbitraryPolynomialChaosExpansion.create_multiwavelet_basis),
+    AbstractArray, Integer,
+}
+
+@from_rrule DefaultCtx Tuple{
+    typeof(ArbitraryPolynomialChaosExpansion.create_multiwavelet_basis),
+    AbstractArray, Vector{Int},
+}
+
+# Register multires Psi assembly (custom analytic rrule)
+@from_rrule DefaultCtx Tuple{
+    typeof(ArbitraryPolynomialChaosExpansion.aPCE_PsiPolynomialMatrix_zygote),
+    AbstractArray, AbstractMatrix{Int}, ArbitraryPolynomialChaosExpansion.MultiWaveletBasis,
+}
+
 @from_rrule DefaultCtx Tuple{typeof(ArbitraryPolynomialChaosExpansion.solve_linear_robust), Any, Any} true
 @from_rrule DefaultCtx Tuple{typeof(pinv), AbstractMatrix}
 

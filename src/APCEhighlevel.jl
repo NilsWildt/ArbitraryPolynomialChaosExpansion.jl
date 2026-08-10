@@ -17,6 +17,10 @@ export aPCE, predict_from_coeffs
 #   Val(:monomial)             classic array-of-coefficients basis (`create_basis`)
 #   Val(:recurrence)           three-term-recurrence basis (`create_recurrence_basis`;
 #                             orthonormal-only, numerically stable to much higher degree)
+#   Val(:multires)             multiresolution/multi-element basis (aMR-PC,
+#                             `create_multiwavelet_basis`; orthonormal-only), split into
+#                             two elements via the `split_dim`/`split_point` keywords
+#                             forwarded from the constructor
 #
 # The default is `:auto` -> recurrence for the orthonormal case: benchmarked
 # 2-5x faster than the monomial path (and leaner end-to-end) AND more robust on
@@ -42,8 +46,8 @@ _aPCE_build_basis(::Val{:monomial}, is_orthonormal::Bool, x, degree, center_data
 _aPCE_build_basis(::Val{:recurrence}, is_orthonormal::Bool, x, degree, _center_data) =
     is_orthonormal ? create_recurrence_basis(x, degree) :
     throw(ArgumentError("basis = Val(:recurrence) requires is_orthonormal = true"))
-_aPCE_build_basis(::Val{:multires}, is_orthonormal::Bool, x, degree, _center_data) =
-    is_orthonormal ? create_multiwavelet_basis(x, degree) :
+_aPCE_build_basis(::Val{:multires}, is_orthonormal::Bool, x, degree, _center_data; kwargs...) =
+    is_orthonormal ? create_multiwavelet_basis(x, degree; kwargs...) :
     throw(ArgumentError("basis = Val(:multires) requires is_orthonormal = true"))
 
 # `aPCE{T, B}`: `B` is the basis-backend container type (an `AbstractArray{T}`
@@ -128,7 +132,7 @@ Base.@constprop :aggressive function aPCE(
     end
     MultivariatePolynomialDegrees = aPCE_MultivariatePolynomialDegrees(input_dimensions, ExpansionDegree + gauss_one_order_more, s_marginals, s_interactions)
     NumberOfTerms = min(size(MultivariatePolynomialDegrees, 1), numberPolynomials(ExpansionDegree + gauss_one_order_more, input_dimensions))
-    OrthonormalBasis = _aPCE_build_basis(basis, is_orthonormal, InputDistribution, ExpansionDegree + gauss_one_order_more, center_data)
+    OrthonormalBasis = _aPCE_build_basis(basis, is_orthonormal, InputDistribution, ExpansionDegree + gauss_one_order_more, center_data; kwargs...)
     ExpansionCoefficients = zeros(T, NumberOfTerms, outdim)
     return aPCE(
         InputDistribution,
@@ -462,23 +466,22 @@ end
 #     return nothing
 # end
 
-function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion = :true, reg_order = 1)
-    @info "=> aPCE Toolbox: Training Arbitrary Polynomial Chaos ..."
-    T = eltype(TrainingInput)
+"""
+    _train_solve(Psi, y_rhs; bayesian_inversion = true, reg_order = 1)
 
-    # Format the output data
-    if size(y_rhs, 2) == 1
-        y_rhs = reshape(y_rhs, :, 1)
-    end
-
-    # Update dimensions if needed
-    if aPCE.output_dimensions != size(y_rhs, 2)
-        aPCE.output_dimensions = size(y_rhs, 2)
-        aPCE.ExpansionCoefficients = zeros(T, aPCE.NumberOfTerms, aPCE.output_dimensions)
-    end
-
-    # Compute the polynomial matrix
-    Psi = aPCE_PsiPolynomialMatrix(aPCE, TrainingInput)' |> Matrix{T}
+Regularized least-squares solve shared by the global and per-element (multires)
+`train!` methods. `Psi` is the (n_points × n_terms) design matrix, `y_rhs` is the
+(n_points × outdim) training output; returns the (n_terms × outdim) coefficient
+matrix.
+"""
+function _train_solve(
+        Psi::AbstractMatrix{T},
+        y_rhs::AbstractMatrix;
+        bayesian_inversion = true,
+        reg_order = 1,
+    ) where {T <: Real}
+    num_terms = size(Psi, 2)
+    coeffs = Matrix{T}(undef, num_terms, size(y_rhs, 2))
 
     # Primary solve: Moore-Penrose pseudoinverse. `pinv` is SVD-based and does
     # not throw for finite input, so we test the result for finiteness instead
@@ -488,13 +491,12 @@ function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion = :true, reg_orde
     # guarded by an explicit success/finiteness check rather than try/catch.
     Psi_inv = LinearAlgebra.pinv(Psi, rtol = sqrt(eps(real(float(oneunit(eltype(Psi)))))))
     # Replaced @tensor with explicit matrix multiplication for Mooncake AD compatibility
-    coeffs = Psi_inv * y_rhs
-    if all(isfinite, coeffs)
-        aPCE.ExpansionCoefficients .= coeffs
+    primary = Psi_inv * y_rhs
+    if all(isfinite, primary)
+        coeffs .= primary
     else
         @warn "Standard pinv produced non-finite coefficients, using robust per-output fallback"
         λ = 1.0e-6  # Regularization parameter
-        num_terms = size(aPCE.ExpansionCoefficients, 1)
 
         for k in axes(y_rhs, 2)
             # Tikhonov: (Psi'Psi + λI) c = Psi'y. The system matrix is symmetric
@@ -505,7 +507,7 @@ function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion = :true, reg_orde
             if LinearAlgebra.issuccess(cF)
                 tikhonov = cF \ (Psi' * y_rhs[:, k])
                 if all(isfinite, tikhonov)
-                    aPCE.ExpansionCoefficients[:, k] = tikhonov
+                    coeffs[:, k] = tikhonov
                     continue
                 end
             end
@@ -517,21 +519,21 @@ function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion = :true, reg_orde
             S_inv = map(s -> s > tol ? 1 / s : zero(T), S)
             svd_sol = (V * Diagonal(S_inv) * U') * y_rhs[:, k]
             if all(isfinite, svd_sol)
-                aPCE.ExpansionCoefficients[:, k] = svd_sol
+                coeffs[:, k] = svd_sol
                 continue
             end
 
             @error "All numerical approaches failed for output $k, falling back to QR"
             # Last resort - QR factorization for this output.
             F = LinearAlgebra.qr(Psi)
-            aPCE.ExpansionCoefficients[:, k] = F \ y_rhs[:, k]
+            coeffs[:, k] = F \ y_rhs[:, k]
         end
     end
 
     # Continue with bayesian inversion if enabled
     if bayesian_inversion
         # @info "Using bayesian regularization to find the expansion coefficients"
-        x₀ = copy(aPCE.ExpansionCoefficients)
+        x₀ = copy(coeffs)
 
         # Validate initial guess - replace Inf/NaN with zeros
         if any(!isfinite, x₀)
@@ -549,11 +551,11 @@ function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion = :true, reg_orde
             # deep inside on an ill-posed problem, and it exposes no success-flag
             # API to branch on. Catching at this third-party boundary is what
             # implements the order-fallback; on total failure we keep the pinv
-            # solution already in ExpansionCoefficients. No autodiff runs through
-            # this path (train! is a fitting routine, not a differentiated kernel).
+            # solution already in `coeffs`. No autodiff runs through this path
+            # (training is a fitting routine, not a differentiated kernel).
             for order in reg_order:-1:0
                 try
-                    aPCE.ExpansionCoefficients[:, i] .= invert(
+                    coeffs[:, i] .= invert(
                         Psi, y_rhs[:, i], Lₖx₀(order, view(x₀, :, i));
                         alg = :gcv_svd,
                         method = LBFGS(linesearch = LineSearches.BackTracking())
@@ -571,6 +573,29 @@ function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion = :true, reg_orde
             end
         end
     end
+
+    return coeffs
+end
+
+function train!(aPCE, TrainingInput, y_rhs; bayesian_inversion = true, reg_order = 1)
+    @info "=> aPCE Toolbox: Training Arbitrary Polynomial Chaos ..."
+    T = eltype(TrainingInput)
+
+    # Format the output data
+    if size(y_rhs, 2) == 1
+        y_rhs = reshape(y_rhs, :, 1)
+    end
+
+    # Update dimensions if needed
+    if aPCE.output_dimensions != size(y_rhs, 2)
+        aPCE.output_dimensions = size(y_rhs, 2)
+        aPCE.ExpansionCoefficients = zeros(T, aPCE.NumberOfTerms, aPCE.output_dimensions)
+    end
+
+    # Compute the polynomial matrix
+    Psi = aPCE_PsiPolynomialMatrix(aPCE, TrainingInput)' |> Matrix{T}
+
+    aPCE.ExpansionCoefficients .= _train_solve(Psi, y_rhs; bayesian_inversion = bayesian_inversion, reg_order = reg_order)
 
     # Compute and report errors
     for k in axes(aPCE.ExpansionCoefficients, 2)
