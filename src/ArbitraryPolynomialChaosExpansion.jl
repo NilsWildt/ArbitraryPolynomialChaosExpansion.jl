@@ -61,7 +61,7 @@ using KernelAbstractions
 
 BLAS.set_num_threads(CPUSummary.get_cpu_threads() ÷ 2)
 
-export aPCE_FullBasis, aPCE_MultivariatePolynomialDegrees, aPCE_PsiPolynomialMatrix, aPCE_DerivativeBasis, compose_Ψ, GaussianCollocation, partitionTrainTest, special_sort_two_arrays!, train!, evaluate_Ψ, aPCE, aPCE_OrthonormalBasis, create_basis, create_centered_basis, CenteredBasis, create_recurrence_basis, RecurrenceCenteredBasis, normalization_functions, predict, UQ, PsiPolynomialMatrix_zygote, reverse_columns!, compute_moments!, MultiWaveletBasis, MultiWaveletElement, create_multiwavelet_basis
+export aPCE_FullBasis, aPCE_MultivariatePolynomialDegrees, aPCE_PsiPolynomialMatrix, aPCE_DerivativeBasis, compose_Ψ, GaussianCollocation, partitionTrainTest, special_sort_two_arrays!, train!, evaluate_Ψ, aPCE, aPCE_OrthonormalBasis, create_basis, create_centered_basis, CenteredBasis, create_recurrence_basis, RecurrenceCenteredBasis, normalization_functions, predict, UQ, PsiPolynomialMatrix_zygote, reverse_columns!, compute_moments!, MultiWaveletBasis, MultiWaveletElement, create_multiwavelet_basis, refine!, auto_refine!, element_variance_contribution, sobol_indices_multires, sobol_bootstrap_ci
 
 include("APCEfunctions.jl")
 include("APCEhighlevel.jl")

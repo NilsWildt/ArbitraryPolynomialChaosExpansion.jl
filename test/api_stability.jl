@@ -6,12 +6,14 @@
 #
 # Ground truth captured from `names(ArbitraryPolynomialChaosExpansion)` on the
 # v0.2.4 baseline (21 exported symbols), extended with the opt-in recurrence
-# basis (`create_recurrence_basis`, `RecurrenceCenteredBasis`) → 23, and with
-# the analytic derivative basis (`aPCE_DerivativeBasis`) → 24, and with the
+# basis (`create_recurrence_basis`, `RecurrenceCenteredBasis`) → 23, and with the
+# analytic derivative basis (`aPCE_DerivativeBasis`) → 24, and with the
 # multiresolution basis (`MultiWaveletBasis`, `MultiWaveletElement`,
-# `create_multiwavelet_basis`) → 27.  Note that `APCEGradientOverrides` is a
-# *submodule*; its exports stay in the submodule namespace and are deliberately
-# NOT part of the top-level public API.
+# `create_multiwavelet_basis`) → 27, and with adaptive refinement
+# (`refine!`, `auto_refine!`, `element_variance_contribution`,
+# `sobol_indices_multires`, `sobol_bootstrap_ci`) → 32.  Note that
+# `APCEGradientOverrides` is a *submodule*; its exports stay in the submodule
+# namespace and are deliberately NOT part of the top-level public API.
 
 @testitem "public_API_surface_lock" begin
     expected = Set(
@@ -43,6 +45,11 @@
             :train!,
             :MultiWaveletBasis,
             :MultiWaveletElement,
+            :refine!,
+            :auto_refine!,
+            :element_variance_contribution,
+            :sobol_indices_multires,
+            :sobol_bootstrap_ci,
         ]
     )
     actual = Set(
@@ -58,7 +65,7 @@
     @test isempty(removed)
     @test isempty(added)
     @test actual == expected
-    @test length(actual) == 27
+    @test length(actual) == 32
 end
 
 @testitem "public_API_callables_defined" begin
@@ -71,7 +78,8 @@ end
         :compose_Ψ, :evaluate_Ψ, :normalization_functions, :partitionTrainTest,
         :special_sort_two_arrays!, :reverse_columns!, :compute_moments!,
         :PsiPolynomialMatrix_zygote, :create_recurrence_basis,
-        :create_multiwavelet_basis,
+        :create_multiwavelet_basis, :refine!, :auto_refine!,
+        :element_variance_contribution, :sobol_indices_multires, :sobol_bootstrap_ci,
     ]
     for sym in callables
         @test isdefined(M, sym)

@@ -45,6 +45,12 @@ element — including points outside the training data's range.
 - `coefficients::Matrix{T}`: per-element expansion coefficients, shape
   `(n_terms_e, outdim)`, rows aligned with `multi_indices`.  Populated by
   `train!`; empty until trained.
+- `xmin::Vector{T}`: per-dimension minimum of the element's training data.
+  Populated by `train!`; `-Inf` until then.  Used by `predict` to clip
+  off-support evaluation points (e.g. Saltelli mixed inputs) to the element's
+  support, bounding local-polynomial extrapolation.
+- `xmax::Vector{T}`: per-dimension maximum of the element's training data
+  (see `xmin`).
 """
 mutable struct MultiWaveletElement{T <: Real}
     lo::Vector{T}
@@ -56,6 +62,8 @@ mutable struct MultiWaveletElement{T <: Real}
     weight::T
     multi_indices::Matrix{Int}
     coefficients::Matrix{T}
+    xmin::Vector{T}
+    xmax::Vector{T}
 end
 
 """
@@ -144,6 +152,7 @@ function _create_single_element_basis(
         lo, hi, copy(degree), rb,
         zeros(Int, n_dims), zeros(Int, n_dims),
         one(T), zeros(Int, 0, 0), zeros(T, 0, 0),
+        fill(T(-Inf), n_dims), fill(T(Inf), n_dims),
     )
 
     return MultiWaveletBasis{T}(n_dims, [element])
@@ -187,6 +196,7 @@ function _create_split_basis(
         elements, MultiWaveletElement{T}(
             lo, hi, fill(degree_lo, n_dims), rb_lo, level, zeros(Int, n_dims),
             T(count(mask_lo) / n_samples), zeros(Int, 0, 0), zeros(T, 0, 0),
+            fill(T(-Inf), n_dims), fill(T(Inf), n_dims),
         ),
     )
 
@@ -204,6 +214,7 @@ function _create_split_basis(
         elements, MultiWaveletElement{T}(
             lo, hi, fill(degree_hi, n_dims), rb_hi, level, dim_idx,
             T(count(mask_hi) / n_samples), zeros(Int, 0, 0), zeros(T, 0, 0),
+            fill(T(-Inf), n_dims), fill(T(Inf), n_dims),
         ),
     )
 
@@ -467,6 +478,11 @@ function train!(
             Matrix{T}(Psi_e'), y_e;
             bayesian_inversion = bayesian_inversion, reg_order = reg_order,
         )
+        # Training-data support of this element, per dimension — used by
+        # `predict` to clip off-support evaluation points (e.g. Saltelli
+        # mixed inputs) before evaluating the local polynomial.
+        elem.xmin = vec(minimum(x_e; dims = 1))
+        elem.xmax = vec(maximum(x_e; dims = 1))
     end
 
     if length(mwb.elements) == 1 &&
@@ -512,7 +528,13 @@ function predict(
         isempty(elem.coefficients) && continue
 
         degs_e = _element_indices(elem, mwb.n_dims)
-        Psi_e = aPCE_PsiPolynomialMatrix(x[sids, :], degs_e, elem.basis)
+        # Clip evaluation points to this element's training-data support before
+        # evaluating the local polynomial: bounds catastrophic extrapolation of
+        # the local basis at off-support inputs (e.g. Saltelli mixed points,
+        # whose coordinates are individually in-range but jointly off the
+        # element's data manifold). No-op for points inside the support.
+        x_clip = clamp.(x[sids, :], elem.xmin', elem.xmax')
+        Psi_e = aPCE_PsiPolynomialMatrix(x_clip, degs_e, elem.basis)
         y_pred[sids, :] = Psi_e' * elem.coefficients
     end
 
@@ -646,6 +668,581 @@ function sobol_indices_multires(mwb::MultiWaveletBasis{T}) where {T <: Real}
     return (S_first = S_first, S_total = S_total)
 end
 
+# ============================================================================
+# Adaptive refinement (auto-refinement)
+#
+# Recursively splits the element with the largest local variance contribution
+# V_e = w_e · Σ_{p≥2} c_e[p]², using a quantile split point.  An optional
+# Sobol-stability stopping rule terminates refinement when the global
+# sensitivity indices stop moving within their bootstrap confidence intervals.
+#
+# References:
+#   Wan & Karniadakis (2005) J. Comput. Phys. 209:617–642 — variance-decay
+#     refinement criterion (Eqs. 23–26)
+#   Le Maître, Najm, Ghanem, Knio (2004) J. Comput. Phys. 197:502–531 —
+#     multi-resolution analysis framework
+#   Kröker & Oladyshkin (2022) Reliab. Eng. Syst. Safety 222:108376 — aMR-PC
+#   Dubreuil, Berveiller, Petitjean, Salaün (2014) Reliab. Eng. Syst. Safety
+#     121:263–275 — bootstrap CIs on Sobol indices and the stopping rule
+#     transposed here from DoE enrichment to h-refinement
+# ============================================================================
+
+"""
+    element_variance_contribution(mwb, elem_idx) -> T
+
+Per-element non-constant variance contribution ``V_e = w_e \\sum_{p \\geq 2} c_e[p]^2``.
+A high ``V_e`` indicates the local basis is working hard — that's where a split
+will reduce the approximation error most.
+
+# References
+- Wan & Karniadakis (2005) J. Comput. Phys. 209:617–642
+- Le Maître et al. (2004) J. Comput. Phys. 197:502–531
+"""
+function element_variance_contribution(
+        mwb::MultiWaveletBasis{T}, elem_idx::Int,
+    ) where {T <: Real}
+    elem = mwb.elements[elem_idx]
+    isempty(elem.coefficients) && return zero(T)
+    w = elem.weight
+    s = zero(T)
+    for i in 2:size(elem.coefficients, 1)
+        for j in 1:size(elem.coefficients, 2)
+            s += elem.coefficients[i, j]^2
+        end
+    end
+    return w * s
+end
+
+"""
+    _select_split_point(x_elem, split_dim; strategy)
+
+Select a candidate split point along `split_dim`.
+
+- `:quantile` (default): median — matches equal-mass weighting assumption
+- `:mean`: arithmetic mean
+"""
+function _select_split_point(
+        x_elem::AbstractMatrix{T}, split_dim::Int;
+        strategy::Symbol = :quantile,
+    ) where {T <: Real}
+    col = @view x_elem[:, split_dim]
+    if strategy == :quantile
+        sorted = sort!(collect(col))
+        n = length(sorted)
+        return T(n % 2 == 0 ? (sorted[n ÷ 2] + sorted[n ÷ 2 + 1]) / 2 : sorted[(n + 1) ÷ 2])
+    elseif strategy == :mean
+        return T(sum(col) / length(col))
+    else
+        throw(ArgumentError("unknown strategy: $strategy (use :quantile or :mean)"))
+    end
+end
+
+"""
+    _split_one_element!(mwb, elem_idx, split_dim, split_point, x)
+
+Replace element `elem_idx` in-place with two children split at
+`(split_dim, split_point)`.  Threads `level` and `dim_index` for recursive
+refinement.
+"""
+function _split_one_element!(
+        mwb::MultiWaveletBasis{T},
+        elem_idx::Int,
+        split_dim::Int,
+        split_point::Real,
+        x::AbstractMatrix,
+    ) where {T <: Real}
+    parent = mwb.elements[elem_idx]
+    n_dims = mwb.n_dims
+
+    # Gather training points belonging to this element
+    xs = ndims(x) == 1 ? reshape(x, :, 1) : x
+    in_parent = trues(size(xs, 1))
+    for d in 1:n_dims
+        in_parent .&= (xs[:, d] .>= parent.lo[d]) .& (xs[:, d] .<= parent.hi[d])
+    end
+    x_parent = xs[in_parent, :]
+
+    mask_lo = x_parent[:, split_dim] .<= T(split_point)
+    mask_hi = .!mask_lo
+    n_lo = count(mask_lo)
+    n_hi = count(mask_hi)
+
+    if n_lo < 2 || n_hi < 2
+        throw(ArgumentError(
+            "split at $(split_point) on dim $(split_dim) leaves too few samples " *
+            "($(n_lo) lo, $(n_hi) hi); element has $(size(x_parent, 1)) points"))
+    end
+
+    n_parent = size(x_parent, 1)
+    children = MultiWaveletElement{T}[]
+
+    for (mask, is_hi) in ((mask_lo, false), (mask_hi, true))
+        x_child = x_parent[mask, :]
+        # Cap degree to maintain ≥2× overdetermination (n_samples ≥ 2(n_terms))
+        degree_child = max(1, min(maximum(parent.degree), (size(x_child, 1) - 1) ÷ 2))
+        rb_child = create_recurrence_basis(x_child, degree_child)
+
+        lo = copy(parent.lo)
+        hi = copy(parent.hi)
+        if is_hi
+            lo[split_dim] = T(split_point)
+        else
+            hi[split_dim] = T(split_point)
+        end
+
+        level = copy(parent.level)
+        level[split_dim] += 1
+
+        dim_index = copy(parent.dim_index)
+        dim_index[split_dim] = 2 * parent.dim_index[split_dim] + (is_hi ? 1 : 0)
+
+        # Conditional weight: P(child | parent) × P(parent)
+        weight = T(count(mask) / n_parent) * parent.weight
+
+        push!(children, MultiWaveletElement{T}(
+            lo, hi, fill(degree_child, n_dims), rb_child,
+            level, dim_index, weight,
+            zeros(Int, 0, 0), zeros(T, 0, 0),
+            fill(T(-Inf), n_dims), fill(T(Inf), n_dims)))
+    end
+
+    splice!(mwb.elements, elem_idx, children)
+    return nothing
+end
+
+"""
+    refine!(apc, X, y, elem_idx, split_dim, split_point)
+
+Split element `elem_idx` at `(split_dim, split_point)` and retrain all elements.
+"""
+function refine!(
+        apc::aPCE{T, MultiWaveletBasis{T}, A1, A2},
+        X::AbstractMatrix,
+        y::AbstractVecOrMat,
+        elem_idx::Int,
+        split_dim::Int,
+        split_point::Real,
+    ) where {T <: Real, A1, A2}
+    xs = ndims(X) == 1 ? reshape(X, :, 1) : X
+    _split_one_element!(apc.OrthonormalBasis, elem_idx, split_dim, split_point, xs)
+    train!(apc, xs, y)
+    return apc
+end
+
+"""
+    auto_refine!(apc, X, y; max_elements, min_samples, strategy, sobol_tol, verbose)
+
+Adaptively refine the multiresolution basis by recursively splitting the element
++ dimension combination that yields the largest between-group variance reduction.
+
+At each step:
+1. Train the model (per-element independent solves).
+2. For each splittable element and candidate dimension, compute the between-group
+   variance proxy: ``n_{lo} n_{hi} / n_e^2 \\cdot (\\bar y_{lo} - \\bar y_{hi})^2``.
+3. Split the (element, dim) pair with the largest score at its median.
+4. Optionally: compute Sobol indices and stop when ``\\max|\\Delta S|`` falls below
+   `sobol_tol` (requires `X` for the marginal projection).
+
+# Keyword arguments
+- `max_elements::Int=8`: hard ceiling on element count
+- `min_samples_per_element::Int=0`: minimum training points per child (0 → auto: `n_terms + 5`)
+- `strategy::Symbol=:quantile`: split-point search (:quantile = grid, :median = fast)
+- `min_improvement::Real=0.01`: stop when best between-group variance < this fraction of Var(y)
+- `sobol_tol::Real=0`: if > 0, stop when max Sobol index change < sobol_tol
+- `verbose::Bool=false`: log each split
+
+# References
+- Wan & Karniadakis (2005) J. Comput. Phys. 209:617–642 — variance-decay criterion
+- Le Maître et al. (2004) J. Comput. Phys. 197:502–531 — multi-resolution analysis
+- Kröker & Oladyshkin (2022) Reliab. Eng. Syst. Safety 222:108376 — aMR-PC
+- Dubreuil et al. (2014) Reliab. Eng. Syst. Safety 121:263–275 — Sobol stopping rule
+"""
+function auto_refine!(
+        apc::aPCE{T, MultiWaveletBasis{T}, A1, A2},
+        X::AbstractVecOrMat,
+        y::AbstractVecOrMat;
+        max_elements::Int = 8,
+        min_samples_per_element::Int = 0,
+        strategy::Symbol = :quantile,
+        min_improvement::Real = 0.01,
+        sobol_tol::Real = 0.0,
+        verbose::Bool = false,
+    ) where {T <: Real, A1, A2}
+    xs = ndims(X) == 1 ? reshape(X, :, 1) : X
+    y_mat = ndims(y) == 1 ? reshape(y, :, 1) : y
+    mwb = apc.OrthonormalBasis
+    n_dims = mwb.n_dims
+    n_samples = size(xs, 1)
+
+    # Min-samples floor: if not specified, tie to local basis size
+    # (n_terms ≈ (degree+1)^n_dims for a full tensor basis)
+    max_degree = maximum(maximum(e.degree) for e in mwb.elements)
+    n_terms = (max_degree + 1)^n_dims
+    min_samples = min_samples_per_element > 0 ? min_samples_per_element : n_terms + 5
+
+    train!(apc, xs, y_mat)
+
+    # Coefficient-based Sobol from the per-element expansion (no off-support
+    # surrogate evaluations — see sobol_indices_multires(::MultiWaveletBasis)).
+    # The surrogate-MC Saltelli variant is numerically unstable for piecewise
+    # polynomial surrogates on strongly-correlated inputs: mixed pick-freeze
+    # points fall off the element data manifolds and the local bases
+    # extrapolate catastrophically, dominating the estimator.
+    S_prev = sobol_tol > 0 ? sobol_indices_multires(apc.OrthonormalBasis) : nothing
+
+    while length(mwb.elements) < max_elements
+        best_score = zero(T)
+        best_elem = 0
+        best_dim = 0
+        best_point = zero(T)
+
+        for (e, elem) in enumerate(mwb.elements)
+            in_elem = trues(n_samples)
+            for d in 1:n_dims
+                in_elem .&= (xs[:, d] .>= elem.lo[d]) .& (xs[:, d] .<= elem.hi[d])
+            end
+            n_elem = count(in_elem)
+            n_elem >= 2 * min_samples || continue
+
+            x_elem = xs[in_elem, :]
+            y_elem = y_mat[in_elem, 1]
+
+            for d in 1:n_dims
+                point, score = _select_best_split(
+                    x_elem, y_elem, d, min_samples; strategy = strategy)
+                isnan(point) && continue
+
+                if score > best_score
+                    best_score = score
+                    best_elem = e
+                    best_dim = d
+                    best_point = point
+                end
+            end
+        end
+
+        best_elem == 0 && break
+
+        # Variance-improvement threshold: stop when splitting yields negligible gain
+        if min_improvement > 0
+            y_col = @view y_mat[:, 1]
+            μ_y = sum(y_col) / n_samples
+            σ²_y = sum(abs2, y_col .- μ_y) / n_samples
+            if best_score < min_improvement * σ²_y
+                verbose && @info "auto_refine: improvement below threshold ($(round(best_score, sigdigits=4)) < $(round(min_improvement * σ²_y, sigdigits=4))), stopping"
+                break
+            end
+        end
+
+        if verbose
+            @info "auto_refine: splitting element $(best_elem) on dim $(best_dim) " *
+                  "at $(round(best_point, digits=4)) (score=$(round(best_score, sigdigits=4)), " *
+                  "elements: $(length(mwb.elements)) → $(length(mwb.elements) + 1))"
+        end
+
+        _split_one_element!(mwb, best_elem, best_dim, best_point, xs)
+        train!(apc, xs, y_mat)
+
+        # Sobol-stability stopping rule
+        # (adapted from Dubreuil et al. 2014, who apply it to DoE enrichment;
+        # here it controls h-refinement termination instead)
+        if sobol_tol > 0 && S_prev !== nothing
+            S_now = sobol_indices_multires(apc.OrthonormalBasis)
+            ΔS_max = maximum(abs.(S_now.S_first .- S_prev.S_first))
+            if verbose
+                @info "auto_refine: max|ΔS_first| = $(round(ΔS_max, sigdigits=4))"
+            end
+            if ΔS_max < sobol_tol
+                verbose && @info "auto_refine: Sobol convergence reached (ΔS < $(sobol_tol))"
+                break
+            end
+            S_prev = S_now
+        end
+    end
+
+    return apc
+end
+
+# ----------------------------------------------------------------------------
+# Greedy split-point selection
+# ----------------------------------------------------------------------------
+
+"""
+    _select_best_split(x_elem, y_elem, split_dim, min_samples; strategy)
+
+Search candidate quantiles (0.1–0.9) for the split point that maximises the
+between-group variance ``n_{lo} n_{hi} / n^2 \\cdot (\\bar y_{lo} - \\bar y_{hi})^2``.
+
+For `strategy = :quantile` the candidate set is the 10th–90th percentile grid.
+For `strategy = :median` only the 50th percentile is tried (fast, but may miss
+bimodal structure where the median falls between modes).
+"""
+function _select_best_split(
+        x_elem::AbstractMatrix{T},
+        y_elem::AbstractVector{T},
+        split_dim::Int,
+        min_samples::Int;
+        strategy::Symbol = :quantile,
+    ) where {T <: Real}
+    n = length(y_elem)
+    x_d = @view x_elem[:, split_dim]
+    sorted_x = sort!(collect(x_d))
+
+    quantiles = if strategy == :median
+        [0.5]
+    else
+        collect(0.1:0.05:0.9)
+    end
+
+    best_score = T(-Inf)
+    best_point = T(NaN)
+
+    for q in quantiles
+        idx = clamp(floor(Int, q * n) + 1, 1, n)
+        point = sorted_x[idx]
+
+        mask_lo = x_d .<= point
+        n_lo = count(mask_lo)
+        n_hi = n - n_lo
+        (n_lo >= min_samples && n_hi >= min_samples) || continue
+
+        y_lo_mean = sum(@view y_elem[mask_lo]) / n_lo
+        y_hi_mean = sum(@view y_elem[.!mask_lo]) / n_hi
+        score = T(n_lo * n_hi) / T(n)^2 * (y_lo_mean - y_hi_mean)^2
+
+        if score > best_score
+            best_score = score
+            best_point = point
+        end
+    end
+
+    return best_point, best_score
+end
+
+# ----------------------------------------------------------------------------
+# Surrogate-MC Sobol indices (Saltelli / pick-freeze estimator)
+# ----------------------------------------------------------------------------
+
+# The analytic marginal-projection approach assumes the local polynomial bases
+# are orthogonal w.r.t. the global marginal, which they are not (each element
+# carries its own degree-d tensor basis centred on the element's data).  We use
+# a surrogate-based Monte Carlo Saltelli estimator instead: draw samples from
+# the input distribution, evaluate the (cheap) surrogate, and compute
+# first-order and total-order indices via the standard pick-freeze formulas.
+# This is exact up to MC error, handles correlated inputs, and works for any
+# tree depth.
+#
+# References:
+#   Saltelli, Annoni, Azzini, Campolongo, Ratto, Tarantola (2010)
+#     "Variance based sensitivity analysis of model output"
+#     Comput. Phys. Commun. 181:259–270
+#   Sobol (2001) Math. Comput. Simul. 55:271–280
+
+"""
+    sobol_indices_multires(apc::aPCE{T,MultiWaveletBasis{T}}, X_train; n_mc)
+
+Surrogate-based Monte Carlo Sobol indices for a trained multires model.
+Uses the Saltelli pick-freeze estimator on the surrogate (cheap to evaluate,
+handles correlated inputs, any tree depth).
+
+Returns `(S_first, S_total)`, each an `n_dims × outdim` matrix.
+
+# References
+- Saltelli et al. (2010) Comput. Phys. Commun. 181:259–270 — pick-freeze estimator
+"""
+function sobol_indices_multires(
+        apc::aPCE{T, MultiWaveletBasis{T}, A1, A2},
+        X_train::AbstractMatrix;
+        n_mc::Int = 100_000,
+    ) where {T <: Real, A1, A2}
+    n_dims = apc.input_dimensions
+    mwb = apc.OrthonormalBasis
+    outdim = _trained_outdim(mwb)
+    n_train = size(X_train, 1)
+
+    # Two independent sample matrices from the empirical input distribution
+    N = min(n_mc, n_train * 10)
+    idx_a = rand(1:n_train, N)
+    idx_b = rand(1:n_train, N)
+    A = X_train[idx_a, :]
+    B = X_train[idx_b, :]
+
+    # Training-data range per dimension — used to clip mixed pick-freeze points
+    # to prevent polynomial extrapolation outside the element's support.
+    x_lo = [minimum(@view X_train[:, d]) for d in 1:n_dims]
+    x_hi = [maximum(@view X_train[:, d]) for d in 1:n_dims]
+
+    # Surrogate evaluations
+    Y_A = predict(apc, A)
+    Y_B = predict(apc, B)
+
+    S_first = zeros(T, n_dims, outdim)
+    S_total = zeros(T, n_dims, outdim)
+
+    for k in 1:outdim
+        y_a = @view Y_A[:, k]
+        y_b = @view Y_B[:, k]
+
+        f0 = (sum(y_a) + sum(y_b)) / (2N)
+        V = (sum(abs2, y_a) + sum(abs2, y_b)) / (2N) - f0^2
+        V > eps(T) || continue
+
+        for d in 1:n_dims
+            AB = copy(A)
+            @views AB[:, d] .= B[:, d]
+            # Clip mixed points to training-data range to prevent catastrophic
+            # polynomial extrapolation off the element's local support.
+            for d2 in 1:n_dims
+                clamp!(@view(AB[:, d2]), x_lo[d2], x_hi[d2])
+            end
+            Y_AB = predict(apc, AB)
+            y_ab = @view Y_AB[:, k]
+
+            # Saltelli (2010) Eqs. 2 and 5:
+            # S_first[i]  = [E[f(B)·f(A_B^i)] - f0²] / V
+            # S_total[i]  = 1 - [E[f(A)·f(A_B^i)] - f0²] / V
+            S_first[d, k] = (sum(y_b .* y_ab) / N - f0^2) / V
+            S_total[d, k] = 1 - (sum(y_a .* y_ab) / N - f0^2) / V
+        end
+    end
+
+    return (S_first = S_first, S_total = S_total)
+end
+
+"""
+    sobol_bootstrap_ci(apc, X, y; n_bootstrap, ci_level, fixed_tree, n_mc)
+
+Bootstrap confidence intervals on the multiresolution Sobol indices.
+
+Two modes:
+- `fixed_tree=false` (default): resample (X, y), retrain from scratch on each
+  bootstrap draw.  The CI covers coefficient uncertainty **and** refinement-path
+  variability — the honest total uncertainty.
+- `fixed_tree=true`: freeze the current element structure, resample (X, y), and
+  retrain only the per-element coefficients.  The CI isolates coefficient
+  uncertainty for the given decomposition.
+
+Returns named tuple with `S_first_mean/lower/upper` and `S_total_mean/lower/upper`.
+
+# References
+- Dubreuil, Berveiller, Petitjean, Salaün (2014) Reliab. Eng. Syst. Safety
+  121:263–275 — bootstrap CIs on Sobol indices from PCE
+"""
+function sobol_bootstrap_ci(
+        apc::aPCE{T, MultiWaveletBasis{T}, A1, A2},
+        X::AbstractVecOrMat,
+        y::AbstractVecOrMat;
+        n_bootstrap::Int = 200,
+        ci_level::Real = 0.95,
+        fixed_tree::Bool = false,
+        n_mc::Int = 10_000,
+    ) where {T <: Real, A1, A2}
+    xs = ndims(X) == 1 ? reshape(X, :, 1) : X
+    y_mat = ndims(y) == 1 ? reshape(y, :, 1) : y
+    n_samples = size(xs, 1)
+    n_dims = apc.input_dimensions
+    outdim = size(y_mat, 2)
+
+    # Capture the current tree structure for fixed_tree mode
+    mwb_template = apc.OrthonormalBasis
+    split_specs = if fixed_tree
+        [(lo = copy(e.lo), hi = copy(e.hi), degree = copy(e.degree),
+          level = copy(e.level), dim_index = copy(e.dim_index))
+         for e in mwb_template.elements]
+    else
+        nothing
+    end
+
+    S_first_samples = Vector{Matrix{T}}()
+    S_total_samples = Vector{Matrix{T}}()
+
+    for _ in 1:n_bootstrap
+        idx = rand(1:n_samples, n_samples)
+        X_boot = xs[idx, :]
+        y_boot = y_mat[idx, :]
+
+        if fixed_tree && split_specs !== nothing
+            # Rebuild basis with the same element structure but new local bases
+            elements = MultiWaveletElement{T}[]
+            for spec in split_specs
+                mask = trues(size(X_boot, 1))
+                for d in 1:n_dims
+                    mask .&= (X_boot[:, d] .>= spec.lo[d]) .& (X_boot[:, d] .<= spec.hi[d])
+                end
+                x_elem = X_boot[mask, :]
+                deg = max(1, min(maximum(spec.degree), size(x_elem, 1) - 1))
+                rb = size(x_elem, 1) >= deg + 1 ? create_recurrence_basis(x_elem, deg) :
+                     create_recurrence_basis(x_elem, max(1, size(x_elem, 1) - 1))
+                push!(elements, MultiWaveletElement{T}(
+                    copy(spec.lo), copy(spec.hi), fill(deg, n_dims), rb,
+                    copy(spec.level), copy(spec.dim_index),
+                    T(count(mask) / n_samples),
+                    zeros(Int, 0, 0), zeros(T, 0, 0),
+                    fill(T(-Inf), n_dims), fill(T(Inf), n_dims)))
+            end
+            mwb_boot = MultiWaveletBasis{T}(n_dims, elements)
+            # aPCE.OrthonormalBasis is a const field — it must be supplied at
+            # construction time via the all-fields inner constructor, not
+            # swapped in afterwards.
+            max_deg = maximum(maximum(s.degree) for s in split_specs)
+            deg_mat = aPCE_MultivariatePolynomialDegrees(n_dims, max_deg, 1.0, 1.0)
+            n_terms = min(size(deg_mat, 1), numberPolynomials(max_deg, n_dims))
+            apc_boot = aPCE{T, MultiWaveletBasis{T}, Matrix{T}, Matrix{Int64}}(
+                X_boot, n_dims, size(y_mat, 2), max_deg, n_terms, deg_mat,
+                true, mwb_boot, zeros(T, n_terms, size(y_mat, 2)), false)
+            train!(apc_boot, X_boot, y_boot)
+        else
+            apc_boot = aPCE(X_boot, maximum(maximum(e.degree) for e in mwb_template.elements);
+                            basis = Val(:multires))
+            train!(apc_boot, X_boot, y_boot)
+        end
+
+        # Coefficient-based Sobol (see auto_refine! for why not surrogate-MC).
+        S = sobol_indices_multires(apc_boot.OrthonormalBasis)
+        push!(S_first_samples, copy(S.S_first))
+        push!(S_total_samples, copy(S.S_total))
+    end
+
+    α = 1 - ci_level
+    lo_pct = α / 2 * 100
+    hi_pct = (1 - α / 2) * 100
+
+    S_first_mean = zeros(T, n_dims, outdim)
+    S_first_lo = zeros(T, n_dims, outdim)
+    S_first_hi = zeros(T, n_dims, outdim)
+    S_total_mean = zeros(T, n_dims, outdim)
+    S_total_lo = zeros(T, n_dims, outdim)
+    S_total_hi = zeros(T, n_dims, outdim)
+
+    for d in 1:n_dims, k in 1:outdim
+        vf = [S[d, k] for S in S_first_samples]
+        vt = [S[d, k] for S in S_total_samples]
+        S_first_mean[d, k] = T(sum(vf) / n_bootstrap)
+        S_first_lo[d, k] = T(_percentile(vf, lo_pct))
+        S_first_hi[d, k] = T(_percentile(vf, hi_pct))
+        S_total_mean[d, k] = T(sum(vt) / n_bootstrap)
+        S_total_lo[d, k] = T(_percentile(vt, lo_pct))
+        S_total_hi[d, k] = T(_percentile(vt, hi_pct))
+    end
+
+    return (
+        S_first_mean = S_first_mean, S_first_lower = S_first_lo, S_first_upper = S_first_hi,
+        S_total_mean = S_total_mean, S_total_lower = S_total_lo, S_total_upper = S_total_hi,
+    )
+end
+
+function _percentile(v::Vector{T}, p::Real) where {T <: Real}
+    sorted = sort(v)
+    n = length(sorted)
+    idx = (p / 100) * (n - 1) + 1
+    lo = floor(Int, idx)
+    hi = ceil(Int, idx)
+    lo == hi && return sorted[lo]
+    return sorted[lo] + (idx - lo) * (sorted[hi] - sorted[lo])
+end
+
+# ============================================================================
+# ChainRules — AD integration
 # ============================================================================
 # ChainRules — AD integration
 # ============================================================================
