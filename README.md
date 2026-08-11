@@ -12,20 +12,18 @@ A Julia package for constructing polynomial chaos expansions with arbitrary poly
 
 ## Overview
 
-ArbitraryPolynomialChaosExpansion.jl (APCE) provides efficient tools for:
-- **Arbitrary Polynomial Basis Construction**: Create orthonormal or full polynomial bases from data
+ArbitraryPolynomialChaosExpansion.jl provides efficient tools for:
+- **Arbitrary Polynomial Basis Construction**: Create orthonormal or full polynomial bases purely data driven
 - **Moment-Based Orthogonalization**: Construct data-driven orthogonal polynomial bases
 - **Uncertainty Quantification**: Compute statistical moments and sensitivities
 - **Surrogate Modeling**: Build fast-to-evaluate polynomial approximations of expensive simulations
 ## Features
 
-- Data-driven orthonormal polynomial basis construction (degrees 0-4 with closed-form solutions)
+- Data-driven orthonormal polynomial basis construction
 - Support for multivariate polynomial expansions with flexible term selection
 - Bayesian regularization for robust coefficient estimation
 - Gaussian collocation point selection (Probabilistic Collocation Method)
-- Type-stable implementations optimized for performance
-- Comprehensive automatic differentiation support via ChainRules
-- Extensive test coverage with TestItems
+- AD compatible 
 
 ## Installation
 
@@ -78,18 +76,19 @@ The classic Ishigami function (a = 7, b = 0.1) with 500 training samples and deg
   <img src="figures/ishigami_prediction.png" width="500" alt="Ishigami prediction vs true response">
 </p>
 
-### Extended Ishigami: Standard vs Regularized vs FastARD
+### Extended Ishigami: Standard, Regularized, FastARD, and Multiresolution
 
-An extended variant (b = 0.5, 5× the standard) with only 300 training samples and a moderate degree-6 basis (84 terms) exposes the difference between solvers. [FastARD.jl](https://github.com/NilsWildt/FastARD.jl) automatically prunes irrelevant basis functions, achieving the best validation R² with a sparse solution:
+An extended variant (b = 0.5, 5× the standard) with only 300 training samples and a moderate degree-6 basis (84 terms) exposes the difference between solvers. [FastARD.jl](https://github.com/NilsWildt/FastARD.jl) automatically prunes irrelevant basis functions, achieving the best validation R² with a sparse solution. Combining FastARD with the multiresolution basis (`solver = :fastard` in `auto_refine!`) applies per-element sparse Bayesian regression — on this smooth function, auto-refinement correctly detects no benefit from domain decomposition (1 element), matching the global FastARD accuracy:
 
 | Method | R² (val) | Active / Total terms |
 |--------|----------|----------------------|
 | Standard (pinv) | 0.9449 | 84 / 84 |
 | Regularized (Bayesian) | 0.9449 | 84 / 84 |
-| **FastARD** | **0.9636** | **53 / 84** |
+| FastARD | **0.9627** | **46 / 84** |
+| Multires + FastARD | 0.9627 | 46 / 84 (1 element) |
 
 <p align="center">
-  <img src="figures/ishigami_extended_comparison.png" width="100%" alt="Extended Ishigami comparison: Standard vs Regularized vs FastARD">
+  <img src="figures/ishigami_extended_comparison.png" width="100%" alt="Extended Ishigami comparison: Standard, Regularized, FastARD, and Multiresolution+FastARD">
 </p>
 
 ### Multiresolution Basis (aMR-PC)
@@ -101,8 +100,8 @@ On a 1-D step function (degree 6, 80 training points), splitting at the disconti
 | Method | MSE | vs Global |
 |--------|-----|-----------|
 | Global aPCE (single element) | 8.6 × 10⁻² | — |
-| Multires aPCE — manual split (split\_point = 0.5) | 1.8 × 10⁻⁴ | **470×** |
-| Multires aPCE — **auto-refine** (no prior knowledge) | 4.8 × 10⁻³ | **18×** |
+| Multires aPCE — manual split (split\_point set at 0.5 manually) | 1.8 × 10⁻⁴ | **470×** |
+| Multires aPCE — auto-refine | 4.8 × 10⁻³ | **18×** |
 
 <p align="center">
   <img src="figures/multires_bimodal_comparison.png" width="90%" alt="Multiresolution aPCE vs global aPCE on a step function">
@@ -208,7 +207,7 @@ apc = aPCE(TrainingInput, degree;
 See the `examples/` directory for comprehensive usage examples:
 - `basic_example.jl`: Basic workflow demonstrating the core API
 - `ishigami_example.jl`: Classic Ishigami function UQ benchmark with analytical validation
-- `ishigami_extended_fastard.jl`: Extended Ishigami variant comparing Standard, Regularized, and [FastARD](https://github.com/NilsWildt/FastARD.jl) solvers
+- `ishigami_extended_fastard.jl`: Extended Ishigami variant comparing Standard, Regularized, [FastARD](https://github.com/NilsWildt/FastARD.jl), and Multiresolution+FastARD solvers
 
 ## Contributing
 
@@ -220,14 +219,14 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## References
 
+ S. Oladyshkin and W. Nowak, "Data-Driven Uncertainty Quantification Using the Arbitrary Polynomial Chaos Expansion," Reliab. Eng. Syst. Safety, vol. 106, pp. 179–190, 2012.
+ D. Xiu and G. E. Karniadakis, "The Wiener–Askey Polynomial Chaos for Stochastic Differential Equations," SIAM J. Sci. Comput., vol. 24, no. 2, pp. 619–644, 2002.
+
  N. Wildt, D. M. Tartakovsky, S. Oladyshkin, and W. Nowak, "Code: A Global Approach to ODE Dynamics Learning," J. Mach. Learn. Model. Comput., vol. 7, no. 2, pp. 73–105, 2026. DOI: 10.1615/JMachLearnModelComput.2026062518
 Arbitrary Polynomial Chaos & Uncertainty Quantification
 
- S. Oladyshkin and W. Nowak, "Data-Driven Uncertainty Quantification Using the Arbitrary Polynomial Chaos Expansion," Reliab. Eng. Syst. Safety, vol. 106, pp. 179–190, 2012.
- D. Xiu and G. E. Karniadakis, "The Wiener–Askey Polynomial Chaos for Stochastic Differential Equations," SIAM J. Sci. Comput., vol. 24, no. 2, pp. 619–644, 2002.
- 
  H. Sharma, L. Novak, and M. Shields, "Physics-Constrained Polynomial Chaos Expansion for Scientific Machine Learning and Uncertainty Quantification," Comput. Methods Appl. Mech. Eng., vol. 431, p. 117314, 2024.
- 
+
  Y. Li, M. Anitescu, O. Roderick, and F. Hickernell, "Orthogonal Bases for Polynomial Regression with Derivative Information in Uncertainty Quantification," Int. J. Uncertainty Quantif., vol. 1, no. 4, pp. 297–320, 2011.
  T. J. Sullivan, Introduction to Uncertainty Quantification. Berlin: Springer, 2015.
 

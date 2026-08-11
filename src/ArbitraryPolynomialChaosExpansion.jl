@@ -46,6 +46,7 @@ using Combinatorics: Combinatorics, factorial
 using DispatchDoctor: @stable
 using Einsum: Einsum, @einsum
 using Estrin: Estrin
+using FastARD: FastARD
 using ForwardDiff: ForwardDiff, Dual
 using LineSearches: LineSearches
 using OnlineStats: OnlineStats, Extrema, Mean, Series, Variance, eachrow, value

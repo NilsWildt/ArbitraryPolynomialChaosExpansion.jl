@@ -421,6 +421,38 @@ end
 # per-element least-squares solves.  These overrides store per-element
 # coefficients in each MultiWaveletElement.coefficients field.
 
+# ----------------------------------------------------------------------------
+# FastARD solver
+# ----------------------------------------------------------------------------
+# Per-element sparse Bayesian regression via Automatic Relevance Determination.
+# Called from the multiresolution `train!` when `solver = :fastard`.
+# Returns the full `(n_terms × outdim)` coefficient matrix; inactive
+# coefficients are exactly zero (pruned by the ARD prior when their precision
+# `α` reaches `max_alpha`).  Each output column is fit independently.
+function _train_solve_fastard(
+        Psi::AbstractMatrix{T},
+        y::AbstractMatrix;
+        n_iter::Int = 300,
+        verbose::Bool = false,
+    ) where {T <: Real}
+    n_terms = size(Psi, 2)
+    outdim  = size(y, 2)
+    coeffs  = zeros(T, n_terms, outdim)
+
+    Psi_dense = Matrix{T}(Psi)
+    for k in axes(y, 2)
+        # standardize=false: PCE orthonormal bases are already centered/scaled
+        # (degree-0 column is constant, which would give std=0 under
+        # standardization and break the coefficient back-projection).
+        model = FastARD.FastARDRegressor(T; verbose = verbose, n_iter = n_iter,
+                                         standardize = false)
+        FastARD.fit!(model, Psi_dense, Vector{T}(@view y[:, k]))
+        coeffs[:, k] .= model.coef
+    end
+
+    return coeffs
+end
+
 """
     train!(aPCE::aPCE{T, MultiWaveletBasis{T}}, TrainingInput, y_rhs; kwargs...)
 
@@ -439,6 +471,15 @@ model has no single global coefficient vector, so `ExpansionCoefficients` is
 filled with `NaN` — generic consumers of that field must not be used with a
 multi-element basis (use `predict`/`UQ`/`sobol_indices_multires`, which read
 the per-element coefficients).
+
+## Solver selection
+
+- `solver = :standard` (default): regularized pseudoinverse solve
+  (`bayesian_inversion`, `reg_order`).
+- `solver = :fastard`: per-element sparse Bayesian regression via
+  [FastARD.jl](https://github.com/NilsWildt/FastARD.jl).  Irrelevant basis
+  terms within each element are pruned automatically.  Use `fastard_n_iter`
+  to control the maximum number of ARD update iterations per element.
 """
 function train!(
         aPCE_apc::aPCE{T, MultiWaveletBasis{T}, A1, A2},
@@ -446,6 +487,8 @@ function train!(
         y_rhs;
         bayesian_inversion = true,
         reg_order = 1,
+        solver::Symbol = :standard,
+        fastard_n_iter::Int = 300,
     ) where {T <: Real, A1, A2}
     Base.require_one_based_indexing(TrainingInput, y_rhs)
     mwb = aPCE_apc.OrthonormalBasis
@@ -474,10 +517,20 @@ function train!(
         Psi_e = aPCE_PsiPolynomialMatrix(x_e, degs_e, elem.basis)
 
         elem.multi_indices = degs_e
-        elem.coefficients = _train_solve(
-            Matrix{T}(Psi_e'), y_e;
-            bayesian_inversion = bayesian_inversion, reg_order = reg_order,
-        )
+        if solver === :fastard
+            elem.coefficients = _train_solve_fastard(
+                Matrix{T}(Psi_e'), y_e; n_iter = fastard_n_iter,
+            )
+        elseif solver === :standard
+            elem.coefficients = _train_solve(
+                Matrix{T}(Psi_e'), y_e;
+                bayesian_inversion = bayesian_inversion, reg_order = reg_order,
+            )
+        else
+            throw(ArgumentError(
+                "Unknown solver :$solver. Use :standard (default) or :fastard."
+            ))
+        end
         # Training-data support of this element, per dimension — used by
         # `predict` to clip off-support evaluation points (e.g. Saltelli
         # mixed inputs) before evaluating the local polynomial.
@@ -811,9 +864,11 @@ function _split_one_element!(
 end
 
 """
-    refine!(apc, X, y, elem_idx, split_dim, split_point)
+    refine!(apc, X, y, elem_idx, split_dim, split_point; solver, fastard_n_iter)
 
 Split element `elem_idx` at `(split_dim, split_point)` and retrain all elements.
+Accepts the same `solver` / `fastard_n_iter` keywords as `train!` and forwards
+them to the per-element retrain step.
 """
 function refine!(
         apc::aPCE{T, MultiWaveletBasis{T}, A1, A2},
@@ -821,11 +876,13 @@ function refine!(
         y::AbstractVecOrMat,
         elem_idx::Int,
         split_dim::Int,
-        split_point::Real,
+        split_point::Real;
+        solver::Symbol = :standard,
+        fastard_n_iter::Int = 300,
     ) where {T <: Real, A1, A2}
     xs = ndims(X) == 1 ? reshape(X, :, 1) : X
     _split_one_element!(apc.OrthonormalBasis, elem_idx, split_dim, split_point, xs)
-    train!(apc, xs, y)
+    train!(apc, xs, y; solver = solver, fastard_n_iter = fastard_n_iter)
     return apc
 end
 
@@ -850,6 +907,8 @@ At each step:
 - `min_improvement::Real=0.01`: stop when best between-group variance < this fraction of Var(y)
 - `sobol_tol::Real=0`: if > 0, stop when max Sobol index change < sobol_tol
 - `verbose::Bool=false`: log each split
+- `solver::Symbol=:standard`: per-element solver (:standard or :fastard)
+- `fastard_n_iter::Int=300`: max ARD iterations per element (only if `solver=:fastard`)
 
 # References
 - Wan & Karniadakis (2005) J. Comput. Phys. 209:617–642 — variance-decay criterion
@@ -867,6 +926,8 @@ function auto_refine!(
         min_improvement::Real = 0.01,
         sobol_tol::Real = 0.0,
         verbose::Bool = false,
+        solver::Symbol = :standard,
+        fastard_n_iter::Int = 300,
     ) where {T <: Real, A1, A2}
     xs = ndims(X) == 1 ? reshape(X, :, 1) : X
     y_mat = ndims(y) == 1 ? reshape(y, :, 1) : y
@@ -880,7 +941,7 @@ function auto_refine!(
     n_terms = (max_degree + 1)^n_dims
     min_samples = min_samples_per_element > 0 ? min_samples_per_element : n_terms + 5
 
-    train!(apc, xs, y_mat)
+    train!(apc, xs, y_mat; solver = solver, fastard_n_iter = fastard_n_iter)
 
     # Coefficient-based Sobol from the per-element expansion (no off-support
     # surrogate evaluations — see sobol_indices_multires(::MultiWaveletBasis)).
@@ -941,7 +1002,7 @@ function auto_refine!(
         end
 
         _split_one_element!(mwb, best_elem, best_dim, best_point, xs)
-        train!(apc, xs, y_mat)
+        train!(apc, xs, y_mat; solver = solver, fastard_n_iter = fastard_n_iter)
 
         # Sobol-stability stopping rule
         # (adapted from Dubreuil et al. 2014, who apply it to DoE enrichment;
