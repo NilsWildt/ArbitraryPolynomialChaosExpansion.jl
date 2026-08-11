@@ -62,7 +62,7 @@ mutable struct aPCE{T <: Real, B, A1 <: AbstractArray{T}, A2 <: AbstractArray{In
     const NumberOfTerms::Int64
     const MultivariatePolynomialDegrees::A2
     const is_orthonormal::Bool # if false: then vandermonde// full basis
-    const OrthonormalBasis::B
+    OrthonormalBasis::B # not const: reassigned by sobol_bootstrap_ci fixed_tree
     ExpansionCoefficients::Matrix{T}
     do_gauss::Bool
 

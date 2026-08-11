@@ -1181,15 +1181,9 @@ function sobol_bootstrap_ci(
                     fill(T(-Inf), n_dims), fill(T(Inf), n_dims)))
             end
             mwb_boot = MultiWaveletBasis{T}(n_dims, elements)
-            # aPCE.OrthonormalBasis is a const field — it must be supplied at
-            # construction time via the all-fields inner constructor, not
-            # swapped in afterwards.
             max_deg = maximum(maximum(s.degree) for s in split_specs)
-            deg_mat = aPCE_MultivariatePolynomialDegrees(n_dims, max_deg, 1.0, 1.0)
-            n_terms = min(size(deg_mat, 1), numberPolynomials(max_deg, n_dims))
-            apc_boot = aPCE{T, MultiWaveletBasis{T}, Matrix{T}, Matrix{Int64}}(
-                X_boot, n_dims, size(y_mat, 2), max_deg, n_terms, deg_mat,
-                true, mwb_boot, zeros(T, n_terms, size(y_mat, 2)), false)
+            apc_boot = aPCE(X_boot, max_deg; basis = Val(:multires))
+            apc_boot.OrthonormalBasis = mwb_boot
             train!(apc_boot, X_boot, y_boot)
         else
             apc_boot = aPCE(X_boot, maximum(maximum(e.degree) for e in mwb_template.elements);
