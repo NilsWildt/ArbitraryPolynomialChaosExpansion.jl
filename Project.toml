@@ -41,7 +41,7 @@ BLISBLASExt = "BLISBLAS"
 MooncakeExt = "Mooncake"
 
 [compat]
-BLISBLAS = "0.2"
+BLISBLAS = "0.1, 0.2"
 CPUSummary = "0.2"
 ChainRules = "1.73"
 ChainRulesCore = "1.26"

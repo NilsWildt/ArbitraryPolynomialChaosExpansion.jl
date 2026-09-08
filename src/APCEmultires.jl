@@ -1352,6 +1352,7 @@ function ChainRulesCore.rrule(
     end
 
     function aPCE_Psi_MultiWavelet_pullback(ΔPsi)
+        ΔPsi = unthunk(ΔPsi)   # element-wise reads below; a thunk would re-materialize per element
         Δx = zeros(T, size(x))
         for e in 1:n_elements
             sids = elem_sids[e]

@@ -119,6 +119,7 @@ function ChainRulesCore.rrule(
     end
 
     function compute_Psi_element_pullback(dy)
+        dy = unthunk(dy)
         ∂TrainingInput = @thunk(dy * derivatives)
         return (NoTangent(), NoTangent(), NoTangent(), ∂TrainingInput, NoTangent(), NoTangent(), NoTangent())
     end
@@ -152,6 +153,7 @@ function ChainRulesCore.rrule(
     T = eltype(x)
 
     function aPCE_PsiPolynomialMatrix_pullback(ΔPsi)
+        ΔPsi = unthunk(ΔPsi)   # element-wise reads below; a thunk would re-materialize per element
         ΔTrainingInput = zeros(T, size(x))
 
         # Pre-compute polynomial evaluations to avoid redundant calculations
@@ -235,6 +237,7 @@ function ChainRulesCore.rrule(
     T = eltype(x)
 
     function aPCE_PsiPolynomialMatrix_pullback(ΔPsi)
+        ΔPsi = unthunk(ΔPsi)   # element-wise reads below; a thunk would re-materialize per element
         ΔTrainingInput = zeros(T, size(x))
 
         # Pre-compute polynomial evaluations to avoid redundant calculations
@@ -327,6 +330,7 @@ function ChainRulesCore.rrule(
     ]
 
     function aPCE_PsiPolynomialMatrix_recurrence_pullback(ΔPsi)
+        ΔPsi = unthunk(ΔPsi)   # element-wise reads below; a thunk would re-materialize per element
         Δx = zeros(T, size(x))
         @inbounds for j in 1:NCpoints
             for i in 1:NumberOfTerms
