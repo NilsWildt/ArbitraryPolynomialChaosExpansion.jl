@@ -40,7 +40,7 @@ Base.getindex(c::CoSorter, i...) =
     getindex(c.coarray, i...),
 )
 Base.setindex!(c::CoSorter, t::SpecialCoSorterElement, i...) =
-    (setindex!(c.sortarray, t.x, i...); setindex!(c.coarray, t.y, i...); c)
+    (setindex!(c.sortarray, t.x, i...); setindex!(c.otherarray, t.z, i...); setindex!(c.coarray, t.y, i...); c)
 
 Base.isless(a::SpecialCoSorterElement, b::SpecialCoSorterElement) =
     isless(a.x, b.x) || (a.x == b.x && isless(a.z, b.z))

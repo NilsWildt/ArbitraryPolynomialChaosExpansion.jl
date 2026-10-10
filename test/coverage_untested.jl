@@ -46,6 +46,15 @@ end
     @inferred special_sort_two_arrays!([3.0 1.0; 1.0 2.0; 2.0 0.0], [10.0, 20.0, 30.0])
 end
 
+@testitem "special_sort_two_arrays!_breaks_ties_on_the_second_column" begin
+    # Many ties in column 1, so the sort relies on column 2 throughout.
+    n = 40
+    x = hcat([mod(7i, 3) for i in 1:n], [mod(11i, 17) for i in 1:n]) .* 1.0
+    y = collect(1.0:n)
+    order = sortperm(collect(zip(x[:, 1], x[:, 2])))
+    @test special_sort_two_arrays!(copy(x), copy(y)) == y[order]
+end
+
 @testitem "compose_Ψ_shape_and_consistency" begin
     using Random
     rng = Xoshiro(99)
