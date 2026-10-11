@@ -244,7 +244,7 @@ function aPCE_DerivativeBasis(
     apc.input_dimensions == 1 || throw(
         DimensionMismatch(
             "aPCE_DerivativeBasis currently supports one input dimension (1D " *
-            "physical points); got $(apc.input_dimensions)",
+                "physical points); got $(apc.input_dimensions)",
         ),
     )
     return _aPCE_derivative_basis_backend(apc, x, Int(order), apc.OrthonormalBasis)

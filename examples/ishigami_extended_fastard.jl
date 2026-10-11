@@ -151,11 +151,11 @@ n_elements = length(apc_mr.OrthonormalBasis.elements)
 # Count non-zero per-element coefficients (across all elements)
 n_nonzero_mr = sum(
     count(!iszero, @view elem.coefficients[:, 1]) for
-    elem in apc_mr.OrthonormalBasis.elements if !isempty(elem.coefficients)
+        elem in apc_mr.OrthonormalBasis.elements if !isempty(elem.coefficients)
 )
 n_total_mr = sum(
     size(elem.coefficients, 1) for
-    elem in apc_mr.OrthonormalBasis.elements if !isempty(elem.coefficients)
+        elem in apc_mr.OrthonormalBasis.elements if !isempty(elem.coefficients)
 )
 
 println("  Multires elements after auto-refine: $n_elements")
@@ -171,8 +171,10 @@ println("-"^78)
 @printf("  Standard             | %10.4f | %9.4f | %d / %d\n", r2_std_train, r2_std_val, n_terms, n_terms)
 @printf("  Regularized          | %10.4f | %9.4f | %d / %d\n", r2_reg_train, r2_reg_val, n_terms, n_terms)
 @printf("  FastARD              | %10.4f | %9.4f | %d / %d\n", r2_ard_train, r2_ard_val, n_active, n_terms)
-@printf("  Multires+FastARD     | %10.4f | %9.4f | %d / %d (%d elem.)\n",
-    r2_mr_train, r2_mr_val, n_nonzero_mr, n_total_mr, n_elements)
+@printf(
+    "  Multires+FastARD     | %10.4f | %9.4f | %d / %d (%d elem.)\n",
+    r2_mr_train, r2_mr_val, n_nonzero_mr, n_total_mr, n_elements
+)
 println("="^78)
 
 # -----------------------------------------------------------------------------
@@ -186,14 +188,22 @@ end
 fig = Figure(size = (2000, 480))
 
 methods = [
-    ("Standard (pinv)", Y_std_val, r2_std_val, :coral,
-        "$n_terms / $n_terms terms"),
-    ("Regularized (Bayesian)", Y_reg_val, r2_reg_val, :mediumseagreen,
-        "$n_terms / $n_terms terms"),
-    ("FastARD", Y_ard_val, r2_ard_val, :dodgerblue,
-        "$n_active / $n_terms terms"),
-    ("Multires + FastARD", Y_mr_val, r2_mr_val, :darkorange,
-        "$n_nonzero_mr / $n_total_mr ($n_elements elem.)"),
+    (
+        "Standard (pinv)", Y_std_val, r2_std_val, :coral,
+        "$n_terms / $n_terms terms",
+    ),
+    (
+        "Regularized (Bayesian)", Y_reg_val, r2_reg_val, :mediumseagreen,
+        "$n_terms / $n_terms terms",
+    ),
+    (
+        "FastARD", Y_ard_val, r2_ard_val, :dodgerblue,
+        "$n_active / $n_terms terms",
+    ),
+    (
+        "Multires + FastARD", Y_mr_val, r2_mr_val, :darkorange,
+        "$n_nonzero_mr / $n_total_mr ($n_elements elem.)",
+    ),
 ]
 
 for (i, (label, Y_pred, r2, col, sub)) in enumerate(methods)

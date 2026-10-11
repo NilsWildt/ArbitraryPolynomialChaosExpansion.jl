@@ -302,9 +302,9 @@ function _element_degrees(
     keep = [
         i for i in axes(MultivariatePolynomialDegrees, 1)
             if all(
-            MultivariatePolynomialDegrees[i, d] <= elem.degree[d]
+                MultivariatePolynomialDegrees[i, d] <= elem.degree[d]
                 for d in axes(MultivariatePolynomialDegrees, 2)
-        )
+            )
     ]
     return Matrix{Int}(MultivariatePolynomialDegrees[keep, :])
 end
@@ -436,16 +436,18 @@ function _train_solve_fastard(
         verbose::Bool = false,
     ) where {T <: Real}
     n_terms = size(Psi, 2)
-    outdim  = size(y, 2)
-    coeffs  = zeros(T, n_terms, outdim)
+    outdim = size(y, 2)
+    coeffs = zeros(T, n_terms, outdim)
 
     Psi_dense = Matrix{T}(Psi)
     for k in axes(y, 2)
         # standardize=false: PCE orthonormal bases are already centered/scaled
         # (degree-0 column is constant, which would give std=0 under
         # standardization and break the coefficient back-projection).
-        model = FastARD.FastARDRegressor(T; verbose = verbose, n_iter = n_iter,
-                                         standardize = false)
+        model = FastARD.FastARDRegressor(
+            T; verbose = verbose, n_iter = n_iter,
+            standardize = false
+        )
         FastARD.fit!(model, Psi_dense, Vector{T}(@view y[:, k]))
         coeffs[:, k] .= model.coef
     end
@@ -527,9 +529,11 @@ function train!(
                 bayesian_inversion = bayesian_inversion, reg_order = reg_order,
             )
         else
-            throw(ArgumentError(
-                "Unknown solver :$solver. Use :standard (default) or :fastard."
-            ))
+            throw(
+                ArgumentError(
+                    "Unknown solver :$solver. Use :standard (default) or :fastard."
+                )
+            )
         end
         # Training-data support of this element, per dimension — used by
         # `predict` to clip off-support evaluation points (e.g. Saltelli
@@ -821,9 +825,12 @@ function _split_one_element!(
     n_hi = count(mask_hi)
 
     if n_lo < 2 || n_hi < 2
-        throw(ArgumentError(
-            "split at $(split_point) on dim $(split_dim) leaves too few samples " *
-            "($(n_lo) lo, $(n_hi) hi); element has $(size(x_parent, 1)) points"))
+        throw(
+            ArgumentError(
+                "split at $(split_point) on dim $(split_dim) leaves too few samples " *
+                    "($(n_lo) lo, $(n_hi) hi); element has $(size(x_parent, 1)) points"
+            )
+        )
     end
 
     n_parent = size(x_parent, 1)
@@ -852,11 +859,14 @@ function _split_one_element!(
         # Conditional weight: P(child | parent) × P(parent)
         weight = T(count(mask) / n_parent) * parent.weight
 
-        push!(children, MultiWaveletElement{T}(
-            lo, hi, fill(degree_child, n_dims), rb_child,
-            level, dim_index, weight,
-            zeros(Int, 0, 0), zeros(T, 0, 0),
-            fill(T(-Inf), n_dims), fill(T(Inf), n_dims)))
+        push!(
+            children, MultiWaveletElement{T}(
+                lo, hi, fill(degree_child, n_dims), rb_child,
+                level, dim_index, weight,
+                zeros(Int, 0, 0), zeros(T, 0, 0),
+                fill(T(-Inf), n_dims), fill(T(Inf), n_dims)
+            )
+        )
     end
 
     splice!(mwb.elements, elem_idx, children)
@@ -970,7 +980,8 @@ function auto_refine!(
 
             for d in 1:n_dims
                 point, score = _select_best_split(
-                    x_elem, y_elem, d, min_samples; strategy = strategy)
+                    x_elem, y_elem, d, min_samples; strategy = strategy
+                )
                 isnan(point) && continue
 
                 if score > best_score
@@ -990,15 +1001,15 @@ function auto_refine!(
             μ_y = sum(y_col) / n_samples
             σ²_y = sum(abs2, y_col .- μ_y) / n_samples
             if best_score < min_improvement * σ²_y
-                verbose && @info "auto_refine: improvement below threshold ($(round(best_score, sigdigits=4)) < $(round(min_improvement * σ²_y, sigdigits=4))), stopping"
+                verbose && @info "auto_refine: improvement below threshold ($(round(best_score, sigdigits = 4)) < $(round(min_improvement * σ²_y, sigdigits = 4))), stopping"
                 break
             end
         end
 
         if verbose
             @info "auto_refine: splitting element $(best_elem) on dim $(best_dim) " *
-                  "at $(round(best_point, digits=4)) (score=$(round(best_score, sigdigits=4)), " *
-                  "elements: $(length(mwb.elements)) → $(length(mwb.elements) + 1))"
+                "at $(round(best_point, digits = 4)) (score=$(round(best_score, sigdigits = 4)), " *
+                "elements: $(length(mwb.elements)) → $(length(mwb.elements) + 1))"
         end
 
         _split_one_element!(mwb, best_elem, best_dim, best_point, xs)
@@ -1011,7 +1022,7 @@ function auto_refine!(
             S_now = sobol_indices_multires(apc.OrthonormalBasis)
             ΔS_max = maximum(abs.(S_now.S_first .- S_prev.S_first))
             if verbose
-                @info "auto_refine: max|ΔS_first| = $(round(ΔS_max, sigdigits=4))"
+                @info "auto_refine: max|ΔS_first| = $(round(ΔS_max, sigdigits = 4))"
             end
             if ΔS_max < sobol_tol
                 verbose && @info "auto_refine: Sobol convergence reached (ΔS < $(sobol_tol))"
@@ -1207,9 +1218,13 @@ function sobol_bootstrap_ci(
     # Capture the current tree structure for fixed_tree mode
     mwb_template = apc.OrthonormalBasis
     split_specs = if fixed_tree
-        [(lo = copy(e.lo), hi = copy(e.hi), degree = copy(e.degree),
-          level = copy(e.level), dim_index = copy(e.dim_index))
-         for e in mwb_template.elements]
+        [
+            (
+                lo = copy(e.lo), hi = copy(e.hi), degree = copy(e.degree),
+                level = copy(e.level), dim_index = copy(e.dim_index),
+            )
+                for e in mwb_template.elements
+        ]
     else
         nothing
     end
@@ -1233,13 +1248,16 @@ function sobol_bootstrap_ci(
                 x_elem = X_boot[mask, :]
                 deg = max(1, min(maximum(spec.degree), size(x_elem, 1) - 1))
                 rb = size(x_elem, 1) >= deg + 1 ? create_recurrence_basis(x_elem, deg) :
-                     create_recurrence_basis(x_elem, max(1, size(x_elem, 1) - 1))
-                push!(elements, MultiWaveletElement{T}(
-                    copy(spec.lo), copy(spec.hi), fill(deg, n_dims), rb,
-                    copy(spec.level), copy(spec.dim_index),
-                    T(count(mask) / n_samples),
-                    zeros(Int, 0, 0), zeros(T, 0, 0),
-                    fill(T(-Inf), n_dims), fill(T(Inf), n_dims)))
+                    create_recurrence_basis(x_elem, max(1, size(x_elem, 1) - 1))
+                push!(
+                    elements, MultiWaveletElement{T}(
+                        copy(spec.lo), copy(spec.hi), fill(deg, n_dims), rb,
+                        copy(spec.level), copy(spec.dim_index),
+                        T(count(mask) / n_samples),
+                        zeros(Int, 0, 0), zeros(T, 0, 0),
+                        fill(T(-Inf), n_dims), fill(T(Inf), n_dims)
+                    )
+                )
             end
             mwb_boot = MultiWaveletBasis{T}(n_dims, elements)
             max_deg = maximum(maximum(s.degree) for s in split_specs)
@@ -1247,8 +1265,10 @@ function sobol_bootstrap_ci(
             apc_boot.OrthonormalBasis = mwb_boot
             train!(apc_boot, X_boot, y_boot)
         else
-            apc_boot = aPCE(X_boot, maximum(maximum(e.degree) for e in mwb_template.elements);
-                            basis = Val(:multires))
+            apc_boot = aPCE(
+                X_boot, maximum(maximum(e.degree) for e in mwb_template.elements);
+                basis = Val(:multires)
+            )
             train!(apc_boot, X_boot, y_boot)
         end
 

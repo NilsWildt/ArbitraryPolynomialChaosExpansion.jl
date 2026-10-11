@@ -33,8 +33,10 @@ APCE.train!(apc_global, X_train, y_train)
 # ---------------------------------------------------------------------------
 # Multires aPCE (split at x = 0.5 — the discontinuity)
 # ---------------------------------------------------------------------------
-apc_mr = APCE.aPCE(X_train, degree; basis = Val(:multires),
-                   split_dim = 1, split_point = 0.5)
+apc_mr = APCE.aPCE(
+    X_train, degree; basis = Val(:multires),
+    split_dim = 1, split_point = 0.5
+)
 APCE.train!(apc_mr, X_train, y_train)
 
 # ---------------------------------------------------------------------------
@@ -50,31 +52,39 @@ mask = abs.(X_fine[:, 1] .- 0.5) .> 0.02
 mse_global = mean((y_global[mask] .- y_truth[mask]) .^ 2)
 mse_mr = mean((y_mr[mask] .- y_truth[mask]) .^ 2)
 
-println("Global  MSE: $(round(mse_global, sigdigits=4))")
-println("MultiRes MSE: $(round(mse_mr, sigdigits=4))")
+println("Global  MSE: $(round(mse_global, sigdigits = 4))")
+println("MultiRes MSE: $(round(mse_mr, sigdigits = 4))")
 
 # ---------------------------------------------------------------------------
 # Plot
 # ---------------------------------------------------------------------------
-p = plot(X_fine[:, 1], y_truth,
-         label = "True function",
-         color = :black, linewidth = 2, linestyle = :dash,
-         xlabel = "x", ylabel = "f(x)",
-         title = "Multiresolution aPCE vs Global aPCE (degree $degree)",
-         legend = :topright, size = (800, 500),
-         margins = 5Plots.mm)
+p = plot(
+    X_fine[:, 1], y_truth,
+    label = "True function",
+    color = :black, linewidth = 2, linestyle = :dash,
+    xlabel = "x", ylabel = "f(x)",
+    title = "Multiresolution aPCE vs Global aPCE (degree $degree)",
+    legend = :topright, size = (800, 500),
+    margins = 5Plots.mm
+)
 
-plot!(p, X_fine[:, 1], y_global,
-      label = "Global aPCE  (MSE = $(round(mse_global, sigdigits=3)))",
-      color = :steelblue, linewidth = 2, alpha = 0.9)
+plot!(
+    p, X_fine[:, 1], y_global,
+    label = "Global aPCE  (MSE = $(round(mse_global, sigdigits = 3)))",
+    color = :steelblue, linewidth = 2, alpha = 0.9
+)
 
-plot!(p, X_fine[:, 1], y_mr,
-      label = "Multires aPCE  (MSE = $(round(mse_mr, sigdigits=3)))",
-      color = :crimson, linewidth = 2, alpha = 0.9)
+plot!(
+    p, X_fine[:, 1], y_mr,
+    label = "Multires aPCE  (MSE = $(round(mse_mr, sigdigits = 3)))",
+    color = :crimson, linewidth = 2, alpha = 0.9
+)
 
-scatter!(p, X_train[:, 1], y_train,
-         label = "Training points",
-         color = :gray, markersize = 2, alpha = 0.5)
+scatter!(
+    p, X_train[:, 1], y_train,
+    label = "Training points",
+    color = :gray, markersize = 2, alpha = 0.5
+)
 
 vline!(p, [0.5], color = :darkgray, linestyle = :dot, label = "Split point")
 

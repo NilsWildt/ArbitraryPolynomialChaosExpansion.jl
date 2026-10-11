@@ -326,7 +326,7 @@ function ChainRulesCore.rrule(
         _orthonormal_recurrence_derivative_values(
             z[:, dim], @view(rb.α[:, dim]), @view(rb.β[:, dim]), rb.degree, 1,
         )
-        for dim in 1:InputDimensions
+            for dim in 1:InputDimensions
     ]
 
     function aPCE_PsiPolynomialMatrix_recurrence_pullback(ΔPsi)
@@ -626,7 +626,7 @@ end
 
     grad_fd = ForwardDiff.gradient(f_rec, x)
     grad_zyg = Zygote.gradient(f_rec, x)[1]
-    @info "recurrence Zygote vs ForwardDiff" mean_abs_diff=StatsBase.mean(abs.(grad_fd .- grad_zyg))
+    @info "recurrence Zygote vs ForwardDiff" mean_abs_diff = StatsBase.mean(abs.(grad_fd .- grad_zyg))
     @test isapprox(grad_fd, grad_zyg, atol = 1.0e-6)
 
     x_1d = rand(10, 1)
