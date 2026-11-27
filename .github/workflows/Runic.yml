@@ -6,6 +6,7 @@ on:
       - main
       - dev/**
       - feature/**
+      - multiresolution
     tags:
       - '*'
   pull_request:
