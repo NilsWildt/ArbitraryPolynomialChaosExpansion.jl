@@ -16,16 +16,10 @@ extend-exclude = [
     "docs/build/*",
 ]
 
-[type.jl]
-# Julia-specific typos to ignore
-extend-ignore-words = [
-    "ND",           # N-dimensional
-    "nd",           # n-dimensional (in comments)
-    "lod",          # intentional variable name (for testing)
-]
-
 # Common false positives in this codebase
 [default.extend-words]
-ND = "ND"
-nd = "nd"
+ND = "ND"          # N-dimensional
+nd = "nd"          # n-dimensional (in comments)
+lod = "lod"        # intentional variable name (for testing)
 nin = "nin"
+Comput = "Comput"  # journal-title abbreviation in citations (SIAM J. Sci. Comput. etc.)
