@@ -36,7 +36,7 @@ BLISBLAS = "6f275bd8-fec0-4d39-945b-7e95a765fa1e"
 Mooncake = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
 
 [sources]
-FastARD = {url = "https://github.com/NilsWildt/FastARD.jl", rev = "3f5dd672bdb3c0f46f6df19c2d280ac8bb145742"}
+FastARD = {url = "https://github.com/NilsWildt/FastARD.jl", rev = "2c2ac87bc6e5afc2531bc478e12fae63b0d5ded5"}
 
 [extensions]
 BLISBLASExt = "BLISBLAS"
