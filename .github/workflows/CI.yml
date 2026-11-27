@@ -6,6 +6,7 @@ on:
       - main
       - dev/**
       - feature/**
+      - multiresolution
     paths-ignore:
       - "data/**"
       - "examples/**"

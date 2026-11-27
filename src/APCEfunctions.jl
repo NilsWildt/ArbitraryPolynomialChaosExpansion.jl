@@ -1349,7 +1349,7 @@ function _stieltjes_recurrence(x::AbstractVector{T}, D::Integer) where {T <: Rea
     for k in 0:(D - 1)
         inner_curr = sum(abs2, P_curr) / N          # ⟨P_k, P_k⟩
         α[k + 1] = sum(i -> x[i] * P_curr[i]^2, eachindex(x)) / (N * inner_curr)
-        
+
         if k > 0
             β[k + 1] = inner_curr / inner_prev                      # β_k
             @. P_next = (x - α[k + 1]) * P_curr - β[k + 1] * P_prev
@@ -1526,13 +1526,13 @@ function aPCE_PsiPolynomialMatrix_zygote(
 
     Psi = [
         compute_Psi_element(
-                i,
-                j,
-                TrainingInput,
-                MultivariatePolynomialDegrees,
-                OrthonormalBasis,
-                InputDimensions,
-            )
+            i,
+            j,
+            TrainingInput,
+            MultivariatePolynomialDegrees,
+            OrthonormalBasis,
+            InputDimensions,
+        )
             for i in 1:NumberOfTerms, j in 1:NCpoints
     ]
     return reshape(Psi, NumberOfTerms, NCpoints)
@@ -1654,8 +1654,8 @@ function _orthonormal_recurrence_derivative_values(
                 for k in 1:(D - 1)
                     out[i, k + 2, m + 1] = (
                         Tm * out[i, k + 1, m]
-                        + (zi - α[k + 1]) * out[i, k + 1, m + 1]
-                        - sqrt(Tz(β[k + 1])) * out[i, k, m + 1]
+                            + (zi - α[k + 1]) * out[i, k + 1, m + 1]
+                            - sqrt(Tz(β[k + 1])) * out[i, k, m + 1]
                     ) / sqrt(Tz(β[k + 2]))
                 end
             end
@@ -1720,8 +1720,8 @@ function _orthonormal_recurrence_derivative_order(
                 for k in 1:(D - 1)
                     cur[k + 2] = (
                         Tm * prev[k + 1]
-                        + (zi - α[k + 1]) * cur[k + 1]
-                        - sqrt(Tz(β[k + 1])) * cur[k]
+                            + (zi - α[k + 1]) * cur[k + 1]
+                            - sqrt(Tz(β[k + 1])) * cur[k]
                     ) / sqrt(Tz(β[k + 2]))
                 end
             end
@@ -1758,8 +1758,8 @@ function aPCE_PsiPolynomialMatrix_zygote(
     # Per-dimension orthonormal values: Pvals[dim][point, degree + 1].
     Pvals = [
         _orthonormal_recurrence_values(
-                z[:, dim], @view(rb.α[:, dim]), @view(rb.β[:, dim]), rb.degree,
-            )
+            z[:, dim], @view(rb.α[:, dim]), @view(rb.β[:, dim]), rb.degree,
+        )
             for dim in 1:InputDimensions
     ]
 
@@ -2831,7 +2831,7 @@ end
         D = aPCE_DerivativeBasis(apc, x_test, order)
         @test size(D) == (P, length(x_test))
         for (j, xj) in enumerate(x_test)
-            @test D[:, j] ≈ ref(xj) atol = 1e-10 rtol = 1e-10
+            @test D[:, j] ≈ ref(xj) atol = 1.0e-10 rtol = 1.0e-10
         end
     end
 
@@ -2876,7 +2876,7 @@ end
     for (order, ref) in ((1, ref1), (2, ref2), (3, ref3), (4, ref4))
         ref_mat = reduce(vcat, [reshape(ref(xj), 1, :) for xj in x_test])
         D = aPCE_DerivativeBasis(apc, x_test, order)
-        @test D ≈ Matrix(transpose(ref_mat)) atol = 1e-9 rtol = 1e-9
+        @test D ≈ Matrix(transpose(ref_mat)) atol = 1.0e-9 rtol = 1.0e-9
     end
 end
 
@@ -2907,7 +2907,7 @@ end
         D = aPCE_DerivativeBasis(apc, x_test, order)
         @test size(D) == (P, length(x_test))
         for (j, xj) in enumerate(x_test)
-            @test D[:, j] ≈ ref(xj) atol = 1e-10 rtol = 1e-10
+            @test D[:, j] ≈ ref(xj) atol = 1.0e-10 rtol = 1.0e-10
         end
     end
 
